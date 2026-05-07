@@ -1,0 +1,42 @@
+physics:
+  m_s: 317.5
+  m_u: 45.4
+  k_s: 22000
+  c_s: 1500
+  k_t: 192000
+  F_max: 10000
+
+road:
+  default_profile: iso_8608_class_c
+  vehicle_speed: 10.0
+  bump_height: 0.1
+  bump_length: 0.5
+  iso_gd0: 256e-6
+  iso_n0: 0.1
+
+env:
+  dt: 0.02
+  episode_duration: 10.0
+  obs_clip: true
+  action_scale: 10000.0
+
+reward:
+  w_comfort: 1.0
+  w_travel: 0.3
+  w_tyre: 0.3
+  w_effort: 0.1
+  a_limit: 10.0
+  travel_limit: 0.08
+  tyre_limit: 0.04
+  terminal_bonus: 10.0
+
+training:
+  n_envs: 4
+  action_repeat: 2
+  reward_scale: 0.1
+
+gazebo:
+  car_forward_speed: 10.0
+  car_start_x: 0.0
+  bump_x_position: 5.0
+  chassis_z_offset: 0.15
