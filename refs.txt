@@ -1,0 +1,62 @@
+[1] MathWorks. "ADMM-Based MPC Control for Quarter-Car Suspension."
+    MATLAB MPC Toolbox Documentation, 2024.
+    URL: https://de.mathworks.com/help/mpc/ug/admm-based-mpc-control-for-quarter-car-suspension.html
+
+[2] Nhu, A.N., Le, N.A., Li, S., Truong, T.D.V.
+    "Physics-Guided Reinforcement Learning System for Realistic Vehicle
+    Active Suspension Control." IEEE ICMLA 2023.
+    arXiv: https://arxiv.org/abs/2408.08425
+    GitHub: https://github.com/anh-nn01/RL4Suspension-ICMLA23
+
+[3] ISO 8608:2016. "Mechanical vibration — Road surface profiles —
+    Reporting of measured data."
+    International Organization for Standardization.
+
+[4] ISO 2631-1:1997. "Mechanical vibration and shock — Evaluation of human
+    exposure to whole-body vibration — Part 1: General requirements."
+    International Organization for Standardization.
+
+[5] Hrovat, D. "Survey of Advanced Suspension Developments and Related
+    Optimal Control Applications." Automatica, 33(10):1781-1817, 1997.
+    DOI: 10.1016/S0005-1098(97)00100-7
+
+[6] Singhnishesh. "Active Suspension Control Using Deep Reinforcement
+    Learning (SAC)." GitHub, 2021.
+    URL: https://github.com/singhnishesh/Active-Suspension-Control-Using-Deep-Reinforcement-Learning
+
+[7] Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., Dormann, N.
+    "Stable-Baselines3: Reliable Reinforcement Learning Implementations."
+    JMLR, 22(268):1-8, 2021.
+    URL: https://jmlr.org/papers/v22/20-1364.html
+
+[8] Boyd, S., Parikh, N., Chu, E., Peleato, B., Eckstein, J.
+    "Distributed Optimization and Statistical Learning via the Alternating
+    Direction Method of Multipliers."
+    Foundations and Trends in Machine Learning, 3(1):1-122, 2011.
+    DOI: 10.1561/2200000016
+
+[9] Stellato, B., Banjac, G., Goulart, P., Bemporad, A., Boyd, S.
+    "OSQP: An Operator Splitting Solver for Quadratic Programs."
+    Mathematical Programming Computation, 12(4):637-672, 2020.
+    URL: https://osqp.org
+
+[10] ECC-BFMC. "Simulator — Official Gazebo Environment for Bosch Future
+     Mobility Challenge." GitHub, 2021.
+     URL: https://github.com/ECC-BFMC/Simulator
+     Note: BFMC RC car proportions used as URDF reference only.
+     Original targets ROS1 Noetic; visual style adapted for ROS2 Humble.
+
+[11] Farama Foundation. "Gymnasium: A Standard Interface for Reinforcement
+     Learning Environments." GitHub, 2023.
+     URL: https://github.com/Farama-Foundation/Gymnasium
+     arXiv: https://arxiv.org/abs/2407.17032
+
+[12] Open Robotics. "ROS 2 Humble Hawksbill." 2022.
+     URL: https://docs.ros.org/en/humble/
+
+[13] Talmaci, A. "Quarter-Car-Suspension-System." GitHub, 2021.
+     URL: https://github.com/2Talmaci/Quarter-Car-Suspension-System
+
+[14] Nrsyed. "Half-Car Vehicle Dynamics with Matplotlib Animation."
+     GitHub, 2018.
+     URL: https://github.com/nrsyed/half-car
