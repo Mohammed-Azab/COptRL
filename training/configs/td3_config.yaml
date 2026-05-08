@@ -1,9 +1,0 @@
-algo: td3
-policy: MlpPolicy
-learning_rate: 1.0e-3
-buffer_size: 200000
-batch_size: 256
-tau: 0.005
-gamma: 0.99
-policy_kwargs:
-  net_arch: [400, 300]
