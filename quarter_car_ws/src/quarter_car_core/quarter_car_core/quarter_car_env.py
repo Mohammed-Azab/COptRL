@@ -1,5 +1,5 @@
 """
-QuarterCarEnv — Gymnasium environment for quarter-car active suspension RL.
+QuarterCarEnv Gymnasium environment for quarter-car active suspension RL.
 
 Observation (8,) float32:
   idx 0: z_s              [m]     clipped +-0.5
@@ -21,15 +21,11 @@ from gymnasium import spaces
 from quarter_car_core.ode_model import QuarterCarODE
 from quarter_car_core.road_generator import RoadGenerator
 from quarter_car_core.reward import RewardConfig, compute_reward, compute_terminal_bonus
-
-F_MAX         = 10_000.0  # N
-DT            = 0.02      # s (50 Hz)
-EPISODE_STEPS = 500       # 10 s
-TRUNC_TRAVEL  = 0.10      # m  — truncate if |travel| exceeds this
-TRUNC_ZS      = 0.30      # m  — truncate if |z_s| exceeds this
-
-OBS_HIGH = np.array([0.5, 5.0, 0.5, 5.0, 0.2, 2.0, 0.15, 0.1], dtype=np.float32)
-OBS_LOW  = -OBS_HIGH
+from quarter_car_core.params import (
+    F_MAX, DT, EPISODE_STEPS,
+    TRUNC_TRAVEL, TRUNC_ZS,
+    OBS_HIGH, OBS_LOW,
+)
 
 
 class QuarterCarEnv(gym.Env):
@@ -70,7 +66,6 @@ class QuarterCarEnv(gym.Env):
         self._hist       = None
         self._fig        = None
 
-    # ------------------------------------------------------------------ reset
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         rng = self.np_random
@@ -89,7 +84,6 @@ class QuarterCarEnv(gym.Env):
 
         return self._obs(), self._info(0.0)
 
-    # ------------------------------------------------------------------ step
     def step(self, action):
         F_act = float(np.clip(action[0], -1.0, 1.0)) * F_MAX
         self._last_F = F_act
@@ -126,7 +120,6 @@ class QuarterCarEnv(gym.Env):
 
         return self._obs(), reward, terminated, truncated, self._info(z_s_ddot)
 
-    # ------------------------------------------------------------------ internal
     def _obs(self) -> np.ndarray:
         z_s, z_s_dot, z_u, z_u_dot = self._state
         z_r     = self._road.get_height(self._t)
@@ -152,51 +145,54 @@ class QuarterCarEnv(gym.Env):
             'episode_time':   self._t,
         }
 
-    # ------------------------------------------------------------------ render
     def render(self):
         if self.render_mode == 'none':
             return None
         return self._do_render(self._road.get_height(self._t), self._last_F)
 
     def _do_render(self, z_r: float, F_act: float):
-        import io
-        import os
-        import matplotlib
-
-        if self.render_mode != 'human' or not os.environ.get('DISPLAY'):
-            matplotlib.use('Agg', force=True)
-
-        import matplotlib.pyplot as plt
-
         if self._hist is None:
             self._hist = {'t': [], 'z_s': [], 'z_u': [], 'z_r': [], 'F': []}
-
         self._hist['t'].append(self._t)
         self._hist['z_s'].append(float(self._state[0]))
         self._hist['z_u'].append(float(self._state[2]))
         self._hist['z_r'].append(z_r)
         self._hist['F'].append(F_act)
-
         if self.render_mode == 'human':
-            if self._fig is None:
-                self._fig, self._axes = plt.subplots(2, 1, figsize=(10, 5))
-                plt.ion()
-            ax1, ax2 = self._axes
-            ax1.cla()
-            ax1.plot(self._hist['t'], self._hist['z_s'], label='z_s (sprung)')
-            ax1.plot(self._hist['t'], self._hist['z_u'], label='z_u (unsprung)')
-            ax1.plot(self._hist['t'], self._hist['z_r'], '--', label='z_r (road)')
-            ax1.legend(fontsize=8)
-            ax1.set_ylabel('Height [m]')
-            ax2.cla()
-            ax2.plot(self._hist['t'], self._hist['F'])
-            ax2.set_ylabel('F_act [N]')
-            ax2.set_xlabel('Time [s]')
-            plt.tight_layout()
-            plt.pause(0.001)
-            return None
+            return self._render_human()
+        return self._render_rgb_array()
 
-        # rgb_array mode
+    def _render_human(self):
+        import os
+        import matplotlib
+        if not os.environ.get('DISPLAY'):
+            matplotlib.use('Agg', force=True)
+        import matplotlib.pyplot as plt
+
+        if self._fig is None:
+            self._fig, self._axes = plt.subplots(2, 1, figsize=(10, 5))
+            plt.ion()
+        ax1, ax2 = self._axes
+        ax1.cla()
+        ax1.plot(self._hist['t'], self._hist['z_s'], label='z_s (sprung)')
+        ax1.plot(self._hist['t'], self._hist['z_u'], label='z_u (unsprung)')
+        ax1.plot(self._hist['t'], self._hist['z_r'], '--', label='z_r (road)')
+        ax1.legend(fontsize=8)
+        ax1.set_ylabel('Height [m]')
+        ax2.cla()
+        ax2.plot(self._hist['t'], self._hist['F'])
+        ax2.set_ylabel('F_act [N]')
+        ax2.set_xlabel('Time [s]')
+        plt.tight_layout()
+        plt.pause(0.001)
+        return None
+
+    def _render_rgb_array(self):
+        import io
+        import matplotlib
+        matplotlib.use('Agg', force=True)
+        import matplotlib.pyplot as plt
+
         fig, axes = plt.subplots(2, 1, figsize=(10, 5))
         axes[0].plot(self._hist['t'], self._hist['z_s'], label='z_s')
         axes[0].plot(self._hist['t'], self._hist['z_u'], label='z_u')

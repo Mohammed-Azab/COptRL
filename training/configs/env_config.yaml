@@ -14,6 +14,12 @@ road:
   iso_gd0: 256e-6
   iso_n0: 0.1
 
+road_options:
+  - speed_bump
+  - iso_8608_class_c
+  - sine_sweep
+  - flat
+
 env:
   dt: 0.02
   episode_duration: 10.0
@@ -34,6 +40,12 @@ training:
   n_envs: 4
   action_repeat: 2
   reward_scale: 0.1
+
+algorithms:
+  - sac
+  - td3
+  - ppo
+  - passive
 
 gazebo:
   car_forward_speed: 10.0

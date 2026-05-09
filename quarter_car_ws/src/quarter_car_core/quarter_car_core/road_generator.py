@@ -1,8 +1,8 @@
-"""
-Road profile generator for quarter-car simulation.
-Profiles: speed_bump, iso_8608_class_c [3], sine_sweep, flat.
-"""
+# Road profile generator for quarter-car simulation.
+# Profiles: speed_bump, iso_8608_class_c, sine_sweep, flat.
 import numpy as np
+
+from quarter_car_core.params import ROAD_DEFAULTS
 
 
 class RoadGenerator:
@@ -10,23 +10,21 @@ class RoadGenerator:
                  params: dict = None):
         self.profile = profile
         self.speed = vehicle_speed
-        p = params or {}
+        p = {**ROAD_DEFAULTS, **(params or {})}
 
-        # Speed bump
-        self._bump_A = p.get('bump_height', 0.1)    # m
-        self._bump_L = p.get('bump_length', 0.5)    # m
+        self._bump_A = p['bump_height']     # m
+        self._bump_L = p['bump_length']     # m
 
-        # ISO 8608 Class C [3]
-        self._iso_Gd0      = p.get('iso_gd0', 256e-6)  # m^3/cyc
-        self._iso_n0       = p.get('iso_n0', 0.1)       # cyc/m
-        self._iso_dt       = 0.002                       # s
-        self._iso_duration = 60.0                        # s buffer length
+        # ISO 8608 buffer is pre-generated at init and regenerated on reset()
+        self._iso_Gd0      = p['iso_gd0']
+        self._iso_n0       = p['iso_n0']
+        self._iso_dt       = 0.002   # s — internal integration step
+        self._iso_duration = 60.0   # s — pre-generated buffer length
 
-        # Sine sweep
-        self._sweep_A      = p.get('sweep_amplitude', 0.02)
-        self._sweep_f_min  = 0.5    # Hz
-        self._sweep_f_max  = 20.0   # Hz
-        self._ep_duration  = p.get('episode_duration', 10.0)
+        self._sweep_A     = p['sweep_amplitude']
+        self._sweep_f_min = 0.5    # Hz
+        self._sweep_f_max = 20.0   # Hz
+        self._ep_duration = p['episode_duration']
 
         self._iso_h     = None
         self._iso_h_dot = None
