@@ -3,7 +3,7 @@ Gazebo evaluation launch.
 NO RViz2. Gazebo is the only 3D view. rqt_plot is the only signal view.
 
 Usage:
-  ros2 launch quarter_car_sim eval_gazebo.launch.py \
+  ros2 launch quarter_car_gazebo eval_gazebo.launch.py \
     model_path:=/path/to/model.zip algo:=sac
 """
 import os
@@ -15,7 +15,7 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    pkg = get_package_share_directory('quarter_car_sim')
+    pkg = get_package_share_directory('quarter_car_gazebo')
 
     model_path   = LaunchConfiguration('model_path')
     algo         = LaunchConfiguration('algo')
@@ -59,7 +59,7 @@ def generate_launch_description():
 
         # Physics simulation node
         Node(
-            package='quarter_car_sim',
+            package='quarter_car_gazebo',
             executable='sim_node',
             parameters=[{'road_profile': road_profile, 'passive': False}],
             output='screen',
@@ -67,7 +67,7 @@ def generate_launch_description():
 
         # Gazebo bridge node (TF + joint cmd_pos)
         Node(
-            package='quarter_car_sim',
+            package='quarter_car_gazebo',
             executable='gazebo_bridge_node',
             output='screen',
         ),

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>quarter_car_sim</name>
+  <name>quarter_car_gazebo</name>
   <version>0.1.0</version>
   <description>ROS2 simulation node and Gazebo bridge for quarter-car active suspension</description>
   <maintainer email="user@example.com">user</maintainer>

@@ -16,7 +16,7 @@ def generate_launch_description():
         DeclareLaunchArgument('model_path', description='Path to SB3 .zip model'),
         DeclareLaunchArgument('algo', default_value='sac'),
 
-        Node(package='quarter_car_sim',
+        Node(package='quarter_car_gazebo',
              executable='sim_node',
              parameters=[{'passive': False}],
              output='screen'),

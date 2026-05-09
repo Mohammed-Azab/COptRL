@@ -98,16 +98,8 @@ class SimNode(Node):
         now   = self.get_clock().now().to_msg()
         obs_8 = [z_s, z_s_dot, z_u, z_u_dot, z_r, z_r_dot, travel, tyre]
 
-        def _pose(z_val: float) -> PoseStamped:
-            p = PoseStamped()
-            p.header.stamp    = now
-            p.header.frame_id = 'map'
-            p.pose.position.z = float(z_val)
-            p.pose.orientation.w = 1.0
-            return p
-
-        self._pub_sp.publish(_pose(z_s))
-        self._pub_wh.publish(_pose(z_u))
+        self._pub_sp.publish(self._make_pose(z_s, now))
+        self._pub_wh.publish(self._make_pose(z_u, now))
         self._pub_rh.publish(Float64(data=float(z_r)))
         ma = Float64MultiArray()
         ma.data = [float(v) for v in obs_8]
@@ -115,6 +107,15 @@ class SimNode(Node):
         self._pub_acc.publish(Float64(data=float(z_s_ddot)))
         self._pub_rew.publish(Float64(data=float(reward)))
         self._pub_cs.publish(Float64(data=float(comfort)))
+
+
+    def _make_pose(self, z_val: float, stamp) -> PoseStamped:
+        p = PoseStamped()
+        p.header.stamp    = stamp
+        p.header.frame_id = 'map'
+        p.pose.position.z = float(z_val)
+        p.pose.orientation.w = 1.0
+        return p
 
 
 def main(args=None):

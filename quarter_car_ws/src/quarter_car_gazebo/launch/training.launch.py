@@ -1,11 +1,5 @@
-"""
-# ============================================================
-# REAL TRAINING: python training/train.py --algo sac
-#
-# This launch file is ONLY for testing the ROS topic pipeline.
-# It starts a passive sim_node (no controller, no Gazebo).
-# ============================================================
-"""
+# Tests the ROS topic pipeline only — passive sim_node, no controller, no Gazebo.
+# For actual training: python training/train.py --algo sac
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
@@ -13,7 +7,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         Node(
-            package='quarter_car_sim',
+            package='quarter_car_gazebo',
             executable='sim_node',
             name='sim_node',
             parameters=[{

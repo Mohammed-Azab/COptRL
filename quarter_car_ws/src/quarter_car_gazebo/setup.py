@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 from glob import glob
 
-package_name = 'quarter_car_sim'
+package_name = 'quarter_car_gazebo'
 
 setup(
     name=package_name,
@@ -20,8 +20,8 @@ setup(
     zip_safe=True,
     entry_points={
         'console_scripts': [
-            'sim_node           = quarter_car_sim.sim_node:main',
-            'gazebo_bridge_node = quarter_car_sim.gazebo_bridge_node:main',
+            'sim_node           = quarter_car_gazebo.sim_node:main',
+            'gazebo_bridge_node = quarter_car_gazebo.gazebo_bridge_node:main',
         ],
     },
 )
