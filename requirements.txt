@@ -9,3 +9,4 @@ tensorboard>=2.14.0
 pandas>=2.0.0
 pillow>=10.0.0
 setuptools<80
+just --classic

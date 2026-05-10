@@ -26,7 +26,7 @@ from QuarterCar_env.params import (
     F_MAX, DT, EPISODE_STEPS,
     TRUNC_TRAVEL, TRUNC_ZS,
     OBS_HIGH, OBS_LOW,
-    VEHICLE_SPEED, MAX_PISODE_STEPS,
+    VEHICLE_SPEED,
 )
 
 

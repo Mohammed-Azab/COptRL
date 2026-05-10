@@ -8,12 +8,12 @@
     arXiv: https://arxiv.org/abs/2408.08425
     GitHub: https://github.com/anh-nn01/RL4Suspension-ICMLA23
 
-[3] ISO 8608:2016. "Mechanical vibration — Road surface profiles —
+[3] ISO 8608:2016. "Mechanical vibration - Road surface profiles -
     Reporting of measured data."
     International Organization for Standardization.
 
-[4] ISO 2631-1:1997. "Mechanical vibration and shock — Evaluation of human
-    exposure to whole-body vibration — Part 1: General requirements."
+[4] ISO 2631-1:1997. "Mechanical vibration and shock - Evaluation of human
+    exposure to whole-body vibration - Part 1: General requirements."
     International Organization for Standardization.
 
 [5] Hrovat, D. "Survey of Advanced Suspension Developments and Related
@@ -40,7 +40,7 @@
     Mathematical Programming Computation, 12(4):637-672, 2020.
     URL: https://osqp.org
 
-[10] ECC-BFMC. "Simulator — Official Gazebo Environment for Bosch Future
+[10] ECC-BFMC. "Simulator - Official Gazebo Environment for Bosch Future
      Mobility Challenge." GitHub, 2021.
      URL: https://github.com/ECC-BFMC/Simulator
      Note: BFMC RC car proportions used as URDF reference only.
