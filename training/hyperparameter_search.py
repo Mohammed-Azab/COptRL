@@ -6,8 +6,6 @@ Usage:
   python training/hyperparameter_search.py --algo sac --trials 50 --timesteps 50000
 """
 import argparse
-import sys
-from pathlib import Path
 
 import numpy as np
 import optuna
@@ -15,10 +13,8 @@ from stable_baselines3 import SAC, TD3, PPO
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'quarter_car_ws' / 'src' / 'quarter_car_core'))
-
-from quarter_car_core.quarter_car_env import QuarterCarEnv
-from quarter_car_core.wrappers import ActionRepeat, RewardScaler
+from QuarterCar_env.envs import QuarterCarEnv
+from QuarterCar_env.wrappers import ActionRepeat, RewardScaler
 
 _ALGO_CLS = {'sac': SAC, 'td3': TD3, 'ppo': PPO}
 

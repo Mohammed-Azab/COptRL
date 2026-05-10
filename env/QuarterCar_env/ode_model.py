@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from quarter_car_ws.quarter_car_core.params import PHYSICS
+from QuarterCar_env.params import PHYSICS
 
 
 class QuarterCarODE:
@@ -35,7 +35,7 @@ class QuarterCarODE:
         return new_state, float(derivs[1])
 
     def get_state_space(self):
-        """Linearised (A, B, C, D) about equilibrium for LQR/MPC design [1][5]."""
+        """Linearised (A, B, C, D) about equilibrium for LQR/MPC design."""
         ms, mu, ks, cs, kt = self.m_s, self.m_u, self.k_s, self.c_s, self.k_t
         A = np.array([
             [0,       1,          0,       0      ],

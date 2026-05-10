@@ -33,3 +33,6 @@ ROAD_DEFAULTS = {
     'sweep_amplitude':  0.02,   # m
     'episode_duration': 10.0,   # s
 }
+
+VEHICLE_SPEED = 10.0  # m/s (36 km/h)
+MAX_PISODE_STEPS = 1000

@@ -2,7 +2,7 @@
 # Profiles: speed_bump, iso_8608_class_c, sine_sweep, flat.
 import numpy as np
 
-from quarter_car_ws.quarter_car_core.params import ROAD_DEFAULTS
+from QuarterCar_env.params import ROAD_DEFAULTS
 
 
 class RoadGenerator:
@@ -30,7 +30,6 @@ class RoadGenerator:
         self._iso_h_dot = None
         self._build_iso_buffer(seed=None)
 
-    # ------------------------------------------------------------------
     def _build_iso_buffer(self, seed=None):
         rng = np.random.default_rng(seed)
         n    = int(self._iso_duration / self._iso_dt)
@@ -40,8 +39,6 @@ class RoadGenerator:
         n_freq      = np.fft.rfftfreq(n, d=dx)
         n_freq[0]   = 1e-9  # avoid divide-by-zero at DC
         Gd          = self._iso_Gd0 * (n_freq / self._iso_n0) ** (-2)
-        # IRFFT divides by n, so multiply by n/2 to recover the correct physical amplitude.
-        # The factor sqrt(2) gives one-sided → two-sided PSD conversion.
         amp         = (n / 2.0) * np.sqrt(2.0 * Gd / x_total)
         phases      = rng.uniform(0, 2 * np.pi, size=len(n_freq))
         spectrum    = amp * np.exp(1j * phases)
@@ -51,7 +48,6 @@ class RoadGenerator:
         self._iso_h     = h
         self._iso_h_dot = np.gradient(h, self._iso_dt)
 
-    # ------------------------------------------------------------------
     def get_height(self, t: float) -> float:
         if self.profile == 'flat':
             return 0.0

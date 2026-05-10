@@ -1,12 +1,9 @@
 import argparse
-import sys
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
 import yaml
-
-sys.path.insert(0, str(Path(__file__).parent.parent / 'quarter_car_ws' / 'src' / 'quarter_car_core'))
 
 from stable_baselines3 import SAC, TD3, PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecNormalize
@@ -14,8 +11,8 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.callbacks import EvalCallback as SB3EvalCallback
 from stable_baselines3.common.monitor import Monitor
 
-from quarter_car_core.quarter_car_env import QuarterCarEnv
-from quarter_car_core.wrappers import ActionRepeat, NormalizeObservation, RewardScaler, EpisodeLogger
+from QuarterCar_env.envs import QuarterCarEnv
+from QuarterCar_env.wrappers import ActionRepeat, NormalizeObservation, RewardScaler, EpisodeLogger
 
 ALGOS = {'sac': SAC, 'td3': TD3, 'ppo': PPO}
 

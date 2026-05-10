@@ -1,14 +1,11 @@
 import argparse
-import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'quarter_car_ws' / 'src' / 'quarter_car_core'))
-
-from quarter_car_core.quarter_car_env import QuarterCarEnv
+from QuarterCar_env.envs import QuarterCarEnv
 
 _SB3_ALGOS = {'sac', 'td3', 'ppo'}
 
@@ -65,7 +62,7 @@ def _run_episode(env: QuarterCarEnv, model, algo: str) -> tuple:
     records = []
     done = False
     while not done:
-        # passive = zero actuator force (spring/damper only) — the no-control baseline
+        # passive = zero actuator force (spring/damper only) - the no-control baseline
         if algo == 'passive':
             action = np.array([0.0], dtype=np.float32)
         else:
@@ -113,7 +110,7 @@ def _plot(df_rl: pd.DataFrame, df_passive: pd.DataFrame | None, algo: str):
     axes[3].set_ylabel('F_act [N]')
     axes[3].set_xlabel('Time [s]')
 
-    plt.suptitle(f'Evaluation — {algo}')
+    plt.suptitle(f'Evaluation - {algo}')
     plt.tight_layout()
     plt.show()
 

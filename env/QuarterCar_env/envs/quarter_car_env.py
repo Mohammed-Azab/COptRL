@@ -14,22 +14,19 @@ Observation (8,) float32:
 Action (1,) float32 in [-1, 1]:
   F_act = action[0] * F_MAX   (F_MAX = 10000 N)
 """
+
 import numpy as np
 import gymnasium as gym
-from gymnasium import register, spaces 
+from gymnasium import spaces
 
-from quarter_car_ws.quarter_car_core.ode_model import QuarterCarODE
-from quarter_car_ws.quarter_car_core.road_generator import RoadGenerator
-from quarter_car_ws.quarter_car_core.reward import RewardConfig, compute_reward, compute_terminal_bonus
-from quarter_car_ws.quarter_car_core.params import (
+from QuarterCar_env.ode_model import QuarterCarODE
+from QuarterCar_env.road_generator import RoadGenerator
+from QuarterCar_env.reward import RewardConfig, compute_reward, compute_terminal_bonus
+from QuarterCar_env.params import (
     F_MAX, DT, EPISODE_STEPS,
     TRUNC_TRAVEL, TRUNC_ZS,
     OBS_HIGH, OBS_LOW,
-)
-
-register(
-    id='QuarterCarEnv',
-    entry_point='quarter_car_ws.quarter_car_core.quarter_car_env:QuarterCarEnv',
+    VEHICLE_SPEED, MAX_PISODE_STEPS,
 )
 
 
@@ -39,7 +36,7 @@ class QuarterCarEnv(gym.Env):
     def __init__(
         self,
         road_profile: str = 'iso_8608_class_c',
-        vehicle_speed: float = 10.0,
+        vehicle_speed: float = VEHICLE_SPEED,
         render_mode: str = 'none',
         physics_params: dict = None,
         road_params: dict = None,
