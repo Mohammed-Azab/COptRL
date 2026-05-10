@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from quarter_car_core.params import PHYSICS
+from quarter_car_ws.quarter_car_core.params import PHYSICS
 
 
 class QuarterCarODE:

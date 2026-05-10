@@ -16,15 +16,20 @@ Action (1,) float32 in [-1, 1]:
 """
 import numpy as np
 import gymnasium as gym
-from gymnasium import spaces
+from gymnasium import register, spaces 
 
-from quarter_car_core.ode_model import QuarterCarODE
-from quarter_car_core.road_generator import RoadGenerator
-from quarter_car_core.reward import RewardConfig, compute_reward, compute_terminal_bonus
-from quarter_car_core.params import (
+from quarter_car_ws.quarter_car_core.ode_model import QuarterCarODE
+from quarter_car_ws.quarter_car_core.road_generator import RoadGenerator
+from quarter_car_ws.quarter_car_core.reward import RewardConfig, compute_reward, compute_terminal_bonus
+from quarter_car_ws.quarter_car_core.params import (
     F_MAX, DT, EPISODE_STEPS,
     TRUNC_TRAVEL, TRUNC_ZS,
     OBS_HIGH, OBS_LOW,
+)
+
+register(
+    id='QuarterCarEnv',
+    entry_point='quarter_car_ws.quarter_car_core.quarter_car_env:QuarterCarEnv',
 )
 
 
