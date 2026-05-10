@@ -1,0 +1,54 @@
+Mandl dynamics sanity tests
+Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
+
+
+============================================================
+1. Static equilibrium (zero road, zero action)
+============================================================
+  z_B_ddot = 0.00e+00 m/s²  (expect ≈ 0)
+  max |Δx[0:4]| = 0.00e+00  (expect ≈ 0)
+  [PASS] Body acceleration at static equilibrium < 1e-6 m/s²
+  [PASS] Vertical states remain at zero (no drift from flat road)
+
+============================================================
+2. Damper asymmetry (A = d1/z1 = 0.5)
+============================================================
+  v_S = ±0.05 m/s → F_cmp = 117.7 N, F_rbd = -235.3 N, ratio = 0.5000
+  v_S = ±0.1 m/s → F_cmp = 235.3 N, F_rbd = -470.7 N, ratio = 0.5000
+  v_S = ±0.15 m/s → F_cmp = 353.0 N, F_rbd = -706.0 N, ratio = 0.5000
+  [PASS] Compression/rebound ratio ≈ A = 0.5 for all low-speed test points
+  [PASS] High-speed compression force > low-speed boundary
+
+============================================================
+3. Nonlinear spring activation
+============================================================
+  [PASS] Nonlinear spring = 0 inside linear range
+    compression: dyn = 0.025 m → F_nonlin = 58.4 N
+    compression: dyn = 0.030 m → F_nonlin = 142.5 N
+    compression: dyn = 0.040 m → F_nonlin = 401.9 N
+    compression: dyn = 0.060 m → F_nonlin = 1409.3 N
+  [PASS] Compression nonlinear force is positive and progressive
+    rebound:     dyn = -0.085 m → F_nonlin = -1125.6 N
+    rebound:     dyn = -0.090 m → F_nonlin = -2601.7 N
+    rebound:     dyn = -0.110 m → F_nonlin = -14400.7 N
+    rebound:     dyn = -0.140 m → F_nonlin = -79629.0 N
+  [PASS] Rebound nonlinear force is negative and progressive
+  [PASS] Nonlinear spring clipped at F_ks_nlin_max = 1e+05 N
+
+============================================================
+4. Speed-bump rollout — 500 steps, no NaN/Inf
+============================================================
+  Completed 500 steps, done=True
+  [PASS] No NaN/Inf in obs or reward over 500 speed-bump steps
+
+============================================================
+5. Free vibration decays (passive system is stable)
+============================================================
+  Initial 2-norm of vertical states: 0.0500
+  Final   2-norm after 4 s:          0.0000
+  [PASS] Vertical state norm decays over 4 s (damping is positive)
+  [PASS] State norm < 1e-2 after 4 s (well-damped)
+
+============================================================
+Summary: 5 passed, 0 failed
+============================================================

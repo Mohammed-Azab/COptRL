@@ -1,25 +1,34 @@
 """
-QuarterCarEnv Gymnasium environment for quarter-car active suspension RL.
+QuarterCarEnv: A Gymnasium environment for quarter-car active suspension RL.
 
-Observation (8,) float32:
-  idx 0: z_s              [m]     clipped +-0.5
-  idx 1: z_s_dot          [m/s]   clipped +-5
-  idx 2: z_u              [m]     clipped +-0.5
-  idx 3: z_u_dot          [m/s]   clipped +-5
-  idx 4: z_r              [m]     clipped +-0.2
-  idx 5: z_r_dot          [m/s]   clipped +-2
-  idx 6: suspension_travel = z_s - z_u  [m]  clipped +-0.15
-  idx 7: tyre_deflection   = z_u - z_r  [m]  clipped +-0.1
+State (internal, 6-D float64):
+  x[0] = ζ − z_W   tire deflection           [m]
+  x[1] = ż_W       wheel vertical velocity    [m/s]
+  x[2] = z_W − z_B suspension travel          [m]
+  x[3] = ż_B       body vertical velocity     [m/s]
+  x[4] = v         longitudinal velocity      [m/s]
+  x[5] = z_B       body displacement from static eq. [m]
 
-Action (1,) float32 in [-1, 1]:
-  F_act = action[0] * F_MAX   (F_MAX = 10000 N)
+Observation (8,) float32 — clipped to OBS_LOW/OBS_HIGH:
+  idx 0: z_B            body displacement      [m]
+  idx 1: ż_B            body velocity          [m/s]
+  idx 2: z_W = z_B + (z_W−z_B)  wheel displacement [m]
+  idx 3: ż_W            wheel velocity         [m/s]
+  idx 4: ζ              road height            [m]
+  idx 5: ζ̇             road velocity          [m/s]
+  idx 6: z_W − z_B      suspension travel      [m]
+  idx 7: ζ − z_W        tire deflection        [m]
+
+Action (1,) float32 ∈ [−1, 1]:
+  F_act = action[0] × F_MAX   (F_MAX = 10 000 N)
+  Positive → lifts body / presses wheel down; applied equal-and-opposite.
 """
 
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-from QuarterCar_env.ode_model import QuarterCarODE
+from QuarterCar_env.ode_model import MandlQuarterCarODE
 from QuarterCar_env.road_generator import RoadGenerator
 from QuarterCar_env.reward import RewardConfig, compute_reward, compute_terminal_bonus
 from QuarterCar_env.params import (
@@ -45,20 +54,21 @@ class QuarterCarEnv(gym.Env):
         super().__init__()
         self.render_mode  = render_mode
         self.road_profile = road_profile
+        self._v0          = float(vehicle_speed)
 
         self.observation_space = spaces.Box(
             low=OBS_LOW, high=OBS_HIGH, dtype=np.float32)
         self.action_space = spaces.Box(
             low=np.array([-1.0], dtype=np.float32),
-            high=np.array([1.0], dtype=np.float32),
+            high=np.array([1.0],  dtype=np.float32),
             dtype=np.float32,
         )
 
-        self._ode  = QuarterCarODE(physics_params)
+        self._ode  = MandlQuarterCarODE(physics_params)
         self._road = RoadGenerator(road_profile, vehicle_speed, road_params)
         self._rcfg = reward_config or RewardConfig()
 
-        self._state      = np.zeros(4, dtype=np.float64)
+        self._state      = self._ode.reset(self._v0)
         self._t          = 0.0
         self._step_count = 0
         self._accel_sq   = 0.0
@@ -72,10 +82,14 @@ class QuarterCarEnv(gym.Env):
         super().reset(seed=seed)
         rng = self.np_random
 
-        self._ode.reset()
         self._road.reset(seed=int(rng.integers(0, 2**31)))
 
-        self._state      = rng.normal(0.0, 0.005, size=4)
+        x = self._ode.reset(self._v0)
+        # small random perturbation on vertical states
+        x[0:4] += rng.normal(0.0, 0.005, size=4)
+        x[5]   += rng.normal(0.0, 0.001)
+        self._state = x
+
         self._t          = 0.0
         self._step_count = 0
         self._accel_sq   = 0.0
@@ -90,26 +104,24 @@ class QuarterCarEnv(gym.Env):
         F_act = float(np.clip(action[0], -1.0, 1.0)) * F_MAX
         self._last_F = F_act
 
-        z_r     = self._road.get_height(self._t)
-        z_r_dot = self._road.get_height_dot(self._t)
-
-        new_state, z_s_ddot = self._ode.step(self._state, F_act, z_r, DT)
+        new_state, z_B_ddot = self._ode.step(
+            self._state, self._road.get_height_dot, self._t, F_act
+        )
         self._state = new_state
         self._t    += DT
         self._step_count += 1
 
-        z_s, _, z_u, _ = self._state
-        travel = z_s - z_u
-        tyre   = z_u - z_r
+        # Mandl state aliases
+        tyre_defl = float(new_state[0])   # ζ − z_W
+        travel    = float(new_state[2])   # z_W − z_B
 
-        self._accel_sq   += z_s_ddot ** 2
+        self._accel_sq   += z_B_ddot ** 2
         self._travel_sq  += travel ** 2
-        self._peak_accel  = max(self._peak_accel, abs(z_s_ddot))
+        self._peak_accel  = max(self._peak_accel, abs(z_B_ddot))
 
-        reward = compute_reward(z_s_ddot, travel, tyre, F_act, self._rcfg)
+        reward = compute_reward(z_B_ddot, travel, tyre_defl, F_act, self._rcfg)
 
-        # gymnasium identity-checks `is False`, so we must return Python bool, not numpy bool
-        truncated  = bool(abs(travel) > TRUNC_TRAVEL or abs(z_s) > TRUNC_ZS)
+        truncated  = bool(abs(travel) > TRUNC_TRAVEL or abs(float(new_state[5])) > TRUNC_ZS)
         terminated = False
 
         if self._step_count >= EPISODE_STEPS and not truncated:
@@ -118,23 +130,29 @@ class QuarterCarEnv(gym.Env):
             reward += compute_terminal_bonus(rms, self._rcfg)
 
         if self.render_mode == 'human':
-            self._do_render(z_r, F_act)
+            self._do_render(self._road.get_height(self._t), F_act)
 
-        return self._obs(), reward, terminated, truncated, self._info(z_s_ddot)
+        return self._obs(), reward, terminated, truncated, self._info(z_B_ddot)
 
     def _obs(self) -> np.ndarray:
-        z_s, z_s_dot, z_u, z_u_dot = self._state
-        z_r     = self._road.get_height(self._t)
-        z_r_dot = self._road.get_height_dot(self._t)
+        x   = self._state
+        zeta     = self._road.get_height(self._t)
+        zeta_dot = self._road.get_height_dot(self._t)
+        z_B  = float(x[5])
+        z_W  = z_B + float(x[2])   # z_B + (z_W − z_B)
         raw = np.array([
-            z_s, z_s_dot, z_u, z_u_dot,
-            z_r, z_r_dot,
-            z_s - z_u,
-            z_u - z_r,
+            z_B,          # idx 0: body displacement
+            float(x[3]),  # idx 1: body velocity
+            z_W,          # idx 2: wheel displacement
+            float(x[1]),  # idx 3: wheel velocity
+            zeta,         # idx 4: road height
+            zeta_dot,     # idx 5: road velocity
+            float(x[2]),  # idx 6: suspension travel
+            float(x[0]),  # idx 7: tire deflection
         ], dtype=np.float32)
         return np.clip(raw, OBS_LOW, OBS_HIGH)
 
-    def _info(self, z_s_ddot: float) -> dict:
+    def _info(self, z_B_ddot: float) -> dict:
         n   = max(self._step_count, 1)
         rms = np.sqrt(self._accel_sq / n)
         return {
@@ -152,21 +170,22 @@ class QuarterCarEnv(gym.Env):
             return None
         return self._do_render(self._road.get_height(self._t), self._last_F)
 
-    def _do_render(self, z_r: float, F_act: float):
+    def _do_render(self, zeta: float, F_act: float):
         if self._hist is None:
-            self._hist = {'t': [], 'z_s': [], 'z_u': [], 'z_r': [], 'F': []}
+            self._hist = {'t': [], 'z_B': [], 'z_W': [], 'zeta': [], 'F': []}
+        z_B = float(self._state[5])
+        z_W = z_B + float(self._state[2])
         self._hist['t'].append(self._t)
-        self._hist['z_s'].append(float(self._state[0]))
-        self._hist['z_u'].append(float(self._state[2]))
-        self._hist['z_r'].append(z_r)
+        self._hist['z_B'].append(z_B)
+        self._hist['z_W'].append(z_W)
+        self._hist['zeta'].append(zeta)
         self._hist['F'].append(F_act)
         if self.render_mode == 'human':
             return self._render_human()
         return self._render_rgb_array()
 
     def _render_human(self):
-        import os
-        import matplotlib
+        import os, matplotlib
         if not os.environ.get('DISPLAY'):
             matplotlib.use('Agg', force=True)
         import matplotlib.pyplot as plt
@@ -176,39 +195,33 @@ class QuarterCarEnv(gym.Env):
             plt.ion()
         ax1, ax2 = self._axes
         ax1.cla()
-        ax1.plot(self._hist['t'], self._hist['z_s'], label='z_s (sprung)')
-        ax1.plot(self._hist['t'], self._hist['z_u'], label='z_u (unsprung)')
-        ax1.plot(self._hist['t'], self._hist['z_r'], '--', label='z_r (road)')
-        ax1.legend(fontsize=8)
-        ax1.set_ylabel('Height [m]')
+        ax1.plot(self._hist['t'], self._hist['z_B'],   label='z_B (body)')
+        ax1.plot(self._hist['t'], self._hist['z_W'],   label='z_W (wheel)')
+        ax1.plot(self._hist['t'], self._hist['zeta'], '--', label='ζ (road)')
+        ax1.legend(fontsize=8); ax1.set_ylabel('Displacement [m]')
         ax2.cla()
         ax2.plot(self._hist['t'], self._hist['F'])
-        ax2.set_ylabel('F_act [N]')
-        ax2.set_xlabel('Time [s]')
-        plt.tight_layout()
-        plt.pause(0.001)
+        ax2.set_ylabel('F_act [N]'); ax2.set_xlabel('Time [s]')
+        plt.tight_layout(); plt.pause(0.001)
         return None
 
     def _render_rgb_array(self):
-        import io
-        import matplotlib
+        import io, matplotlib
         matplotlib.use('Agg', force=True)
         import matplotlib.pyplot as plt
+        from PIL import Image
 
         fig, axes = plt.subplots(2, 1, figsize=(10, 5))
-        axes[0].plot(self._hist['t'], self._hist['z_s'], label='z_s')
-        axes[0].plot(self._hist['t'], self._hist['z_u'], label='z_u')
-        axes[0].plot(self._hist['t'], self._hist['z_r'], '--', label='z_r')
-        axes[0].legend(fontsize=8)
-        axes[0].set_ylabel('Height [m]')
+        axes[0].plot(self._hist['t'], self._hist['z_B'],   label='z_B')
+        axes[0].plot(self._hist['t'], self._hist['z_W'],   label='z_W')
+        axes[0].plot(self._hist['t'], self._hist['zeta'], '--', label='ζ')
+        axes[0].legend(fontsize=8); axes[0].set_ylabel('Displacement [m]')
         axes[1].plot(self._hist['t'], self._hist['F'])
-        axes[1].set_ylabel('F_act [N]')
-        axes[1].set_xlabel('Time [s]')
+        axes[1].set_ylabel('F_act [N]'); axes[1].set_xlabel('Time [s]')
         plt.tight_layout()
         buf = io.BytesIO()
         fig.savefig(buf, format='png', dpi=72)
         buf.seek(0)
-        from PIL import Image
         img = np.array(Image.open(buf).convert('RGB'))
         plt.close(fig)
         return img

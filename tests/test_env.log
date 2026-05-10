@@ -6,7 +6,7 @@ Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
 1. Environment registration
 ============================================================
   [PASS] gym.make('QuarterCar_env/QuarterCar-v0') succeeded
-  observation_space : Box([-0.5  -5.   -0.5  -5.   -0.2  -2.   -0.15 -0.1 ], [0.5  5.   0.5  5.   0.2  2.   0.15 0.1 ], (8,), float32)
+  observation_space : Box([-0.3  -3.   -0.4  -5.   -0.15 -7.   -0.15 -0.05], [0.3  3.   0.4  5.   0.15 7.   0.15 0.05], (8,), float32)
   action_space      : Box(-1.0, 1.0, (1,), float32)
 
 ============================================================
@@ -30,15 +30,15 @@ Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
 ============================================================
 4. Full episode rollout (random policy)
 ============================================================
-  [PASS] speed_bump              steps=  22  return=   -63.629  rms_accel=15.7889  comfort=0.0000
-  [PASS] iso_8608_class_c        steps=  21  return=   -33.033  rms_accel=11.2438  comfort=0.0000
-  [PASS] sine_sweep              steps=  18  return=   -23.309  rms_accel=9.8805  comfort=0.0119
-  [PASS] flat                    steps=  49  return=   -78.292  rms_accel=11.5086  comfort=0.0000
+  [PASS] speed_bump              steps= 500  return=  -231.637  rms_accel=6.0019  comfort=0.3998
+  [PASS] iso_8608_class_c        steps= 500  return=  -268.819  rms_accel=6.3478  comfort=0.3652
+  [PASS] sine_sweep              steps= 500  return=  -414.089  rms_accel=8.2748  comfort=0.1725
+  [PASS] flat                    steps= 500  return=  -218.240  rms_accel=5.7906  comfort=0.4209
 
 ============================================================
 5. Passive baseline (zero action = spring-damper only)
 ============================================================
-  [PASS] Passive episode completed  rms_accel=1.3961  comfort=0.8604
+  [PASS] Passive episode completed  rms_accel=2.0353  comfort=0.7965
 
 ============================================================
 6. gymnasium check_env
