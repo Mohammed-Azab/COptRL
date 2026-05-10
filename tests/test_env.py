@@ -46,8 +46,8 @@ def info(msg: str, log):
 
 def check_registration(log):
     section("1. Environment registration", log)
-    env = gym.make("QuarterCar_env/QuarterCar-v0")
-    ok("gym.make('QuarterCar_env/QuarterCar-v0') succeeded", log)
+    env = gym.make("QuarterCar_env/QuarterCar")
+    ok("gym.make('QuarterCar_env/QuarterCar') succeeded", log)
     info(f"observation_space : {env.observation_space}", log)
     info(f"action_space      : {env.action_space}", log)
     env.close()
@@ -55,7 +55,7 @@ def check_registration(log):
 
 def check_spaces(log):
     section("2. Spaces", log)
-    env = gym.make("QuarterCar_env/QuarterCar-v0")
+    env = gym.make("QuarterCar_env/QuarterCar")
     obs, _ = env.reset()
 
     assert env.observation_space.shape == (8,), "obs shape"
@@ -75,7 +75,7 @@ def check_spaces(log):
 
 def check_reset_step(log):
     section("3. reset() / step() contract", log)
-    env = gym.make("QuarterCar_env/QuarterCar-v0")
+    env = gym.make("QuarterCar_env/QuarterCar")
     obs, info_dict = env.reset(seed=0)
 
     assert obs.dtype == np.float32, f"obs dtype {obs.dtype}"
@@ -108,7 +108,7 @@ def check_full_episode(log):
     section("4. Full episode rollout (random policy)", log)
     results = {}
     for profile in ["speed_bump", "iso_8608_class_c", "sine_sweep", "flat"]:
-        env = gym.make("QuarterCar_env/QuarterCar-v0", road_profile=profile)
+        env = gym.make("QuarterCar_env/QuarterCar", road_profile=profile)
         obs, _ = env.reset(seed=42)
         total_reward = 0.0
         steps = 0
@@ -132,7 +132,7 @@ def check_full_episode(log):
 
 def check_zero_action(log):
     section("5. Passive baseline (zero action = spring-damper only)", log)
-    env = gym.make("QuarterCar_env/QuarterCar-v0", road_profile="speed_bump")
+    env = gym.make("QuarterCar_env/QuarterCar", road_profile="speed_bump")
     obs, _ = env.reset(seed=0)
     done = False
     while not done:
@@ -187,7 +187,7 @@ def run_sb3_check_env(log):
 def check_seed_reproducibility(log):
     section("8. Seed reproducibility", log)
     def rollout(seed):
-        env = gym.make("QuarterCar_env/QuarterCar-v0", road_profile="speed_bump")
+        env = gym.make("QuarterCar_env/QuarterCar", road_profile="speed_bump")
         obs, _ = env.reset(seed=seed)
         rewards = []
         for _ in range(20):

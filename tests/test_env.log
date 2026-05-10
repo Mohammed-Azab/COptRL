@@ -5,7 +5,7 @@ Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
 ============================================================
 1. Environment registration
 ============================================================
-  [PASS] gym.make('QuarterCar_env/QuarterCar-v0') succeeded
+  [PASS] gym.make('QuarterCar_env/QuarterCar') succeeded
   observation_space : Box([-0.3  -3.   -0.4  -5.   -0.15 -7.   -0.15 -0.05], [0.3  3.   0.4  5.   0.15 7.   0.15 0.05], (8,), float32)
   action_space      : Box(-1.0, 1.0, (1,), float32)
 
@@ -30,10 +30,10 @@ Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
 ============================================================
 4. Full episode rollout (random policy)
 ============================================================
-  [PASS] speed_bump              steps= 500  return=  -231.637  rms_accel=6.0019  comfort=0.3998
-  [PASS] iso_8608_class_c        steps= 500  return=  -268.819  rms_accel=6.3478  comfort=0.3652
-  [PASS] sine_sweep              steps= 500  return=  -414.089  rms_accel=8.2748  comfort=0.1725
-  [PASS] flat                    steps= 500  return=  -218.240  rms_accel=5.7906  comfort=0.4209
+  [PASS] speed_bump              steps= 500  return=  -233.062  rms_accel=5.9592  comfort=0.4041
+  [PASS] iso_8608_class_c        steps= 500  return=  -222.864  rms_accel=5.8474  comfort=0.4153
+  [PASS] sine_sweep              steps= 500  return=  -419.132  rms_accel=8.2456  comfort=0.1754
+  [PASS] flat                    steps= 500  return=  -207.216  rms_accel=5.6175  comfort=0.4382
 
 ============================================================
 5. Passive baseline (zero action = spring-damper only)

@@ -123,7 +123,7 @@ def check_rollout_no_nan(log):
     import gymnasium as gym
     import QuarterCar_env   # registers the env
 
-    env = gym.make('QuarterCar_env/QuarterCar-v0', road_profile='speed_bump')
+    env = gym.make('QuarterCar_env/QuarterCar', road_profile='speed_bump')
     obs, _ = env.reset(seed=0)
 
     nan_detected = False

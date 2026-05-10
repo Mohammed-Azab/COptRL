@@ -8,7 +8,7 @@ Scaffolded with the [Gymnasium environment template](https://github.com/Farama-F
 
 ## Environment
 
-**`QuarterCar_env/QuarterCar-v0`** — 2-DOF quarter-car model with an active actuator between sprung and unsprung masses.
+**`QuarterCar_env/QuarterCar`** — 2-DOF quarter-car model with an active actuator between sprung and unsprung masses.
 
 | | |
 |---|---|
@@ -87,7 +87,7 @@ pip install -e gym_env/
 import gymnasium as gym
 import QuarterCar_env  # registers the environment
 
-env = gym.make("QuarterCar_env/QuarterCar-v0", road_profile="speed_bump")
+env = gym.make("QuarterCar_env/QuarterCar", road_profile="speed_bump")
 obs, info = env.reset()
 
 for _ in range(500):
