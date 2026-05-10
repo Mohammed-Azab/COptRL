@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>quarter_car_controllers</name>
+  <name>control</name>
   <version>0.1.0</version>
   <description>RL, LQR, and MPC controller nodes for quarter-car active suspension</description>
   <maintainer email="user@example.com">user</maintainer>

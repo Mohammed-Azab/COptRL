@@ -2,7 +2,7 @@
 RL controller node. Loads a Stable-Baselines3 model and publishes actuator force.
 
 ROS params:
-  ~model_path    string  REQUIRED — path to .zip file
+  ~model_path    string  REQUIRED - path to .zip file
   ~algo          string  default: 'sac'
   ~deterministic bool    default: true
 """

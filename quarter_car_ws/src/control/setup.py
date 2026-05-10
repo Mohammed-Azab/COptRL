@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-package_name = 'quarter_car_controllers'
+package_name = 'control'
 
 setup(
     name=package_name,
@@ -15,9 +15,9 @@ setup(
     zip_safe=True,
     entry_points={
         'console_scripts': [
-            'lqr_node = quarter_car_controllers.lqr_node:main',
-            'mpc_node = quarter_car_controllers.mpc_node:main',
-            'rl_node  = quarter_car_controllers.rl_node:main',
+            'lqr_node = control.lqr_node:main',
+            'mpc_node = control.mpc_node:main',
+            'rl_node  = control.rl_node:main',
         ],
     },
 )
