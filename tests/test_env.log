@@ -1,0 +1,63 @@
+QuarterCarEnv test run
+Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
+
+
+============================================================
+1. Environment registration
+============================================================
+  [PASS] gym.make('QuarterCar_env/QuarterCar-v0') succeeded
+  observation_space : Box([-0.5  -5.   -0.5  -5.   -0.2  -2.   -0.15 -0.1 ], [0.5  5.   0.5  5.   0.2  2.   0.15 0.1 ], (8,), float32)
+  action_space      : Box(-1.0, 1.0, (1,), float32)
+
+============================================================
+2. Spaces
+============================================================
+  [PASS] observation_space.shape == (8,)
+  [PASS] action_space.shape == (1,)
+  [PASS] action_space in [-1, 1]
+  [PASS] reset() obs is inside observation_space
+
+============================================================
+3. reset() / step() contract
+============================================================
+  [PASS] obs.dtype == float32
+  [PASS] reward is float
+  [PASS] terminated is bool (not numpy bool)
+  [PASS] truncated is bool (not numpy bool)
+  [PASS] step() obs is inside observation_space
+  [PASS] info dict contains all expected keys
+
+============================================================
+4. Full episode rollout (random policy)
+============================================================
+  [PASS] speed_bump              steps=  22  return=   -63.629  rms_accel=15.7889  comfort=0.0000
+  [PASS] iso_8608_class_c        steps=  21  return=   -33.033  rms_accel=11.2438  comfort=0.0000
+  [PASS] sine_sweep              steps=  18  return=   -23.309  rms_accel=9.8805  comfort=0.0119
+  [PASS] flat                    steps=  49  return=   -78.292  rms_accel=11.5086  comfort=0.0000
+
+============================================================
+5. Passive baseline (zero action = spring-damper only)
+============================================================
+  [PASS] Passive episode completed  rms_accel=1.3961  comfort=0.8604
+
+============================================================
+6. gymnasium check_env
+============================================================
+  [PASS] gymnasium check_env passed with no errors
+    warning: /home/ubuntu/myRepo/quarter_car_sim/.venv/lib/python3.10/site-packages/gymnasium/utils/env_checker.py:367: UserWarning: [33mWARN: `check_env(warn=...)` parameter is now ignored.[0m
+    warning:   logger.warn("`check_env(warn=...)` parameter is now ignored.")
+
+============================================================
+7. stable-baselines3 check_env
+============================================================
+  [PASS] SB3 check_env passed with no errors
+
+============================================================
+8. Seed reproducibility
+============================================================
+  [PASS] Same seed → identical rewards
+  [PASS] Different seeds → different rewards
+
+============================================================
+Summary: 8 passed, 0 failed
+============================================================
