@@ -12,14 +12,15 @@ class RoadGenerator:
         self.speed = vehicle_speed
         p = {**ROAD_DEFAULTS, **(params or {})}
 
-        self._bump_A = p['bump_height']     # m
-        self._bump_L = p['bump_length']     # m
+        self._bump_A  = p['bump_height']      # m
+        self._bump_L  = p['bump_length']      # m
+        self._bump_x0 = p['bump_x_start']     # m - start position along road
 
         # ISO 8608 buffer is pre-generated at init and regenerated on reset()
         self._iso_Gd0      = p['iso_gd0']
         self._iso_n0       = p['iso_n0']
-        self._iso_dt       = 0.002   # s — internal integration step
-        self._iso_duration = 60.0   # s — pre-generated buffer length
+        self._iso_dt       = 0.002   # s - internal integration step
+        self._iso_duration = 60.0   # s - pre-generated buffer length
 
         self._sweep_A     = p['sweep_amplitude']
         self._sweep_f_min = 0.5    # Hz
@@ -53,8 +54,9 @@ class RoadGenerator:
             return 0.0
         if self.profile == 'speed_bump':
             x = self.speed * t
-            if 0.0 <= x <= self._bump_L:
-                return (self._bump_A / 2.0) * (1.0 - np.cos(2.0 * np.pi * x / self._bump_L))
+            dx = x - self._bump_x0
+            if 0.0 <= dx <= self._bump_L:
+                return (self._bump_A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx / self._bump_L))
             return 0.0
         if self.profile == 'iso_8608_class_c':
             idx = int(t / self._iso_dt) % len(self._iso_h)
@@ -70,9 +72,10 @@ class RoadGenerator:
             return 0.0
         if self.profile == 'speed_bump':
             x = self.speed * t
-            if 0.0 < x < self._bump_L:
+            dx = x - self._bump_x0
+            if 0.0 < dx < self._bump_L:
                 dzdx = (self._bump_A / 2.0) * (2.0 * np.pi / self._bump_L) * np.sin(
-                    2.0 * np.pi * x / self._bump_L)
+                    2.0 * np.pi * dx / self._bump_L)
                 return dzdx * self.speed
             return 0.0
         if self.profile == 'iso_8608_class_c':
@@ -83,6 +86,27 @@ class RoadGenerator:
             return (self.get_height(t + eps) - self.get_height(t - eps)) / (2.0 * eps)
         return 0.0
 
+    def get_height_array(self, t_array: np.ndarray) -> np.ndarray:
+        """Vectorised get_height for an array of query times (used by render)."""
+        t = np.asarray(t_array, dtype=np.float64)
+        if self.profile == 'flat':
+            return np.zeros(len(t))
+        if self.profile == 'speed_bump':
+            dx = self.speed * t - self._bump_x0
+            return np.where(
+                (dx >= 0.0) & (dx <= self._bump_L),
+                (self._bump_A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx / self._bump_L)),
+                0.0,
+            )
+        if self.profile == 'iso_8608_class_c':
+            idxs = np.mod((t / self._iso_dt).astype(int), len(self._iso_h))
+            return self._iso_h[idxs]
+        if self.profile == 'sine_sweep':
+            ratio = np.clip(t / self._ep_duration, 0.0, 1.0)
+            f = self._sweep_f_min + (self._sweep_f_max - self._sweep_f_min) * ratio
+            return self._sweep_A * np.sin(2.0 * np.pi * f * t)
+        return np.zeros(len(t))
+
     def reset(self, seed=None):
         if self.profile == 'iso_8608_class_c':
             self._build_iso_buffer(seed=seed)
@@ -90,8 +114,9 @@ class RoadGenerator:
     def get_bump_times(self) -> list:
         if self.profile != 'speed_bump':
             return []
+        t0 = self._bump_x0 / self.speed
         return [
-            0.0,
-            (self._bump_L / 2.0) / self.speed,
-            self._bump_L / self.speed,
+            t0,
+            t0 + (self._bump_L / 2.0) / self.speed,
+            t0 + self._bump_L / self.speed,
         ]
