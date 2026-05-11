@@ -9,7 +9,7 @@ State (internal, 6-D float64):
   x[4] = v         longitudinal velocity      [m/s]
   x[5] = z_B       body displacement from static eq. [m]
 
-Observation (8,) float32 — clipped to OBS_LOW/OBS_HIGH:
+Observation (8,) float32 - clipped to OBS_LOW/OBS_HIGH:
   idx 0: z_B            body displacement      [m]
   idx 1: ż_B            body velocity          [m/s]
   idx 2: z_W = z_B + (z_W−z_B)  wheel displacement [m]
