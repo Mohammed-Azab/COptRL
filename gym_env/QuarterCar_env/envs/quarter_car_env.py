@@ -447,13 +447,17 @@ class QuarterCarEnv(gym.Env):
             fig.canvas.manager.set_window_title(win_title)
 
         # schematic axis
+        import matplotlib.ticker as ticker
         ax_s.set_facecolor('white')
         ax_s.set_xlim(RENDER_XLIM)
         ax_s.set_ylim(RENDER_YLIM)
-        ax_s.set_xlabel('position relative to car (m)', fontsize=9)
+        ax_s.set_xlabel('position (m)', fontsize=9)
         ax_s.set_ylabel(f'height  (m × {self._y_scale})', fontsize=9)
         ax_s.tick_params(labelsize=8)
         ax_s.spines[['top', 'right']].set_visible(False)
+        ax_s.xaxis.set_major_formatter(
+            ticker.FuncFormatter(lambda x, _: f'{x + self._s_pos:.0f}')
+        )
 
         # road profile — gray line, no fill
         road_line, = ax_s.plot([], [], '-', color=RENDER_C_ROAD, lw=1.5, zorder=2,
