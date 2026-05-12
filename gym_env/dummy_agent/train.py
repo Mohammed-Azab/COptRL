@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from QuarterCar_env.envs import QuarterCarEnv
 from QuarterCar_env.params import V_MAX, V_MIN
 
-# ──  tuning parameters ───────────────────────────────────────────────
+#   tuning parameters
 H_THRESH = 0.01   # m - road height threshold 
 ACCEL    = 0.01   # normalised speed increment per step when no bump detected
 K_SUSP   = 8.0    # PD proportional gain: travel → normalised suspension force
@@ -121,42 +121,6 @@ def run_episodes(
     env.close()
     return results, last_ep_data
 
-
-def train_model(
-    mode: str,
-    road: str,
-    timesteps: int,
-    algo: str,
-    results_dir: Path,
-    ts_str: str,
-    v_max: float = V_MAX,
-) -> Path:
-    """Train an SB3 model and save to results/. Returns the saved model path."""
-    from stable_baselines3 import SAC, TD3, PPO
-    from stable_baselines3.common.monitor import Monitor as SB3Monitor
-
-    _algos = {'sac': SAC, 'td3': TD3, 'ppo': PPO}
-    AlgoCls = _algos[algo]
-
-    env = SB3Monitor(QuarterCarEnv(
-        road_profile=road,
-        control_mode=mode,
-        v_max=v_max,
-    ))
-
-    model = AlgoCls('MlpPolicy', env, verbose=1)
-    print(f'\nTraining {algo.upper()} — mode={mode}, road={road}, steps={timesteps:,}')
-    model.learn(total_timesteps=timesteps, progress_bar=True)
-
-    model_path = results_dir / f'model_{algo}_{mode}_{road}_{ts_str}'
-    model.save(str(model_path))
-    env.close()
-
-    saved = Path(str(model_path) + '.zip')
-    print(f'Model saved → {saved}')
-    return saved
-
-
 def main():
     parser = argparse.ArgumentParser(
         description=' runner + optional SB3 trainer for quarter-car env')
@@ -167,10 +131,6 @@ def main():
     parser.add_argument('--episodes',  type=int, default=10,
                         help=' evaluation episodes.')
     parser.add_argument('--render',    action='store_true')
-    parser.add_argument('--timesteps', type=int, default=0,
-                        help='If > 0, train an SB3 model for this many steps and save it.')
-    parser.add_argument('--algo',      default='sac', choices=['sac', 'td3', 'ppo'],
-                        help='RL algorithm used when --timesteps > 0.')
     args = parser.parse_args()
 
     results_dir = Path(__file__).parent / 'results'
@@ -186,7 +146,7 @@ def main():
     mean_vs  = [r['mean_speed']      for r in results]
     sp_errs  = [r['speed_error_rms'] for r in results]
 
-    print('\n── Aggregate ──────────────────────────────────────────')
+    print('\n Aggregate ')
     print(f"  Mean return        : {np.mean(returns):.2f} ± {np.std(returns):.2f}")
     print(f"  Mean RMS accel     : {np.mean(rms_accs):.3f} m/s²")
     print(f"  Mean peak accel    : {np.mean(pk_accs):.3f} m/s²")
@@ -199,12 +159,5 @@ def main():
         writer.writeheader()
         writer.writerows(results)
     print(f'\n results → {csv_path}')
-
-    # ── SB3 training (optional) ───────────────────────────────────────────────
-    if args.timesteps > 0:
-        train_model(args.mode, args.road, args.timesteps,
-                    args.algo, results_dir, ts_str)
-
-
 if __name__ == '__main__':
     main()
