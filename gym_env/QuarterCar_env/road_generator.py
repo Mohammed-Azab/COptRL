@@ -107,6 +107,10 @@ class RoadGenerator:
             return self._sweep_A * np.sin(2.0 * np.pi * f * t)
         return np.zeros(len(t))
 
+    def set_speed(self, v: float) -> None:
+        """Update longitudinal speed used by all road-height queries."""
+        self.speed = float(v)
+
     def reset(self, seed=None):
         if self.profile == 'iso_8608_class_c':
             self._build_iso_buffer(seed=seed)

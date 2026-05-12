@@ -1,5 +1,6 @@
 import os
 import collections
+from typing import Callable, Optional
 
 import numpy as np
 import gymnasium as gym
@@ -10,9 +11,12 @@ from QuarterCar_env.road_generator import RoadGenerator
 from QuarterCar_env.reward import RewardConfig, compute_reward, compute_terminal_bonus
 from QuarterCar_env.params import (
     F_MAX, DT, EPISODE_STEPS,
-    TRUNC_TRAVEL, TRUNC_ZS,
+    TRUNC_TRAVEL, TRUNC_ZS, MAX_DISTANCE,
     OBS_HIGH, OBS_LOW,
     VEHICLE_SPEED,
+    V_TAU, V_MAX, V_MIN, V_BRAKE_LEAD,
+)
+from QuarterCar_env.render_params import (
     RENDER_Y_SCALE, RENDER_HIST_SECS,
     RENDER_SHOW_TIMESERIES, RENDER_N_TIMESERIES,
     RENDER_Y_W_NOM, RENDER_Y_B_NOM,
@@ -74,7 +78,6 @@ def _damper_xy(x_c: float, y_top: float, y_bot: float, cyl_h: float):
     return upper_rod_xy, lower_rod_xy, cyl_xy, pist_rect
 
 
-
 def _ground_symbol_xy(x_c: float, y: float, half_w: float = 0.55):
     """Horizontal ground line only."""
     return np.array([x_c - half_w, x_c + half_w]), np.array([y, y])
@@ -99,6 +102,11 @@ class QuarterCarEnv(gym.Env):
         render_y_scale: int = RENDER_Y_SCALE,
         render_show_timeseries: bool = RENDER_SHOW_TIMESERIES,
         render_n_timeseries: int = RENDER_N_TIMESERIES,
+        control_mode: str = "suspension",       # "suspension" | "speed" | "hybrid"
+        v_max: float = V_MAX,                   # m/s — maximum longitudinal speed
+        ref_speed_profile: str = "constant",    # "constant" | "slow_before_bump" | "custom"
+        max_episode_steps: int = EPISODE_STEPS, # steps before terminated=True
+        max_distance: Optional[float] = MAX_DISTANCE,  # m — truncate when s_pos exceeds this
     ):
         super().__init__()
         self.render_mode  = render_mode
@@ -108,18 +116,52 @@ class QuarterCarEnv(gym.Env):
         self._show_ts     = bool(render_show_timeseries)
         self._n_ts        = max(1, min(4, int(render_n_timeseries)))
 
-        self.observation_space = spaces.Box(
-            low=OBS_LOW, high=OBS_HIGH, dtype=np.float32)
-        self.action_space = spaces.Box(
-            low=np.array([-1.0], dtype=np.float32),
-            high=np.array([ 1.0], dtype=np.float32),
-            dtype=np.float32,
-        )
+        if control_mode not in ("suspension", "speed", "hybrid"):
+            raise ValueError(f"control_mode must be 'suspension', 'speed', or 'hybrid', got {control_mode!r}")
+        self._control_mode      = control_mode
+        self._v_max             = float(v_max)
+        self._v_min             = V_MIN
+        self._ref_speed_profile = ref_speed_profile
+        self._max_episode_steps = int(max_episode_steps)
+        self._max_distance      = max_distance
+
+        # Optional custom v_ref callable passed through road_params
+        self._v_ref_fn: Optional[Callable[[float], float]] = (road_params or {}).get('v_ref_fn', None)
+
+        # ── action space ──────────────────────────────────────────────────────
+        if control_mode == "suspension":
+            self.action_space = spaces.Box(
+                low=np.array([-1.0], dtype=np.float32),
+                high=np.array([ 1.0], dtype=np.float32),
+            )
+        elif control_mode == "speed":
+            self.action_space = spaces.Box(
+                low=np.array([0.0], dtype=np.float32),
+                high=np.array([1.0], dtype=np.float32),
+            )
+        else:  # "hybrid"
+            self.action_space = spaces.Box(
+                low=np.array([-1.0, 0.0], dtype=np.float32),
+                high=np.array([ 1.0, 1.0], dtype=np.float32),
+            )
+
+        # ── observation space ─────────────────────────────────────────────────
+        if control_mode == "suspension":
+            self.observation_space = spaces.Box(
+                low=OBS_LOW, high=OBS_HIGH, dtype=np.float32)
+        else:
+            obs_high_ext = np.concatenate(
+                [OBS_HIGH, [self._v_max, self._v_max]]).astype(np.float32)
+            obs_low_ext  = np.concatenate(
+                [OBS_LOW,  [0.0,        -self._v_max]]).astype(np.float32)
+            self.observation_space = spaces.Box(
+                low=obs_low_ext, high=obs_high_ext, dtype=np.float32)
 
         self._ode  = QuarterCarODE(physics_params)
         self._road = RoadGenerator(road_profile, vehicle_speed, road_params)
         self._rcfg = reward_config or RewardConfig()
 
+        # ── episode state ──────────────────────────────────────────────────────
         self._state          = self._ode.reset(self._v0)
         self._t              = 0.0
         self._step_count     = 0
@@ -129,6 +171,15 @@ class QuarterCarEnv(gym.Env):
         self._last_F         = 0.0
         self._last_z_B_ddot  = 0.0
         self._episode_reward = 0.0
+
+        # speed control state
+        self._v              = self._v0
+        self._v_ref_last     = self._v_max
+        self._speed_err_sq   = 0.0
+        self._s_pos          = 0.0   # accumulated longitudinal distance (m)
+
+        # precompute bump times used by slow_before_bump profile
+        self._bump_times: list = self._road.get_bump_times()
 
         self._fig            = None
         self._ren_hist       = None
@@ -141,6 +192,7 @@ class QuarterCarEnv(gym.Env):
         rng = self.np_random
 
         self._road.reset(seed=int(rng.integers(0, 2**31)))
+        self._road.set_speed(self._v0)
 
         x = self._ode.reset(self._v0)
         x[0:4] += rng.normal(0.0, 0.005, size=4)
@@ -157,12 +209,39 @@ class QuarterCarEnv(gym.Env):
         self._episode_reward = 0.0
         self._ren_hist       = None
 
+        self._v              = self._v0
+        self._v_ref_last     = self._v_max
+        self._speed_err_sq   = 0.0
+        self._s_pos          = 0.0
+
+        # rebuild bump times after road reset (bump_x_start may differ across resets)
+        self._bump_times = self._road.get_bump_times()
+
         return self._obs(), self._info(0.0)
 
     def step(self, action):
-        F_act = float(np.clip(action[0], -1.0, 1.0)) * F_MAX
-        self._last_F = F_act
+        # ── 1. Parse action, update speed if applicable ────────────────────────
+        if self._control_mode == "suspension":
+            F_act = float(np.clip(action[0], -1.0, 1.0)) * F_MAX
+        elif self._control_mode == "speed":
+            F_act = 0.0
+            v_cmd = float(np.clip(action[0], 0.0, 1.0)) * self._v_max
+            v_new = self._v + DT * (v_cmd - self._v) / V_TAU
+            self._v = float(np.clip(v_new, 0.0, self._v_max))
+            self._state[4] = self._v
+            self._road.set_speed(self._v)
+        else:  # "hybrid"
+            F_act = float(np.clip(action[0], -1.0, 1.0)) * F_MAX
+            v_cmd = float(np.clip(action[1], 0.0, 1.0)) * self._v_max
+            v_new = self._v + DT * (v_cmd - self._v) / V_TAU
+            self._v = float(np.clip(v_new, 0.0, self._v_max))
+            self._state[4] = self._v
+            self._road.set_speed(self._v)
 
+        self._last_F = F_act
+        self._s_pos += self._v * DT
+
+        # ── 2. Integrate ODE ───────────────────────────────────────────────────
         new_state, z_B_ddot = self._ode.step(
             self._state, self._road.get_height_dot, self._t, F_act
         )
@@ -178,13 +257,30 @@ class QuarterCarEnv(gym.Env):
         self._travel_sq  += travel ** 2
         self._peak_accel  = max(self._peak_accel, abs(z_B_ddot))
 
-        reward = compute_reward(z_B_ddot, travel, tyre_defl, F_act, self._rcfg)
+        # ── 3. Reference speed and reward ──────────────────────────────────────
+        v_ref = self._compute_v_ref(self._t)
+        self._v_ref_last = v_ref
+
+        if self._control_mode == "suspension":
+            reward = compute_reward(z_B_ddot, travel, tyre_defl, F_act, self._rcfg)
+        else:
+            self._rcfg.v_ref = v_ref
+            reward = compute_reward(
+                z_B_ddot, travel, tyre_defl, F_act, self._rcfg, v=self._v)
+            speed_err = v_ref - self._v
+            self._speed_err_sq += speed_err ** 2
+
         self._episode_reward += reward
 
-        truncated  = bool(abs(travel) > TRUNC_TRAVEL or abs(float(new_state[5])) > TRUNC_ZS)
+        # ── 4. Termination ─────────────────────────────────────────────────────
+        truncated  = bool(
+            abs(travel) > TRUNC_TRAVEL
+            or abs(float(new_state[5])) > TRUNC_ZS
+            or (self._max_distance is not None and self._s_pos >= self._max_distance)
+        )
         terminated = False
 
-        if self._step_count >= EPISODE_STEPS and not truncated:
+        if self._step_count >= self._max_episode_steps and not truncated:
             terminated = True
             rms = np.sqrt(self._accel_sq / self._step_count)
             reward += compute_terminal_bonus(rms, self._rcfg)
@@ -236,12 +332,23 @@ class QuarterCarEnv(gym.Env):
             float(x[2]),  # 6: suspension travel
             float(x[0]),  # 7: tyre deflection
         ], dtype=np.float32)
-        return np.clip(raw, OBS_LOW, OBS_HIGH)
+        base_obs = np.clip(raw, OBS_LOW, OBS_HIGH)
+
+        if self._control_mode == "suspension":
+            return base_obs
+
+        v_ref = self._v_ref_last
+        v     = self._v
+        speed_ext = np.array([
+            np.clip(v,         0.0,          self._v_max),   # 8: current speed [m/s]
+            np.clip(v_ref - v, -self._v_max, self._v_max),   # 9: speed error v_ref − v [m/s]
+        ], dtype=np.float32)
+        return np.concatenate([base_obs, speed_ext])
 
     def _info(self, z_B_ddot: float) -> dict:
         n   = max(self._step_count, 1)
         rms = np.sqrt(self._accel_sq / n)
-        return {
+        info = {
             'rms_accel':      float(rms),
             'peak_accel':     float(self._peak_accel),
             'suspension_rms': float(np.sqrt(self._travel_sq / n)),
@@ -249,12 +356,50 @@ class QuarterCarEnv(gym.Env):
             'road_profile':   self.road_profile,
             'step_count':     self._step_count,
             'episode_time':   self._t,
+            'F_act':          self._last_F,
+            'z_B_ddot':       float(z_B_ddot),
         }
+        if self._control_mode != "suspension":
+            n_s = max(self._step_count, 1)
+            info.update({
+                'speed':            float(self._v),
+                'v_ref':            float(self._v_ref_last),
+                'speed_error':      float(self._v_ref_last - self._v),
+                'speed_error_rms':  float(np.sqrt(self._speed_err_sq / n_s)),
+            })
+        return info
 
     def get_comfort_metric(self) -> float:
         n   = max(self._step_count, 1)
         rms = np.sqrt(self._accel_sq / n)
         return float(max(0.0, 1.0 - rms / self._rcfg.a_limit))
+
+    # ── Speed reference profile ────────────────────────────────────────────────
+
+    def _compute_v_ref(self, t: float) -> float:
+        if self._ref_speed_profile == "constant":
+            return self._v_max
+        if self._ref_speed_profile == "custom":
+            return float(self._v_ref_fn(t))
+        if self._ref_speed_profile == "slow_before_bump":
+            times = self._bump_times
+            if not times:
+                return self._v_max
+            t_start, t_center, t_end = times
+            t_brake_start = t_center - V_BRAKE_LEAD
+            t_accel_end   = t_end    + V_BRAKE_LEAD
+            if t < t_brake_start:
+                return self._v_max
+            if t < t_center:
+                alpha = (t - t_brake_start) / V_BRAKE_LEAD
+                return self._v_max - (self._v_max - self._v_min) * alpha
+            if t <= t_end:
+                return self._v_min
+            if t <= t_accel_end:
+                alpha = (t - t_end) / V_BRAKE_LEAD
+                return self._v_min + (self._v_max - self._v_min) * alpha
+            return self._v_max
+        return self._v_max
 
     # ── Render internals ───────────────────────────────────────────────────────
 
@@ -446,7 +591,7 @@ class QuarterCarEnv(gym.Env):
         h['z_W'].append(z_W)
         h['z_B_ddot'].append(self._last_z_B_ddot)
         h['F'].append(self._last_F)
-        h['s_dot'].append(float(x[4]))
+        h['s_dot'].append(float(self._v))
 
     def _update_artists(self):
         """Update all artists in-place. Only the F_D arrow patch is re-allocated."""
@@ -458,7 +603,6 @@ class QuarterCarEnv(gym.Env):
 
         z_B    = float(x[5])
         z_W    = z_B + float(x[2])
-        travel = float(x[2])
         F_act  = self._last_F
         zeta_0 = float(self._road.get_height(self._t))
 
@@ -468,8 +612,9 @@ class QuarterCarEnv(gym.Env):
         y_road_0 = RENDER_GROUND_Y + zeta_0 * ys   # road surface directly below car
 
         # ── road profile (gray line, car at x=0, road scrolls left) ───────────
-        t_q    = self._t + _ROAD_X / self._v0
-        road_h = self._road.get_height_array(t_q) * ys + RENDER_GROUND_Y
+        v_disp  = max(self._v, 0.1)
+        t_q     = self._t + _ROAD_X / v_disp
+        road_h  = self._road.get_height_array(t_q) * ys + RENDER_GROUND_Y
         art['road_line'].set_data(_ROAD_X, road_h)
 
         h = self._ren_hist
@@ -539,12 +684,12 @@ class QuarterCarEnv(gym.Env):
             art['fd_text'].set_text('')
 
         # ── status text ────────────────────────────────────────────────────────
-        s_pos = self._v0 * self._t
         art['status_text'].set_text(
-            f't={self._t:6.2f} s    s={s_pos:6.1f} m\n'
+            f't={self._t:6.2f} s    s={self._s_pos:6.1f} m\n'
             f'z_B={z_B*100:+.2f} cm  z_W={z_W*100:+.2f} cm\n'
             f'ζ={zeta_0*100:.3f} cm    '
             f'F_D={F_act:+.0f} N\n'
+            f'v={self._v:.1f} m/s    '
             f'ep reward={self._episode_reward:.2f}'
         )
 
