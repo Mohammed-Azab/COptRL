@@ -30,10 +30,10 @@ Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
 ============================================================
 4. Full episode rollout (random policy)
 ============================================================
-  [PASS] speed_bump              steps= 500  return=  -233.062  rms_accel=5.9592  comfort=0.4041
-  [PASS] iso_8608_class_c        steps= 500  return=  -222.864  rms_accel=5.8474  comfort=0.4153
-  [PASS] sine_sweep              steps= 500  return=  -419.132  rms_accel=8.2456  comfort=0.1754
-  [PASS] flat                    steps= 500  return=  -207.216  rms_accel=5.6175  comfort=0.4382
+  [PASS] speed_bump              steps= 500  return=  -228.182  rms_accel=5.8618  comfort=0.4138
+  [PASS] iso_8608_class_c        steps= 500  return=  -201.696  rms_accel=5.6241  comfort=0.4376
+  [PASS] sine_sweep              steps= 500  return=  -393.892  rms_accel=8.0660  comfort=0.1934
+  [PASS] flat                    steps= 500  return=  -230.427  rms_accel=5.8520  comfort=0.4148
 
 ============================================================
 5. Passive baseline (zero action = spring-damper only)

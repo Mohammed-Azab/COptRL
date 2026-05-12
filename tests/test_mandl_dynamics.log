@@ -36,7 +36,7 @@ Python 3.10.12 (main, Mar  3 2026, 11:56:32) [GCC 11.4.0]
   [PASS] Nonlinear spring clipped at F_ks_nlin_max = 1e+05 N
 
 ============================================================
-4. Speed-bump rollout — 500 steps, no NaN/Inf
+4. Speed-bump rollout - 500 steps, no NaN/Inf
 ============================================================
   Completed 500 steps, done=True
   [PASS] No NaN/Inf in obs or reward over 500 speed-bump steps

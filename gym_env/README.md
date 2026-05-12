@@ -8,7 +8,7 @@ Scaffolded with the [Gymnasium environment template](https://github.com/Farama-F
 
 ## Environment
 
-**`QuarterCar_env/QuarterCar`** — 2-DOF quarter-car model with an active actuator between sprung and unsprung masses.
+**`QuarterCar_env/QuarterCar`** - 2-DOF quarter-car model with an active actuator between sprung and unsprung masses.
 
 | | |
 |---|---|

@@ -1,13 +1,13 @@
 # Active Suspension Control via Deep Reinforcement Learning
-### A Quarter-Car Simulation Framework — ROS 2 Humble · Stable-Baselines3 · Gazebo
+### A Quarter-Car Simulation Framework - ROS 2 Humble · Stable-Baselines3 · Gazebo
 
 ---
 
-> *"The road doesn't care about your comfort — but your controller can."*
+> *"The road doesn't care about your comfort - but your controller can."*
 
 Every time a vehicle hits a pothole, a speed bump, or a stretch of rough tarmac, there is a
 brief, violent negotiation between the road and the passenger. Passive suspensions settle
-this negotiation with fixed springs and dampers — good enough on average, but compromised by
+this negotiation with fixed springs and dampers - good enough on average, but compromised by
 definition. Active suspensions can do better: given the right policy, an actuator can cancel
 disturbances in real time, keeping the sprung mass smooth while the wheels follow the road
 faithfully.
@@ -23,7 +23,7 @@ that policy end-to-end with deep reinforcement learning.
 .
 ├── quarter_car_ws/          # ROS 2 workspace
 │   └── src/
-│       ├── quarter_car_core/         # Pure Python — ZERO ROS dependency
+│       ├── quarter_car_core/         # Pure Python - ZERO ROS dependency
 │       │   └── quarter_car_core/     # Physics, road profiles, Gym env, wrappers
 │       ├── quarter_car_sim/          # ROS 2 simulation + Gazebo bridge
 │       └── quarter_car_controllers/  # RL node · LQR stub · MPC stub
@@ -34,7 +34,7 @@ that policy end-to-end with deep reinforcement learning.
 │   ├── hyperparameter_search.py  # Optuna search
 │   └── configs/             # YAML configs for env, SAC, TD3, PPO
 │
-├── tests/                   # pytest suite — 39 tests, all passing
+├── tests/                   # pytest suite - 39 tests, all passing
 ├── scripts/                 # Shell helpers for training and Gazebo launch
 ├── notebooks/               # Jupyter exploration notebook
 ├── refs.txt                 # Full academic references [1]–[14]
@@ -82,7 +82,7 @@ Layer 2 ── ROS 2 Evaluation Pipeline
 Layer 3 ── Gazebo Visualisation (evaluation only)
            gazebo_bridge_node converts z_s → joint cmd + TF
            Orange speed bump world, 1/10-scale RC car mesh.
-           NO RViz2 anywhere — Gazebo is the sole 3D view.
+           NO RViz2 anywhere - Gazebo is the sole 3D view.
            rqt_plot provides real-time signal traces.
 ```
 
@@ -124,7 +124,7 @@ than just minimising instantaneous cost.
 
 ## Quickstart
 
-### 1 — Install (no ROS needed for training)
+### 1 - Install (no ROS needed for training)
 
 ```bash
 git clone <repo>
@@ -142,19 +142,19 @@ Or with the helper script:
 bash scripts/install_deps.sh
 ```
 
-### 2 — Verify the zero-ROS import guarantee
+### 2 - Verify the zero-ROS import guarantee
 
 ```bash
 python3 -c "from quarter_car_core import quarter_car_env; print('OK')"
 ```
 
-### 3 — Run the test suite
+### 3 - Run the test suite
 
 ```bash
 /home/ubuntu/myRepo/quarter_car_sim/.venv/bin/python -m pytest tests/ -v         # 39 tests, ~1 second
 ```
 
-### 4 — Train an RL agent
+### 4 - Train an RL agent
 
 ```bash
 # SAC for 500k steps on ISO 8608 Class C road (recommended)
@@ -180,7 +180,7 @@ suspension_rms             0.0312     0.0089      71.5%
 ══════════════════════════════════════════════════════════════
 ```
 
-### 5 — Headless evaluation (no ROS)
+### 5 - Headless evaluation (no ROS)
 
 ```bash
 python training/evaluate.py \
@@ -192,15 +192,15 @@ python training/evaluate.py \
 ```
 
 Produces a 4-panel figure: chassis height, sprung acceleration, suspension travel, and
-actuator force — passive baseline overlaid in every plot.
+actuator force - passive baseline overlaid in every plot.
 
-### 6 — Gazebo evaluation (requires ROS 2 Humble)
+### 6 - Gazebo evaluation (requires ROS 2 Humble)
 
-One script handles everything — build, source, and launch. It also strips an active
+One script handles everything - build, source, and launch. It also strips an active
 Python venv from the path so `ros2` never hits a `PackageNotFoundError` for `ros2cli`:
 
 ```bash
-# Passive simulation only (default — no model needed)
+# Passive simulation only (default - no model needed)
 bash scripts/build_and_launch.sh
 
 # Full Gazebo evaluation with a trained RL model
@@ -220,7 +220,7 @@ This opens Gazebo with the speed-bump world and the RC car driving through it at
 > **Venv note:** if you prefer to call `colcon` and `ros2` directly, deactivate the venv
 > first (`deactivate`) then source ROS 2 before running any `ros2` commands.
 
-### 7 — Hyperparameter search
+### 7 - Hyperparameter search
 
 ```bash
 python training/hyperparameter_search.py --algo sac --trials 50 --timesteps 50000
@@ -252,17 +252,17 @@ The environment stack is: `ActionRepeat(2) → NormalizeObservation → RewardSc
 
 LQR and MPC are intentionally left as stubs with documented design references.
 Their node counterparts (`lqr_node`, `mpc_node`) publish zero force and log a
-clear "stub — passive mode" message so the pipeline remains runnable for comparison
+clear "stub - passive mode" message so the pipeline remains runnable for comparison
 launches without misleading results.
 
 ---
 
 ## Repository Hygiene
 
-- `quarter_car_core` imports with **zero ROS installed** — tested in a clean venv
+- `quarter_car_core` imports with **zero ROS installed** - tested in a clean venv
 - No `visualization_msgs`, no marker arrays, no RViz2 anywhere in the codebase
 - Physics integrator runs at **500 Hz** internally regardless of the 50 Hz control rate
-- All random seeds are explicit and propagated — results are reproducible
+- All random seeds are explicit and propagated - results are reproducible
 - The ISO 8608 profile pre-generates a **60-second spatial buffer** and wraps it,
   so episodes are fast with no re-synthesis overhead
 
@@ -272,12 +272,12 @@ launches without misleading results.
 
 Full citations in [`refs.txt`](refs.txt). Key works:
 
-- **[1]** MathWorks — ADMM-Based MPC Control for Quarter-Car Suspension
-- **[2]** Nhu et al. — Physics-Guided RL for Vehicle Suspension (ICMLA 2023)
-- **[3]** ISO 8608:2016 — Road surface profiles
-- **[5]** Hrovat 1997 — Survey of Advanced Suspension Developments *(Automatica)*
-- **[7]** Raffin et al. — Stable-Baselines3 *(JMLR 2021)*
-- **[9]** Stellato et al. — OSQP: An Operator Splitting Solver for QPs
+- **[1]** MathWorks - ADMM-Based MPC Control for Quarter-Car Suspension
+- **[2]** Nhu et al. - Physics-Guided RL for Vehicle Suspension (ICMLA 2023)
+- **[3]** ISO 8608:2016 - Road surface profiles
+- **[5]** Hrovat 1997 - Survey of Advanced Suspension Developments *(Automatica)*
+- **[7]** Raffin et al. - Stable-Baselines3 *(JMLR 2021)*
+- **[9]** Stellato et al. - OSQP: An Operator Splitting Solver for QPs
 
 ---
 
@@ -292,8 +292,8 @@ quarter_car_core/
   wrappers.py           NormalizeObservation, ActionRepeat,
                         RewardScaler, EpisodeLogger
   controllers/
-    lqr_controller.py   STUB — raises NotImplementedError
-    mpc_controller.py   STUB — raises NotImplementedError
+    lqr_controller.py   STUB - raises NotImplementedError
+    mpc_controller.py   STUB - raises NotImplementedError
 ```
 
 ---

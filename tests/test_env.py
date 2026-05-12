@@ -2,10 +2,12 @@
 Smoke-tests and conformance checks for QuarterCarEnv.
 
 Run:  python tests/test_env.py
-Output is also written to tests/test_env.log
+  --render {human,rgb_array,none}  optional: run render rollout instead of tests
 """
 import sys
 import io
+import time
+import argparse
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
@@ -213,6 +215,75 @@ def check_seed_reproducibility(log):
         fail("Different seeds produced identical rewards (suspicious)", log)
 
 
+# ── render rollout ─────────────────────────────────────────────────────────────
+
+def run_render_rollout(render_mode: str):
+    """
+    5-second rollout with sinusoidal F_D policy.
+    Road: speed_bump, bump 10 m ahead of start, A=0.08 m, L=1.0 m.
+    """
+    from QuarterCar_env.envs import QuarterCarEnv
+    from QuarterCar_env.params import F_MAX, DT, VEHICLE_SPEED
+
+    speed    = VEHICLE_SPEED   # 10 m/s
+    n_steps  = int(5.0 / DT)   # 250 steps = 5 s
+    period   = 1.0             # sinusoidal period (s)
+    amp      = 0.4 * F_MAX     # sinusoidal amplitude
+
+    env = QuarterCarEnv(
+        road_profile='speed_bump',
+        vehicle_speed=speed,
+        render_mode=render_mode,
+        road_params={
+            'bump_x_start': 10.0,   # bump 10 m ahead
+            'bump_length':   3.5,   # 1 m wide for visibility
+            'bump_height':   0.15,  # 8 cm
+        },
+    )
+    obs, _ = env.reset(seed=0)
+
+    frames = []
+    t_wall_start = time.perf_counter()
+
+    for step_i in range(n_steps):
+        t_sim  = step_i * DT
+        action = np.array([amp * np.sin(2.0 * np.pi * t_sim / period) / F_MAX],
+                          dtype=np.float32)
+        obs, _, terminated, truncated, _ = env.step(action)
+
+        if render_mode == 'rgb_array':
+            frame = env.render()
+            if frame is not None:
+                frames.append(frame)
+
+        if terminated or truncated:
+            break
+
+    elapsed = time.perf_counter() - t_wall_start
+    fps = (step_i + 1) / elapsed
+    print(f"\nRender FPS (wall-time): {fps:.1f}  ({step_i+1} frames in {elapsed:.2f} s)")
+
+    if render_mode == 'rgb_array' and frames:
+        out_dir = Path(__file__).parent.parent / 'outputs'
+        out_dir.mkdir(exist_ok=True)
+        try:
+            import imageio
+            try:
+                import imageio_ffmpeg   # noqa: F401
+                out_path = out_dir / 'rollout.mp4'
+                imageio.mimsave(str(out_path), frames,
+                                fps=env.metadata['render_fps'])
+            except ImportError:
+                out_path = out_dir / 'rollout.gif'
+                imageio.mimsave(str(out_path), frames,
+                                fps=env.metadata['render_fps'])
+            print(f"Saved: {out_path.resolve()}  ({out_path.stat().st_size / 1024:.1f} KB)")
+        except ImportError:
+            print("imageio not available - skipping file save.")
+
+    env.close()
+
+
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -248,4 +319,18 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="QuarterCarEnv test / render demo")
+    parser.add_argument(
+        '--render',
+        nargs='?',
+        const='human',
+        default=None,
+        choices=['human', 'rgb_array', 'none'],
+        help="Run render rollout (default: run existing conformance tests)",
+    )
+    args = parser.parse_args()
+
+    if args.render is None or args.render == 'none':
+        main()
+    else:
+        run_render_rollout(args.render)

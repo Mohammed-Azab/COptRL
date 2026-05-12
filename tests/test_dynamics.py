@@ -2,11 +2,11 @@
 Sanity checks for the Mandl (2021) quarter-car dynamics.
 
 Tests:
-  1. Static equilibrium  — zero road, zero action → accelerations ≈ 0
-  2. Damper asymmetry    — |F_cs(+v)| / |F_cs(-v)| ≈ A = 0.5
-  3. Nonlinear spring    — force > 0 once compression clearance is exceeded
-  4. Speed-bump rollout  — 500 steps, no NaN / Inf
-  5. RK4 energy check    — free vibration decays monotonically in 2-norm
+  1. Static equilibrium  - zero road, zero action → accelerations ≈ 0
+  2. Damper asymmetry    - |F_cs(+v)| / |F_cs(-v)| ≈ A = 0.5
+  3. Nonlinear spring    - force > 0 once compression clearance is exceeded
+  4. Speed-bump rollout  - 500 steps, no NaN / Inf
+  5. RK4 energy check    - free vibration decays monotonically in 2-norm
 
 Run:  python tests/test_mandl_dynamics.py
 """
@@ -86,13 +86,13 @@ def check_spring_nonlinear(log):
     section('3. Nonlinear spring activation', log)
     p = _P(PHYSICS)
 
-    # Inside linear range — should be zero
+    # Inside linear range - should be zero
     for dyn in [0.0, p.dz_cmp - 0.001, -(p.dz_rbd - 0.001)]:
         F = _spring_nonlin(dyn, p)
         assert F == 0.0, f'Expected 0 in linear range, got {F} at dyn={dyn}'
     ok('Nonlinear spring = 0 inside linear range', log)
 
-    # Compression onset — force is positive and increases with deflection
+    # Compression onset - force is positive and increases with deflection
     F_prev = 0.0
     for excess in [0.005, 0.010, 0.020, 0.040]:
         dyn = p.dz_cmp + excess
@@ -102,7 +102,7 @@ def check_spring_nonlinear(log):
         F_prev = F
     ok('Compression nonlinear force is positive and progressive', log)
 
-    # Rebound onset — force is negative and grows in magnitude
+    # Rebound onset - force is negative and grows in magnitude
     F_prev = 0.0
     for excess in [0.005, 0.010, 0.030, 0.060]:
         dyn = -(p.dz_rbd + excess)
@@ -119,7 +119,7 @@ def check_spring_nonlinear(log):
 
 
 def check_rollout_no_nan(log):
-    section('4. Speed-bump rollout — 500 steps, no NaN/Inf', log)
+    section('4. Speed-bump rollout - 500 steps, no NaN/Inf', log)
     import gymnasium as gym
     import QuarterCar_env   # registers the env
 
