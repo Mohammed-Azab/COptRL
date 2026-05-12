@@ -14,19 +14,73 @@ from QuarterCar_env.params import (
     OBS_HIGH, OBS_LOW,
     VEHICLE_SPEED,
     RENDER_Y_SCALE, RENDER_HIST_SECS,
+    RENDER_SHOW_TIMESERIES, RENDER_N_TIMESERIES,
     RENDER_Y_W_NOM, RENDER_Y_B_NOM,
     RENDER_H_MW, RENDER_W_MW,
     RENDER_H_MB, RENDER_W_MB,
     RENDER_XLIM, RENDER_YLIM,
     RENDER_ROAD_HALF, RENDER_ROAD_N,
+    RENDER_C_MB, RENDER_C_MW, RENDER_C_SPRING, RENDER_C_DAMPER,
+    RENDER_C_ROAD, RENDER_C_GROUND,
+    RENDER_SP_X, RENDER_SP_W, RENDER_SP_N,
+    RENDER_DA_X, RENDER_DA_W, RENDER_DA_PIST_H, RENDER_DA_PIST_FRAC,
+    RENDER_DA_LOWER_STEM, RENDER_DA_CYL_H_SUSP, RENDER_DA_CYL_H_TIRE,
+    RENDER_CONTACT_STEM, RENDER_GROUND_Y,
+    Y_LINE_OFFSET,
 )
 
-# Precomputed road x-positions (relative to car)
 _ROAD_X = np.linspace(-RENDER_ROAD_HALF, RENDER_ROAD_HALF, RENDER_ROAD_N)
 _N_HIST = int(RENDER_HIST_SECS / DT)
 
 
-# ── Environment ─────
+# ── Render geometry helpers ────────────────────────────────────────────────────
+
+def _spring_xy(x_c: float, y_top: float, y_bot: float,
+               n: int = 8, w: float = 0.18):
+    """Zigzag coil spring; returns (xs, ys) for a single Line2D."""
+    n_pts = 2 * n + 2
+    ys = np.linspace(y_top, y_bot, n_pts)
+    xs = np.full(n_pts, x_c)
+    idx = np.arange(1, n_pts - 1)
+    xs[1:-1] = x_c + w * np.where(idx % 2 == 1, 1.0, -1.0)
+    return xs, ys
+
+
+def _damper_xy(x_c: float, y_top: float, y_bot: float, cyl_h: float):
+    """
+    Open-top piston-cylinder damper (⊔).
+    y_bot: lower mass attachment; y_top: upper mass attachment.
+    A short lower rod links y_bot → cylinder base (RENDER_DA_LOWER_STEM).
+    The upper rod links piston top → y_top.
+    Returns (upper_rod_xy, lower_rod_xy, cyl_xy, pist_rect).
+    """
+    hw      = RENDER_DA_W / 2
+    gap     = max(y_top - y_bot, 0.05)
+    cyl_bot = y_bot + RENDER_DA_LOWER_STEM       # cylinder sits above lower mass
+    cyl_top = cyl_bot + cyl_h
+    pist_h  = RENDER_DA_PIST_H
+    pist_top = float(np.clip(
+        y_bot + gap * RENDER_DA_PIST_FRAC,
+        cyl_bot + pist_h + 0.005,
+        cyl_top - 0.005,
+    ))
+    pist_bot = pist_top - pist_h
+    upper_rod_xy = ([x_c, x_c], [pist_top, y_top])          # piston top → upper mass
+    lower_rod_xy = ([x_c, x_c], [y_bot,    cyl_bot])         # lower mass → cylinder base
+    cyl_xy       = ([x_c - hw, x_c - hw, x_c + hw, x_c + hw],
+                    [cyl_top,  cyl_bot,   cyl_bot,   cyl_top])
+    m = 0.01
+    pist_rect = (x_c - hw + m, pist_bot, 2 * hw - 2 * m, pist_h)
+    return upper_rod_xy, lower_rod_xy, cyl_xy, pist_rect
+
+
+
+def _ground_symbol_xy(x_c: float, y: float, half_w: float = 0.55):
+    """Horizontal ground line only."""
+    return np.array([x_c - half_w, x_c + half_w]), np.array([y, y])
+
+
+# ── Environment ────────────────────────────────────────────────────────────────
 
 class QuarterCarEnv(gym.Env):
     metadata = {
@@ -43,12 +97,16 @@ class QuarterCarEnv(gym.Env):
         road_params: dict = None,
         reward_config: RewardConfig = None,
         render_y_scale: int = RENDER_Y_SCALE,
+        render_show_timeseries: bool = RENDER_SHOW_TIMESERIES,
+        render_n_timeseries: int = RENDER_N_TIMESERIES,
     ):
         super().__init__()
         self.render_mode  = render_mode
         self.road_profile = road_profile
         self._v0          = float(vehicle_speed)
         self._y_scale     = int(render_y_scale)
+        self._show_ts     = bool(render_show_timeseries)
+        self._n_ts        = max(1, min(4, int(render_n_timeseries)))
 
         self.observation_space = spaces.Box(
             low=OBS_LOW, high=OBS_HIGH, dtype=np.float32)
@@ -76,7 +134,7 @@ class QuarterCarEnv(gym.Env):
         self._ren_hist       = None
         self._fd_arrow_patch = None
 
-    # ── Gymnasium interface ─────
+    # ── Gymnasium interface ────────────────────────────────────────────────────
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -136,7 +194,31 @@ class QuarterCarEnv(gym.Env):
 
         return self._obs(), reward, terminated, truncated, self._info(z_B_ddot)
 
-    # ── Observation ───
+    def render(self):
+        if self.render_mode == 'none':
+            return None
+        if self._ren_hist is None:
+            self._init_render()
+        self._push_history()
+        self._update_artists()
+        if self.render_mode == 'human':
+            import matplotlib.pyplot as plt
+            self._fig.canvas.draw_idle()
+            plt.pause(1e-3)
+            return None
+        self._fig.canvas.draw()
+        buf = self._fig.canvas.buffer_rgba()
+        w, h = self._fig.canvas.get_width_height()
+        img = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
+        return img[..., :3].copy()
+
+    def close(self):
+        if self._fig is not None:
+            import matplotlib.pyplot as plt
+            plt.close(self._fig)
+            self._fig = None
+
+    # ── Observation / info ─────────────────────────────────────────────────────
 
     def _obs(self) -> np.ndarray:
         x        = self._state
@@ -150,7 +232,7 @@ class QuarterCarEnv(gym.Env):
             z_W,          # 2: wheel displacement
             float(x[1]),  # 3: ż_W
             zeta,         # 4: road height
-            zeta_dot,     # 5: ζ̇
+            zeta_dot,     # 5: zeta_dot
             float(x[2]),  # 6: suspension travel
             float(x[0]),  # 7: tyre deflection
         ], dtype=np.float32)
@@ -173,23 +255,17 @@ class QuarterCarEnv(gym.Env):
         n   = max(self._step_count, 1)
         rms = np.sqrt(self._accel_sq / n)
         return float(max(0.0, 1.0 - rms / self._rcfg.a_limit))
-    
-    def close(self):
-        if self._fig is not None:
-            import matplotlib.pyplot as plt
-            plt.close(self._fig)
-            self._fig = None
 
-    # ── Render internals ──────
+    # ── Render internals ───────────────────────────────────────────────────────
 
     def _init_render(self):
-        """Build figure and all artists once; subsequent frames only call set_data."""
+        """Build the figure and all artists exactly once."""
         import matplotlib
         if not os.environ.get('DISPLAY'):
             matplotlib.use('Agg', force=True)
         import matplotlib.pyplot as plt
         from matplotlib.gridspec import GridSpec
-        from matplotlib.patches import Rectangle, Polygon
+        from matplotlib.patches import Rectangle
 
         self._ren_hist = {
             't':        collections.deque(maxlen=_N_HIST),
@@ -200,92 +276,132 @@ class QuarterCarEnv(gym.Env):
             's_dot':    collections.deque(maxlen=_N_HIST),
         }
 
-        fig = plt.figure(figsize=(14, 7))
-        gs  = GridSpec(1, 2, figure=fig, width_ratios=[3, 2],
-                       left=0.06, right=0.97, bottom=0.09, top=0.94, wspace=0.38)
-        ax_s = fig.add_subplot(gs[0, 0])
-        gs_r = gs[0, 1].subgridspec(4, 1, hspace=0.08)
-        ax_r = [fig.add_subplot(gs_r[i]) for i in range(4)]
+        # ── figure layout ──────────────────────────────────────────────────────
+        if self._show_ts:
+            fig = plt.figure(figsize=(14, 7))
+            gs  = GridSpec(1, 2, figure=fig, width_ratios=[3, 2],
+                           left=0.06, right=0.97, bottom=0.09, top=0.93, wspace=0.38)
+            ax_s = fig.add_subplot(gs[0, 0])
+            gs_r = gs[0, 1].subgridspec(self._n_ts, 1, hspace=0.10)
+            ax_r = [fig.add_subplot(gs_r[i]) for i in range(self._n_ts)]
+        else:
+            fig  = plt.figure(figsize=(9, 7))
+            ax_s = fig.add_subplot(1, 1, 1)
+            fig.subplots_adjust(left=0.07, right=0.97, bottom=0.09, top=0.93)
+            ax_r = []
 
-        # --- schematic axis ---
+        # ── schematic axis ─────────────────────────────────────────────────────
+        ax_s.set_facecolor('white')
         ax_s.set_xlim(RENDER_XLIM)
         ax_s.set_ylim(RENDER_YLIM)
-        ax_s.set_xlabel('x relative to car (m)', fontsize=9)
+        ax_s.set_xlabel('position relative to car (m)', fontsize=9)
         ax_s.set_ylabel(f'height  (m × {self._y_scale})', fontsize=9)
-        ax_s.set_title('Quarter-Car Schematic', fontsize=10)
         ax_s.tick_params(labelsize=8)
+        ax_s.spines[['top', 'right']].set_visible(False)
 
-        road_poly = Polygon(np.zeros((4, 2)), closed=True,
-                            fc='#c8a46e', ec='none', hatch='////', zorder=1)
-        ax_s.add_patch(road_poly)
+        # road profile — gray line, no fill
+        road_line, = ax_s.plot([], [], '-', color=RENDER_C_ROAD, lw=1.5, zorder=2,
+                               label='road profile ζ(x)')
 
-        road_line, = ax_s.plot([], [], 'k-', lw=2, zorder=2)
+        # ground symbol — updated each frame to track road surface under the car
+        ground_sym, = ax_s.plot([], [], '-', color=RENDER_C_GROUND, lw=1.5, zorder=2)
 
-        tire_spring,  = ax_s.plot([], [], 'k-', lw=1.5, zorder=4)
-        tire_dashpot, = ax_s.plot([], [], 'k-', lw=1.5, zorder=4)
+        # contact stem + dot (stem goes below ground line, dot at bottom)
+        contact_stem, = ax_s.plot([], [], '-', color=RENDER_C_GROUND, lw=1.8, zorder=6)
+        contact_dot,  = ax_s.plot([], [], 'o', color=RENDER_C_GROUND, ms=10, zorder=7)
 
-        mw_patch = Rectangle((-RENDER_W_MW / 2, RENDER_Y_W_NOM - RENDER_H_MW / 2),
-                              RENDER_W_MW, RENDER_H_MW,
-                              fc='#d0d0d0', ec='black', lw=1.5, zorder=5)
+        # ── tire elements (k_T left, c_T right) ───────────────────────────────
+        _hw = RENDER_DA_W / 2
+        tire_spring,          = ax_s.plot([], [], '-', color=RENDER_C_SPRING, lw=2.0, zorder=4)
+        tire_damp_rod,        = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
+        tire_damp_lower_rod,  = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
+        tire_damp_cyl,        = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=2.0, zorder=4)
+        tire_damp_pist = Rectangle(
+            (RENDER_DA_X - _hw + 0.01, 0), RENDER_DA_W - 0.02, RENDER_DA_PIST_H,
+            fc=RENDER_C_DAMPER, ec='none', zorder=4)
+        ax_s.add_patch(tire_damp_pist)
+
+        # m_W block — steel blue, dot inside
+        mw_patch = Rectangle(
+            (-RENDER_W_MW / 2, RENDER_Y_W_NOM - RENDER_H_MW / 2),
+            RENDER_W_MW, RENDER_H_MW,
+            fc=RENDER_C_MW, ec='black', lw=1.5, zorder=5,
+        )
         ax_s.add_patch(mw_patch)
-        mw_label = ax_s.text(0, RENDER_Y_W_NOM, r'$m_W$',
-                             ha='center', va='center', fontsize=10,
-                             fontweight='bold', zorder=6)
+        mw_dot   = ax_s.plot(0, RENDER_Y_W_NOM, 'o', color='black', ms=5, zorder=7)[0]
+        mw_label = ax_s.text(-RENDER_W_MW / 2 + 0.05, RENDER_Y_W_NOM,
+                              r'$m_W$', ha='left', va='center',
+                              fontsize=9, fontweight='bold', color='white', zorder=7)
 
-        # suspension spring color changes with compression state (set in _update_artists)
-        susp_spring,  = ax_s.plot([], [], '-',  lw=1.5, color='#666666', zorder=4)
-        susp_dashpot, = ax_s.plot([], [], 'k-', lw=1.5, zorder=4)
+        # ── suspension elements (k_S left, c_S right) ─────────────────────────
+        susp_spring,          = ax_s.plot([], [], '-', color=RENDER_C_SPRING, lw=2.0, zorder=4)
+        susp_damp_rod,        = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
+        susp_damp_lower_rod,  = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
+        susp_damp_cyl,        = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=2.0, zorder=4)
+        susp_damp_pist = Rectangle(
+            (RENDER_DA_X - _hw + 0.01, 0), RENDER_DA_W - 0.02, RENDER_DA_PIST_H,
+            fc=RENDER_C_DAMPER, ec='none', zorder=4)
+        ax_s.add_patch(susp_damp_pist)
 
-        mb_patch = Rectangle((-RENDER_W_MB / 2, RENDER_Y_B_NOM - RENDER_H_MB / 2),
-                              RENDER_W_MB, RENDER_H_MB,
-                              fc='#aac8e8', ec='black', lw=1.5, zorder=5)
+        # m_B block — golden yellow, dot inside
+        mb_patch = Rectangle(
+            (-RENDER_W_MB / 2, RENDER_Y_B_NOM - RENDER_H_MB / 2),
+            RENDER_W_MB, RENDER_H_MB,
+            fc=RENDER_C_MB, ec='black', lw=1.5, zorder=5,
+        )
         ax_s.add_patch(mb_patch)
-        mb_label = ax_s.text(0, RENDER_Y_B_NOM, r'$m_B$',
-                             ha='center', va='center', fontsize=11,
-                             fontweight='bold', zorder=6)
+        mb_dot   = ax_s.plot(0, RENDER_Y_B_NOM, 'o', color='black', ms=5, zorder=7)[0]
+        mb_label = ax_s.text(-RENDER_W_MB / 2 + 0.05, RENDER_Y_B_NOM,
+                              r'$m_B$', ha='left', va='center',
+                              fontsize=9, fontweight='bold', color='black', zorder=7)
 
-        # dashed lines at static-equilibrium heights so deflection is visible
-        ax_s.axhline(RENDER_Y_W_NOM, color='#4444cc', ls='--', lw=0.8, alpha=0.45, zorder=3)
-        ax_s.axhline(RENDER_Y_B_NOM, color='#cc4444', ls='--', lw=0.8, alpha=0.45, zorder=3)
-
+        # F_D arrow — remove/add each frame (only allocation in hot-path)
         fd_text = ax_s.text(0, RENDER_Y_B_NOM, '',
-                            ha='left', va='center', fontsize=9,
-                            fontweight='bold', zorder=7)
+                            ha='left', va='center', fontsize=8,
+                            fontweight='bold', color='#0055cc', zorder=8)
 
+        # status text — top-left corner
         status_text = ax_s.text(
             0.02, 0.98, '', transform=ax_s.transAxes,
-            va='top', ha='left', fontsize=8, family='monospace',
-            bbox=dict(facecolor='white', alpha=0.75, edgecolor='none', pad=3),
-            zorder=8,
+            va='top', ha='left', fontsize=7.5, family='monospace',
+            bbox=dict(facecolor='white', alpha=0.80, edgecolor='#cccccc',
+                      boxstyle='round,pad=0.3'),
+            zorder=9,
         )
+
+        # exaggeration note
         ax_s.text(0.98, 0.02, f'y ×{self._y_scale}',
                   transform=ax_s.transAxes,
-                  va='bottom', ha='right', fontsize=7, color='#888888', zorder=8)
+                  va='bottom', ha='right', fontsize=7, color='#aaaaaa', zorder=9)
 
-        # --- time-series axes ---
+        ax_s.legend(fontsize=7, loc='upper right', framealpha=0.7,
+                    handlelength=1.5, borderpad=0.4)
+
+        # ── time-series axes ───────────────────────────────────────────────────
+        _ts_specs = [
+            # (key_B,   key_W,       ylabel,                  color_B, color_W)
+            ('z_B',    'z_W',       'z (m)',                 'b',     'r'),
+            ('z_B_ddot', None,      r'$\ddot{z}_B$ (m/s²)',  'k',     None),
+            ('F',        None,      r'$F_D$ (N)',            '#008800', None),
+            ('s_dot',    None,      r'$\dot{s}$ (m/s)',      '#aa00aa', None),
+        ]
         ts = {}
-        ts['z_B'], = ax_r[0].plot([], [], 'b-',  lw=1, label=r'$z_B$')
-        ts['z_W'], = ax_r[0].plot([], [], 'r--', lw=1, label=r'$z_W$')
-        ax_r[0].legend(fontsize=7, loc='upper left', framealpha=0.6)
-        ax_r[0].set_ylabel('z (m)', fontsize=8)
-
-        ts['z_B_ddot'], = ax_r[1].plot([], [], 'k-', lw=1)
-        ax_r[1].set_ylabel(r'$\ddot{z}_B$ (m/s²)', fontsize=8)
-        ax_r[1].axhline(0, color='gray', lw=0.5)
-
-        ts['F'], = ax_r[2].plot([], [], color='#008800', lw=1)
-        ax_r[2].set_ylabel(r'$F_D$ (N)', fontsize=8)
-        ax_r[2].axhline(0, color='gray', lw=0.5)
-
-        ts['s_dot'], = ax_r[3].plot([], [], color='#aa00aa', lw=1)
-        ax_r[3].set_ylabel(r'$\dot{s}$ (m/s)', fontsize=8)
-        ax_r[3].set_xlabel('t (s)', fontsize=8)
-
-        for ax in ax_r[:-1]:
-            ax.tick_params(labelbottom=False)
-        for ax in ax_r:
+        for i, ax in enumerate(ax_r):
+            k1, k2, ylabel, c1, c2 = _ts_specs[i]
+            ts[k1], = ax.plot([], [], '-', color=c1, lw=1,
+                              label=(r'$z_B$' if k1 == 'z_B' else None))
+            if k2:
+                ts[k2], = ax.plot([], [], '--', color=c2, lw=1, label=r'$z_W$')
+            if k1 == 'z_B':
+                ax.legend(fontsize=7, loc='upper left', framealpha=0.6)
+            ax.set_ylabel(ylabel, fontsize=8)
             ax.tick_params(labelsize=7)
             ax.grid(True, lw=0.3, alpha=0.5)
+            ax.axhline(0, color='gray', lw=0.4)
+            if i < len(ax_r) - 1:
+                ax.tick_params(labelbottom=False)
+            else:
+                ax.set_xlabel('t (s)', fontsize=8)
 
         if self.render_mode == 'human':
             plt.ion()
@@ -295,19 +411,29 @@ class QuarterCarEnv(gym.Env):
         self._ax_s = ax_s
         self._ax_r = ax_r
         self._artists = {
-            'road_poly':    road_poly,
-            'road_line':    road_line,
-            'tire_spring':  tire_spring,
-            'tire_dashpot': tire_dashpot,
-            'mw_patch':     mw_patch,
-            'mw_label':     mw_label,
-            'susp_spring':  susp_spring,
-            'susp_dashpot': susp_dashpot,
-            'mb_patch':     mb_patch,
-            'mb_label':     mb_label,
-            'fd_text':      fd_text,
-            'status_text':  status_text,
-            'ts':           ts,
+            'road_line':      road_line,
+            'contact_stem':   contact_stem,
+            'contact_dot':    contact_dot,
+            'ground_sym':     ground_sym,
+            'tire_spring':         tire_spring,
+            'tire_damp_rod':       tire_damp_rod,
+            'tire_damp_lower_rod': tire_damp_lower_rod,
+            'tire_damp_cyl':       tire_damp_cyl,
+            'tire_damp_pist':      tire_damp_pist,
+            'mw_patch':            mw_patch,
+            'mw_dot':              mw_dot,
+            'mw_label':            mw_label,
+            'susp_spring':         susp_spring,
+            'susp_damp_rod':       susp_damp_rod,
+            'susp_damp_lower_rod': susp_damp_lower_rod,
+            'susp_damp_cyl':       susp_damp_cyl,
+            'susp_damp_pist':      susp_damp_pist,
+            'mb_patch':       mb_patch,
+            'mb_dot':         mb_dot,
+            'mb_label':       mb_label,
+            'fd_text':        fd_text,
+            'status_text':    status_text,
+            'ts':             ts,
         }
 
     def _push_history(self):
@@ -323,7 +449,7 @@ class QuarterCarEnv(gym.Env):
         h['s_dot'].append(float(x[4]))
 
     def _update_artists(self):
-        """Reposition every artist in-place. The only allocation is the F_D arrow patch."""
+        """Update all artists in-place. Only the F_D arrow patch is re-allocated."""
         from matplotlib.patches import FancyArrow
 
         art = self._artists
@@ -334,86 +460,108 @@ class QuarterCarEnv(gym.Env):
         z_W    = z_B + float(x[2])
         travel = float(x[2])
         F_act  = self._last_F
+        zeta_0 = float(self._road.get_height(self._t))
 
-        y_W = RENDER_Y_W_NOM + z_W * ys
-        y_B = RENDER_Y_B_NOM + z_B * ys
+        # draw-space heights for the two masses (RENDER_GROUND_Y shifts entire system)
+        y_W      = RENDER_Y_W_NOM + RENDER_GROUND_Y + z_W * ys
+        y_B      = RENDER_Y_B_NOM + RENDER_GROUND_Y + z_B * ys
+        y_road_0 = RENDER_GROUND_Y + zeta_0 * ys   # road surface directly below car
 
-        # road polygon and surface contour
+        # ── road profile (gray line, car at x=0, road scrolls left) ───────────
         t_q    = self._t + _ROAD_X / self._v0
-        road_h = self._road.get_height_array(t_q) * ys
-        poly_xs = np.concatenate([_ROAD_X, _ROAD_X[::-1]])
-        poly_ys = np.concatenate([road_h, np.full(RENDER_ROAD_N, RENDER_YLIM[0])])
-        art['road_poly'].set_xy(np.column_stack([poly_xs, poly_ys]))
+        road_h = self._road.get_height_array(t_q) * ys + RENDER_GROUND_Y
         art['road_line'].set_data(_ROAD_X, road_h)
 
-        # tire spring (left) and dashpot (right)
-        y_road_0  = float(self._road.get_height(self._t)) * ys
+        h = self._ren_hist
+
+        y_road_0 += Y_LINE_OFFSET
+        # ── ground symbol + contact stem + dot ────────────────────────────────
+        gx, gy = _ground_symbol_xy(0.0, y_road_0, half_w=RENDER_W_MB / 2 + 0.15)
+        art['ground_sym'].set_data(gx, gy)
+        art['contact_stem'].set_data([0.0, 0.0], [y_road_0 - Y_LINE_OFFSET + RENDER_CONTACT_STEM, y_road_0])
+        art['contact_dot'].set_data([0.0], [y_road_0-Y_LINE_OFFSET])
+
+        # ── tire spring (k_T) and tire damper (c_T) ────────────────────────────
         y_tire_top = y_W - RENDER_H_MW / 2
-        art['tire_spring'].set_data(*_spring_xy(-0.15, y_tire_top, y_road_0))
-        art['tire_dashpot'].set_data(*_dashpot_xy(0.15, y_tire_top, y_road_0))
+        art['tire_spring'].set_data(
+            *_spring_xy(RENDER_SP_X, y_tire_top, y_road_0, RENDER_SP_N, RENDER_SP_W))
+        u_rod, l_rod, cyl_xy, pr = _damper_xy(RENDER_DA_X, y_tire_top, y_road_0,
+                                              RENDER_DA_CYL_H_TIRE)
+        art['tire_damp_rod'].set_data(*u_rod)
+        art['tire_damp_lower_rod'].set_data(*l_rod)
+        art['tire_damp_cyl'].set_data(*cyl_xy)
+        art['tire_damp_pist'].set_xy((pr[0], pr[1]))
+        art['tire_damp_pist'].set_height(pr[3])
 
-        # m_W block
+        # ── m_W block ──────────────────────────────────────────────────────────
         art['mw_patch'].set_xy((-RENDER_W_MW / 2, y_W - RENDER_H_MW / 2))
-        art['mw_label'].set_position((0, y_W))
+        art['mw_dot'].set_data([0], [y_W])
+        art['mw_label'].set_position((-RENDER_W_MW / 2 + 0.05, y_W))
 
-        # suspension spring (left) and dashpot (right)
+        # ── suspension spring (k_S) and damper (c_S) ──────────────────────────
         y_susp_bot = y_W + RENDER_H_MW / 2
         y_susp_top = y_B - RENDER_H_MB / 2
         if y_susp_top > y_susp_bot + 0.05:
-            # spring color: red = compressed beyond 2 cm, blue = extended, gray = normal
-            spring_color = ('#cc0000' if travel >  0.02 else
-                            '#0044cc' if travel < -0.02 else '#666666')
-            xs, ys_ = _spring_xy(-0.22, y_susp_top, y_susp_bot)
-            art['susp_spring'].set_data(xs, ys_)
-            art['susp_spring'].set_color(spring_color)
-            art['susp_dashpot'].set_data(*_dashpot_xy(0.22, y_susp_top, y_susp_bot))
+            art['susp_spring'].set_data(
+                *_spring_xy(RENDER_SP_X, y_susp_top, y_susp_bot, RENDER_SP_N, RENDER_SP_W))
+            u_rod, l_rod, cyl_xy, pr = _damper_xy(RENDER_DA_X, y_susp_top, y_susp_bot,
+                                                  RENDER_DA_CYL_H_SUSP)
+            art['susp_damp_rod'].set_data(*u_rod)
+            art['susp_damp_lower_rod'].set_data(*l_rod)
+            art['susp_damp_cyl'].set_data(*cyl_xy)
+            art['susp_damp_pist'].set_xy((pr[0], pr[1]))
+            art['susp_damp_pist'].set_height(pr[3])
 
-        # m_B block
+        # ── m_B block ──────────────────────────────────────────────────────────
         art['mb_patch'].set_xy((-RENDER_W_MB / 2, y_B - RENDER_H_MB / 2))
-        art['mb_label'].set_position((0, y_B))
+        art['mb_dot'].set_data([0], [y_B])
+        art['mb_label'].set_position((-RENDER_W_MB / 2 + 0.05, y_B))
 
-        # F_D arrow - remove old patch, add new one proportional to force magnitude
+        # ── F_D arrow (remove old patch, add fresh one) ────────────────────────
         if self._fd_arrow_patch is not None:
             self._fd_arrow_patch.remove()
             self._fd_arrow_patch = None
-        arrow_len = (F_act / F_MAX) * 1.2
-        if abs(arrow_len) > 0.05:
+        arrow_len = (F_act / F_MAX) * 1.0   # max 1.0 draw unit
+        if abs(arrow_len) > 0.04:
             x_start = RENDER_W_MB / 2 if F_act > 0 else -RENDER_W_MB / 2
-            color   = '#008800' if F_act > 0 else '#cc0000'
             al      = abs(arrow_len)
             arr = FancyArrow(x_start, y_B, arrow_len, 0.0,
-                             width=0.04, length_includes_head=True,
-                             head_width=0.13, head_length=min(al * 0.25, 0.25),
-                             fc=color, ec=color, zorder=7)
+                             width=0.035, length_includes_head=True,
+                             head_width=0.12, head_length=min(al * 0.25, 0.22),
+                             fc='#0055cc', ec='#0055cc', zorder=8)
             self._ax_s.add_patch(arr)
             self._fd_arrow_patch = arr
-            txt_x = x_start + arrow_len + (0.1 if F_act > 0 else -0.1)
+            txt_x = x_start + arrow_len + (0.08 if F_act > 0 else -0.08)
             art['fd_text'].set_text(f'$F_D$={F_act:+.0f} N')
             art['fd_text'].set_position((txt_x, y_B))
             art['fd_text'].set_ha('left' if F_act > 0 else 'right')
-            art['fd_text'].set_color(color)
         else:
             art['fd_text'].set_text('')
 
-        # status text block
+        # ── status text ────────────────────────────────────────────────────────
         s_pos = self._v0 * self._t
         art['status_text'].set_text(
-            f't={self._t:6.2f} s   s={s_pos:6.1f} m   ṡ={float(x[4]):.1f} m/s\n'
-            f'z_B={z_B*100:+.2f} cm   z_W={z_W*100:+.2f} cm\n'
-            f'ζ={self._road.get_height(self._t)*100:.3f} cm   '
+            f't={self._t:6.2f} s    s={s_pos:6.1f} m\n'
+            f'z_B={z_B*100:+.2f} cm  z_W={z_W*100:+.2f} cm\n'
+            f'ζ={zeta_0*100:.3f} cm    '
             f'F_D={F_act:+.0f} N\n'
             f'ep reward={self._episode_reward:.2f}'
         )
 
-        # time-series
-        h     = self._ren_hist
+        # ── time-series ────────────────────────────────────────────────────────
+        if not self._show_ts:
+            return
         t_arr = np.array(h['t'])
         ts    = art['ts']
-        ts['z_B'].set_data(t_arr,     np.array(h['z_B']))
-        ts['z_W'].set_data(t_arr,     np.array(h['z_W']))
-        ts['z_B_ddot'].set_data(t_arr, np.array(h['z_B_ddot']))
-        ts['F'].set_data(t_arr,        np.array(h['F']))
-        ts['s_dot'].set_data(t_arr,    np.array(h['s_dot']))
+        _map = {
+            'z_B':      h['z_B'],
+            'z_W':      h['z_W'],
+            'z_B_ddot': h['z_B_ddot'],
+            'F':        h['F'],
+            's_dot':    h['s_dot'],
+        }
+        for key, line in ts.items():
+            line.set_data(t_arr, np.array(_map[key]))
 
         if len(t_arr) > 1:
             t_hi = t_arr[-1]
@@ -421,55 +569,3 @@ class QuarterCarEnv(gym.Env):
                 ax.set_xlim(t_hi - RENDER_HIST_SECS, t_hi)
                 ax.relim()
                 ax.autoscale_view(scalex=False, scaley=True)
-
-    
-    # ── Render helpers  ────────────────────────────────────
-
-    def _spring_xy(x_c: float, y_top: float, y_bot: float,
-                   n: int = 6, w: float = 0.08):
-        """Zigzag coil spring coords for a single Line2D."""
-        n_pts = 2 * n + 2
-        ys = np.linspace(y_top, y_bot, n_pts)
-        xs = np.full(n_pts, x_c)
-        idx = np.arange(1, n_pts - 1)
-        xs[1:-1] = x_c + w * np.where(idx % 2 == 1, 1.0, -1.0)
-        return xs, ys
-
-
-    def _dashpot_xy(x_c: float, y_top: float, y_bot: float, w: float = 0.06):
-        """Piston-cylinder dashpot coords using NaN pen-lifts for a single Line2D."""
-        h    = abs(y_top - y_bot)
-        y_pt = y_top - h * 0.25   # piston plate
-        y_cb = y_bot + h * 0.15   # cylinder bottom
-        nan  = float('nan')
-        xs = [x_c,      x_c,      nan,
-              x_c-w/2,  x_c+w/2,  nan,
-              x_c-w/2,  x_c-w/2,
-              x_c+w/2,  x_c+w/2,  nan,
-              x_c-w/2,  x_c+w/2,  nan,
-              x_c,      x_c]
-        ys = [y_top,    y_pt,     nan,
-              y_pt,     y_pt,     nan,
-              y_pt,     y_cb,
-              y_cb,     y_pt,     nan,
-              y_cb,     y_cb,     nan,
-              y_cb,     y_bot]
-        return np.array(xs, dtype=float), np.array(ys, dtype=float)
-
-    def render(self):
-        if self.render_mode == 'none':
-            return None
-        if self._ren_hist is None:
-            self._init_render()
-        self._push_history()
-        self._update_artists()
-        if self.render_mode == 'human':
-            import matplotlib.pyplot as plt
-            self._fig.canvas.draw_idle()
-            plt.pause(1e-3)
-            return None
-        self._fig.canvas.draw()
-        buf = self._fig.canvas.buffer_rgba()
-        w, h = self._fig.canvas.get_width_height()
-        img = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
-        return img[..., :3].copy()
