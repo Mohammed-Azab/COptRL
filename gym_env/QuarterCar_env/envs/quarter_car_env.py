@@ -37,7 +37,7 @@ _ROAD_X = np.linspace(-RENDER_ROAD_HALF, RENDER_ROAD_HALF, RENDER_ROAD_N)
 _N_HIST = int(RENDER_HIST_SECS / DT)
 
 
-# ── Render geometry helpers ────────────────────────────────────────────────────
+#  Render geometry helpers 
 
 def _spring_xy(x_c: float, y_top: float, y_bot: float,
                n: int = 8, w: float = 0.18):
@@ -83,7 +83,7 @@ def _ground_symbol_xy(x_c: float, y: float, half_w: float = 0.55):
     return np.array([x_c - half_w, x_c + half_w]), np.array([y, y])
 
 
-# ── Environment ────────────────────────────────────────────────────────────────
+# Environment
 
 class QuarterCarEnv(gym.Env):
     metadata = {
@@ -128,7 +128,7 @@ class QuarterCarEnv(gym.Env):
         # Optional custom v_ref callable passed through road_params
         self._v_ref_fn: Optional[Callable[[float], float]] = (road_params or {}).get('v_ref_fn', None)
 
-        # ── action space ──────────────────────────────────────────────────────
+        # action space
         if control_mode == "suspension":
             self.action_space = spaces.Box(
                 low=np.array([-1.0], dtype=np.float32),
@@ -145,7 +145,7 @@ class QuarterCarEnv(gym.Env):
                 high=np.array([ 1.0, 1.0], dtype=np.float32),
             )
 
-        # ── observation space ─────────────────────────────────────────────────
+        # observation space
         if control_mode == "suspension":
             self.observation_space = spaces.Box(
                 low=OBS_LOW, high=OBS_HIGH, dtype=np.float32)
@@ -161,7 +161,7 @@ class QuarterCarEnv(gym.Env):
         self._road = RoadGenerator(road_profile, vehicle_speed, road_params)
         self._rcfg = reward_config or RewardConfig()
 
-        # ── episode state ──────────────────────────────────────────────────────
+        # episode state
         self._state          = self._ode.reset(self._v0)
         self._t              = 0.0
         self._step_count     = 0
@@ -184,8 +184,9 @@ class QuarterCarEnv(gym.Env):
         self._fig            = None
         self._ren_hist       = None
         self._fd_arrow_patch = None
+        self._episode_count  = 0
 
-    # ── Gymnasium interface ────────────────────────────────────────────────────
+    # Gymnasium interface
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -207,6 +208,12 @@ class QuarterCarEnv(gym.Env):
         self._last_F         = 0.0
         self._last_z_B_ddot  = 0.0
         self._episode_reward = 0.0
+        self._episode_count += 1
+
+        if self._fig is not None:
+            import matplotlib.pyplot as plt
+            plt.close(self._fig)
+            self._fig = None
         self._ren_hist       = None
 
         self._v              = self._v0
@@ -220,7 +227,7 @@ class QuarterCarEnv(gym.Env):
         return self._obs(), self._info(0.0)
 
     def step(self, action):
-        # ── 1. Parse action, update speed if applicable ────────────────────────
+        # 1. Parse action, update speed if applicable
         if self._control_mode == "suspension":
             F_act = float(np.clip(action[0], -1.0, 1.0)) * F_MAX
         elif self._control_mode == "speed":
@@ -241,7 +248,7 @@ class QuarterCarEnv(gym.Env):
         self._last_F = F_act
         self._s_pos += self._v * DT
 
-        # ── 2. Integrate ODE ───────────────────────────────────────────────────
+        # 2. Integrate ODE
         new_state, z_B_ddot = self._ode.step(
             self._state, self._road.get_height_dot, self._t, F_act
         )
@@ -257,7 +264,7 @@ class QuarterCarEnv(gym.Env):
         self._travel_sq  += travel ** 2
         self._peak_accel  = max(self._peak_accel, abs(z_B_ddot))
 
-        # ── 3. Reference speed and reward ──────────────────────────────────────
+        # 3. Reference speed and reward
         v_ref = self._compute_v_ref(self._t)
         self._v_ref_last = v_ref
 
@@ -272,7 +279,7 @@ class QuarterCarEnv(gym.Env):
 
         self._episode_reward += reward
 
-        # ── 4. Termination ─────────────────────────────────────────────────────
+        # 4. Termination
         truncated  = bool(
             abs(travel) > TRUNC_TRAVEL
             or abs(float(new_state[5])) > TRUNC_ZS
@@ -314,7 +321,7 @@ class QuarterCarEnv(gym.Env):
             plt.close(self._fig)
             self._fig = None
 
-    # ── Observation / info ─────────────────────────────────────────────────────
+    # Observation / info
 
     def _obs(self) -> np.ndarray:
         x        = self._state
@@ -374,7 +381,7 @@ class QuarterCarEnv(gym.Env):
         rms = np.sqrt(self._accel_sq / n)
         return float(max(0.0, 1.0 - rms / self._rcfg.a_limit))
 
-    # ── Speed reference profile ────────────────────────────────────────────────
+    # Speed reference profile
 
     def _compute_v_ref(self, t: float) -> float:
         if self._ref_speed_profile == "constant":
@@ -401,7 +408,7 @@ class QuarterCarEnv(gym.Env):
             return self._v_max
         return self._v_max
 
-    # ── Render internals ───────────────────────────────────────────────────────
+    #  Render internals
 
     def _init_render(self):
         """Build the figure and all artists exactly once."""
@@ -421,7 +428,8 @@ class QuarterCarEnv(gym.Env):
             's_dot':    collections.deque(maxlen=_N_HIST),
         }
 
-        # ── figure layout ──────────────────────────────────────────────────────
+        # figure layout
+        win_title = f'Quarter_Car Model : ep{self._episode_count}'
         if self._show_ts:
             fig = plt.figure(figsize=(14, 7))
             gs  = GridSpec(1, 2, figure=fig, width_ratios=[3, 2],
@@ -435,7 +443,10 @@ class QuarterCarEnv(gym.Env):
             fig.subplots_adjust(left=0.07, right=0.97, bottom=0.09, top=0.93)
             ax_r = []
 
-        # ── schematic axis ─────────────────────────────────────────────────────
+        if fig.canvas.manager is not None:
+            fig.canvas.manager.set_window_title(win_title)
+
+        # schematic axis
         ax_s.set_facecolor('white')
         ax_s.set_xlim(RENDER_XLIM)
         ax_s.set_ylim(RENDER_YLIM)
@@ -455,7 +466,7 @@ class QuarterCarEnv(gym.Env):
         contact_stem, = ax_s.plot([], [], '-', color=RENDER_C_GROUND, lw=1.8, zorder=6)
         contact_dot,  = ax_s.plot([], [], 'o', color=RENDER_C_GROUND, ms=10, zorder=7)
 
-        # ── tire elements (k_T left, c_T right) ───────────────────────────────
+        # tire elements (k_T left, c_T right)
         _hw = RENDER_DA_W / 2
         tire_spring,          = ax_s.plot([], [], '-', color=RENDER_C_SPRING, lw=2.0, zorder=4)
         tire_damp_rod,        = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
@@ -478,7 +489,7 @@ class QuarterCarEnv(gym.Env):
                               r'$m_W$', ha='left', va='center',
                               fontsize=9, fontweight='bold', color='white', zorder=7)
 
-        # ── suspension elements (k_S left, c_S right) ─────────────────────────
+        # suspension elements (k_S left, c_S right)
         susp_spring,          = ax_s.plot([], [], '-', color=RENDER_C_SPRING, lw=2.0, zorder=4)
         susp_damp_rod,        = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
         susp_damp_lower_rod,  = ax_s.plot([], [], '-', color=RENDER_C_DAMPER, lw=1.5, zorder=4)
@@ -522,7 +533,7 @@ class QuarterCarEnv(gym.Env):
         ax_s.legend(fontsize=7, loc='upper right', framealpha=0.7,
                     handlelength=1.5, borderpad=0.4)
 
-        # ── time-series axes ───────────────────────────────────────────────────
+        # time-series axes
         _ts_specs = [
             # (key_B,   key_W,       ylabel,                  color_B, color_W)
             ('z_B',    'z_W',       'z (m)',                 'b',     'r'),
@@ -611,7 +622,7 @@ class QuarterCarEnv(gym.Env):
         y_B      = RENDER_Y_B_NOM + RENDER_GROUND_Y + z_B * ys
         y_road_0 = RENDER_GROUND_Y + zeta_0 * ys   # road surface directly below car
 
-        # ── road profile (gray line, car at x=0, road scrolls left) ───────────
+        # road profile (gray line, car at x=0, road scrolls left)
         v_disp  = max(self._v, 0.1)
         t_q     = self._t + _ROAD_X / v_disp
         road_h  = self._road.get_height_array(t_q) * ys + RENDER_GROUND_Y
@@ -620,13 +631,13 @@ class QuarterCarEnv(gym.Env):
         h = self._ren_hist
 
         y_road_0 += Y_LINE_OFFSET
-        # ── ground symbol + contact stem + dot ────────────────────────────────
+        # ground symbol + contact stem + dot
         gx, gy = _ground_symbol_xy(0.0, y_road_0, half_w=RENDER_W_MB / 2 + 0.15)
         art['ground_sym'].set_data(gx, gy)
         art['contact_stem'].set_data([0.0, 0.0], [y_road_0 - Y_LINE_OFFSET + RENDER_CONTACT_STEM, y_road_0])
         art['contact_dot'].set_data([0.0], [y_road_0-Y_LINE_OFFSET])
 
-        # ── tire spring (k_T) and tire damper (c_T) ────────────────────────────
+        # tire spring (k_T) and tire damper (c_T)
         y_tire_top = y_W - RENDER_H_MW / 2
         art['tire_spring'].set_data(
             *_spring_xy(RENDER_SP_X, y_tire_top, y_road_0, RENDER_SP_N, RENDER_SP_W))
@@ -638,12 +649,12 @@ class QuarterCarEnv(gym.Env):
         art['tire_damp_pist'].set_xy((pr[0], pr[1]))
         art['tire_damp_pist'].set_height(pr[3])
 
-        # ── m_W block ──────────────────────────────────────────────────────────
+        # m_W block
         art['mw_patch'].set_xy((-RENDER_W_MW / 2, y_W - RENDER_H_MW / 2))
         art['mw_dot'].set_data([0], [y_W])
         art['mw_label'].set_position((-RENDER_W_MW / 2 + 0.05, y_W))
 
-        # ── suspension spring (k_S) and damper (c_S) ──────────────────────────
+        # suspension spring (k_S) and damper (c_S)
         y_susp_bot = y_W + RENDER_H_MW / 2
         y_susp_top = y_B - RENDER_H_MB / 2
         if y_susp_top > y_susp_bot + 0.05:
@@ -657,12 +668,12 @@ class QuarterCarEnv(gym.Env):
             art['susp_damp_pist'].set_xy((pr[0], pr[1]))
             art['susp_damp_pist'].set_height(pr[3])
 
-        # ── m_B block ──────────────────────────────────────────────────────────
+        # m_B block
         art['mb_patch'].set_xy((-RENDER_W_MB / 2, y_B - RENDER_H_MB / 2))
         art['mb_dot'].set_data([0], [y_B])
         art['mb_label'].set_position((-RENDER_W_MB / 2 + 0.05, y_B))
 
-        # ── F_D arrow (remove old patch, add fresh one) ────────────────────────
+        #  F_D arrow (remove old patch, add fresh one)
         if self._fd_arrow_patch is not None:
             self._fd_arrow_patch.remove()
             self._fd_arrow_patch = None
@@ -683,7 +694,7 @@ class QuarterCarEnv(gym.Env):
         else:
             art['fd_text'].set_text('')
 
-        # ── status text ────────────────────────────────────────────────────────
+        #  status text 
         art['status_text'].set_text(
             f't={self._t:6.2f} s    s={self._s_pos:6.1f} m\n'
             f'z_B={z_B*100:+.2f} cm  z_W={z_W*100:+.2f} cm\n'
@@ -693,7 +704,7 @@ class QuarterCarEnv(gym.Env):
             f'ep reward={self._episode_reward:.2f}'
         )
 
-        # ── time-series ────────────────────────────────────────────────────────
+        #  time-series 
         if not self._show_ts:
             return
         t_arr = np.array(h['t'])

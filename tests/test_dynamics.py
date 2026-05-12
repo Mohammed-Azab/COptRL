@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-# ── path setup ────────────────────────────────────────────────────────────────
+#  path setup 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'gym_env'))
 
 from QuarterCar_env.ode_model import _spring_nonlin, _damper, _P, MandlQuarterCarODE
@@ -24,7 +24,7 @@ from QuarterCar_env.params import PHYSICS, VEHICLE_SPEED, DT
 
 LOG_PATH = Path(__file__).parent / 'test_mandl_dynamics.log'
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+#  helpers ─
 
 def section(title, log):
     line = f"\n{'=' * 60}\n{title}\n{'=' * 60}"
@@ -40,7 +40,7 @@ def info(msg, log):
     s = f'  {msg}'; print(s); log.write(s + '\n')
 
 
-# ── individual checks ─────────────────────────────────────────────────────────
+#  individual checks ─
 
 def check_static_equilibrium(log):
     section('1. Static equilibrium (zero road, zero action)', log)
@@ -169,7 +169,7 @@ def check_free_vibration_decay(log):
     ok('State norm < 1e-2 after 4 s (well-damped)', log)
 
 
-# ── main ─────────────────────────────────────────────────────────────────────
+#  main ─
 
 def main():
     with open(LOG_PATH, 'w') as log:

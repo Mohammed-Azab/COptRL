@@ -21,7 +21,7 @@ import QuarterCar_env  # registers the environment
 
 LOG_PATH = Path(__file__).parent / "test_env.log"
 
-# ── helpers ────────────────────────────────────────────────────────────────────
+#  helpers 
 
 def section(title: str, log):
     line = f"\n{'=' * 60}\n{title}\n{'=' * 60}"
@@ -44,7 +44,7 @@ def info(msg: str, log):
     print(s); log.write(s + "\n")
 
 
-# ── individual checks ──────────────────────────────────────────────────────────
+#  individual checks 
 
 def check_registration(log):
     section("1. Environment registration", log)
@@ -215,7 +215,7 @@ def check_seed_reproducibility(log):
         fail("Different seeds produced identical rewards (suspicious)", log)
 
 
-# ── render rollout ─────────────────────────────────────────────────────────────
+#  render rollout ─
 
 def run_render_rollout(render_mode: str):
     """
@@ -284,7 +284,7 @@ def run_render_rollout(render_mode: str):
     env.close()
 
 
-# ── main ───────────────────────────────────────────────────────────────────────
+#  main ─
 
 def main():
     with open(LOG_PATH, "w") as log:

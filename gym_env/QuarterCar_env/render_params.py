@@ -1,5 +1,5 @@
 
-# ── Render defaults ────────────────────────────────────────────────────────────
+# Render defaults 
 RENDER_Y_SCALE   = 5      # vertical exaggeration applied to all z-deflections
 RENDER_HIST_SECS = 5.0     # seconds of rolling history in the time-series panel
 
@@ -23,7 +23,7 @@ RENDER_ROAD_HALF = 15.0   # road sampled ±this distance from car (m)
 RENDER_ROAD_N    = 300    # number of road sample points
 RENDER_GROUND_Y  = 1.5    # draw-space offset: shifts ground line + both masses up together
 
-# ── Render appearance — colours ───────────────────────────────────────────────
+#  Render appearance — colours ─
 RENDER_C_MB     = '#f5c842'   # sprung mass body (golden yellow)
 RENDER_C_MW     = '#4a86c8'   # unsprung mass (steel blue)
 RENDER_C_SPRING = '#e05a1c'   # spring coils (orange-red)
@@ -31,12 +31,12 @@ RENDER_C_DAMPER = '#4a86c8'   # damper cylinder / piston (steel blue)
 RENDER_C_ROAD   = '#aaaaaa'   # road profile line (light gray)
 RENDER_C_GROUND = '#222222'   # ground symbol and contact stem (near-black)
 
-# ── Render appearance — spring geometry ──────────────────────────────────────
+#  Render appearance — spring geometry 
 RENDER_SP_X = -0.42   # spring centre x in draw-space
 RENDER_SP_W =  0.18   # coil half-amplitude (zigzag width)
 RENDER_SP_N =  8      # number of zigzag coil pairs
 
-# ── Render appearance — damper geometry ──────────────────────────────────────
+#  Render appearance — damper geometry 
 # Piston-cylinder style: open-top cylinder (⊔) linked to lower mass via a short
 # rod (RENDER_DA_LOWER_STEM); piston linked to upper mass via upper rod.
 RENDER_DA_X          =  0.6   # damper centre x in draw-space
@@ -51,6 +51,6 @@ RENDER_DA_LOWER_STEM =  0.20  # rod length from lower mass to cylinder base
 RENDER_DA_CYL_H_SUSP = 0.88   # suspension cylinder height (≈ 1.6 × 0.55)
 RENDER_DA_CYL_H_TIRE = 0.8   # tire cylinder height       (≈ 1.825 × 0.55)
 
-# ── Render appearance — contact geometry ─────────────────────────────────────
+#  Render appearance — contact geometry ─
 RENDER_CONTACT_STEM = 0   # short stem length above ground line to contact dot
 Y_LINE_OFFSET = 0.7   # vertical offset to shift ground line and contact point up together

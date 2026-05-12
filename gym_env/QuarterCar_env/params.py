@@ -82,7 +82,7 @@ ROAD_DEFAULTS = {
 
 VEHICLE_SPEED = 5.0   # m/s (36 km/h)
 
-# ── Speed control ──────────────────────────────────────────────────────────────
+# Speed control 
 V_TAU        = 0.5    # s   
 V_MAX        = 20.0   # m/s 
 V_MIN        = 2.0    # m/s 
