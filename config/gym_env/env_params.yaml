@@ -1,0 +1,65 @@
+model_params:
+  # core masses and stiffness/damping
+  m_B: 465.7
+  m_W: 50.4
+  c_T: 500.0
+  k_T: 262200.0
+  k_S: 27922.0
+
+dumping_params:
+  # damper curve shape (piecewise slopes)
+  D: 3530.0
+  A: 0.5
+  v_d: 0.2
+  v_z: 0.2
+
+
+# bumpstop progression beyond linear travel
+f1_cmp: 0.3333333333
+f2_cmp: 4.0
+f1_rbd: 1.0
+f2_rbd: 8.0
+dz_cmp: 0.02
+dz_rbd: 0.08
+F_ks_nlin_max: 100000.0
+
+# actuator limit
+F_MAX: 10000.0
+
+# timing and episode length
+DT: 0.02
+DT_SIM: 0.001
+EPISODE_STEPS: 360
+
+# truncation rules
+TRUNC_TRAVEL: 0.6
+TRUNC_ZS: 0.6
+MAX_DISTANCE: 150
+
+# observation clip bounds
+OBS_HIGH:
+  - 0.3
+  - 3.0
+  - 0.4
+  - 5.0
+  - 0.15
+  - 7.0
+  - 0.15
+  - 0.05
+
+# road profile defaults
+ROAD_DEFAULTS:
+  bump_height: 0.1
+  bump_length: 3.5
+  bump_x_start: 3.0
+  iso_gd0: 0.000256
+  iso_n0: 0.1
+  sweep_amplitude: 0.02
+  episode_duration: 5.0
+
+Speed control targets:
+  # speed control targets
+  VEHICLE_SPEED: 5.0
+  V_MAX: 20.0
+  V_MIN: 2.0
+  V_BRAKE_LEAD: 2.0
