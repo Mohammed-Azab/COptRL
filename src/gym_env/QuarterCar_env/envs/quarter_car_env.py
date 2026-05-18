@@ -116,7 +116,6 @@ class QuarterCarEnv(gym.Env):
         self._s_pos          = 0.0
 
         # filter state — cleared in reset()
-        self._prev_v         = self._v0
         self._prev_a         = 0.0
         self._filtered_a     = 0.0
         self._filtered_jerk  = 0.0
@@ -165,7 +164,6 @@ class QuarterCarEnv(gym.Env):
         self._s_pos          = 0.0
 
         # reset filter state
-        self._prev_v         = self._v0
         self._prev_a         = 0.0
         self._filtered_a     = 0.0
         self._filtered_jerk  = 0.0
@@ -208,8 +206,7 @@ class QuarterCarEnv(gym.Env):
         self._step_count   += 1
         self._last_z_B_ddot = z_B_ddot
 
-        tyre_defl = float(new_state[0])
-        travel    = float(new_state[2])
+        travel = float(new_state[2])
 
         self._accel_sq  += z_B_ddot ** 2
         self._travel_sq += travel ** 2
@@ -231,7 +228,6 @@ class QuarterCarEnv(gym.Env):
         self._episode_reward += reward
 
         # 5. Update history
-        self._prev_v      = v_old
         self._prev_a      = a_actual
         self._prev_action = u
 
@@ -277,9 +273,9 @@ class QuarterCarEnv(gym.Env):
         """Build observation space bounds once at __init__ from toggle flags."""
         cfg = self._rcfg
 
-        # Speed components always present
-        extra_high = [cfg.v_max, cfg.v_max]
-        extra_low  = [0.0,       -cfg.v_max]
+        # Speed components always present (values are normalised by v_max)
+        extra_high = [1.0,  1.0]
+        extra_low  = [0.0, -1.0]
 
         if cfg.obs_enable_accel:
             bound = cfg.accel_clip / cfg.a_comfort
