@@ -1,18 +1,15 @@
-model_params:
-  # core masses and stiffness/damping
-  m_B: 465.7
-  m_W: 50.4
-  c_T: 500.0
-  k_T: 262200.0
-  k_S: 27922.0
+# core masses and stiffness/damping
+m_B: 465.7
+m_W: 50.4
+c_T: 500.0
+k_T: 262200.0
+k_S: 27922.0
 
-dumping_params:
-  # damper curve shape (piecewise slopes)
-  D: 3530.0
-  A: 0.5
-  v_d: 0.2
-  v_z: 0.2
-
+# damper curve shape (piecewise slopes)
+D: 3530.0
+A: 0.5
+v_d: 0.2
+v_z: 0.2
 
 # bumpstop progression beyond linear travel
 f1_cmp: 0.3333333333
@@ -57,9 +54,8 @@ ROAD_DEFAULTS:
   sweep_amplitude: 0.02
   episode_duration: 5.0
 
-Speed control targets:
-  # speed control targets
-  VEHICLE_SPEED: 5.0
-  V_MAX: 20.0
-  V_MIN: 2.0
-  V_BRAKE_LEAD: 2.0
+# speed control targets
+VEHICLE_SPEED: 5.0
+V_MAX: 20.0
+V_MIN: 2.0
+V_BRAKE_LEAD: 2.0
