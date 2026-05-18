@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from QuarterCar_env.config.config_manager import _load_yaml
 
 
-@dataclass
+@dataclass(frozen=True)
 class RewardConfig:
     # --- weights ---
     w_tracking:      float = 1.0
