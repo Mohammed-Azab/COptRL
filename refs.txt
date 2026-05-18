@@ -63,3 +63,50 @@
 
 [14] Nrsyed. "TU Wien thesis. The 6-state model (Mandl Eq. 3.22 + z_B integral)"
      info : Mandl, P. (2021), "Predictive driver model for speed control in the presence of road obstacles"
+
+
+Reward Ref:
+
+[15] Betz, J., Zheng, H., Dreissig, A., Togbe, T., Lienkamp, M.
+     "A Review of Reward Functions for Reinforcement Learning in the
+     Context of Autonomous Driving."
+     IEEE Intelligent Transportation Systems Conference (ITSC), 2022.
+     DOI: 10.1109/ITSC55140.2022.9921838
+
+[16] Gao, B., Shen, W., Guan, H., Zheng, L., Zhang, W., Huang, K.
+     "Reinforcement Learning-Based Vibration Control for a Vehicle
+     Active Suspension System via PPO."
+     IEEE Transactions on Cybernetics, 2021.
+     DOI: 10.1109/TCYB.2021.3090471
+     Note: See also [2] for physics-guided RL on active suspension.
+
+[17] Haarnoja, T., Zhou, A., Abbeel, P., Levine, S.
+     "Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement
+     Learning with a Stochastic Actor."
+     International Conference on Machine Learning (ICML), 2018.
+     arXiv: https://arxiv.org/abs/1801.01290
+
+[18] Fujimoto, S., van Hoof, H., Meger, D.
+     "Addressing Function Approximation Error in Actor-Critic Methods (TD3)."
+     International Conference on Machine Learning (ICML), 2018.
+     arXiv: https://arxiv.org/abs/1802.09477
+
+[19] ISO 2631-1:1997. "Mechanical vibration and shock - Evaluation of
+     human exposure to whole-body vibration - Part 1: General requirements."
+     International Organization for Standardization.
+     Note: See also [4]. a_comfort threshold in reward_params.yaml is
+     derived from the 8-hour RMS limit for reduced comfort (0.5 m/s^2
+     weighted) scaled to unweighted longitudinal acceleration.
+
+[20] Schreier, M., Willert, V., Adamy, J.
+     "Eco-Driving Using Reinforcement Learning with Continuous State
+     and Action Spaces."
+     IEEE Intelligent Transportation Systems Conference (ITSC), 2015.
+     DOI: 10.1109/ITSC.2015.126
+
+[21] Ziegler, J., Becker, M.
+     "Trajectory Planning for the Urban Environment Using a Continuous
+     Curvature Model."
+     IEEE Intelligent Vehicles Symposium (IV), 2010.
+     DOI: 10.1109/IVS.2010.5548085
+     Note: Basis for curvature-aware speed target in compute_v_target().
