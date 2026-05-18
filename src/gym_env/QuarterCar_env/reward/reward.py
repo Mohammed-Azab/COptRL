@@ -14,7 +14,6 @@ References: [15][17][18][19] in refs.txt
 """
 
 import numpy as np
-from typing import Tuple
 
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
 
