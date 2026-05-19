@@ -3,16 +3,26 @@
 import numpy as np
 from typing import Callable
 
-from QuarterCar_env.params import PHYSICS, DT_SIM, N_SUB, VEHICLE_SPEED
+from QuarterCar_env.config.env_params import PHYSICS, DT_SIM, N_SUB, VEHICLE_SPEED
 
 
 class _P:
-    """Flat parameter struct to avoids dict look-ups on the ODE hot-path."""
+    """Flat parameter struct for the quarter-car ODE model."""
     __slots__ = (
-        'm_B', 'm_W', 'c_T', 'k_T', 'k_S', 'dz_S_stat',
+        # masses
+        'm_B', 'm_W',
+        # spring/damper parameters
+        'c_T', 'k_T', 'k_S',
+        # nonlinear spring parameters
+        'dz_S_stat',
+        
         'd1', 'z1', 'd2', 'z2', 'v_d', 'v_z',
+        # nonlinear spring force limits
         'f1_cmp', 'f2_cmp', 'f1_rbd', 'f2_rbd',
-        'dz_cmp', 'dz_rbd', 'F_ks_nlin_max',
+        # nonlinear spring clearance limits
+        'dz_cmp', 'dz_rbd',
+        # nonlinear spring force limits
+        'F_ks_nlin_max',
     )
 
     def __init__(self, d: dict):
@@ -58,12 +68,22 @@ def _ode(x: np.ndarray, z_q: float, F_act: float, p: _P) -> np.ndarray:
     """
     6-state quarter-car equations of motion.
 
-    State:  x = [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B]
-    Input:  z_q  = ζ̇ (road velocity)
+    State:  x = [ζ − z_W,           # tire deflection   (positive = compression)
+                 ż_W,               # wheel velocity
+                 z_W − z_B,         # suspension travel (positive = compression)
+                 ż_B,               # body velocity
+                 v,                 # longitudinal speed
+                 z_B]               # body position
+    
+    Input:  z_q  = ζ̇  (road velocity)
             F_act = active suspension force (+ lifts body / presses wheel down)
     """
-    F_spring = p.k_S * x[2] + _spring_nonlin(x[2], p)
+    
+    # 
+    F_spring = p.k_S * x[2] + _spring_nonlin(x[2], p) 
     F_damp   = _damper(x[1] - x[3], p)
+    
+    # tire forces: linear spring + damper to road
     F_tire_k = p.k_T * x[0]
     F_tire_c = p.c_T * (z_q - x[1])
 

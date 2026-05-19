@@ -11,7 +11,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from QuarterCar_env.envs import QuarterCarEnv
-from QuarterCar_env.params import V_MAX, V_MIN
+from QuarterCar_env.config.env_params import V_MAX, V_MIN
 
 #   tuning parameters
 H_THRESH = 0.01   # m - road height threshold 
@@ -35,10 +35,11 @@ def _action(
     F_norm = -K_SUSP * travel - B_SUSP * (body_vel - wheel_vel)
     F_norm = float(np.clip(F_norm, -1.0, 1.0))
 
-    if road_height > H_THRESH:
-        v_cmd = V_MIN / v_max
-    else:
-        v_cmd = min(1.0, v_cmd + ACCEL)
+    v_cmd = 3
+    #if road_height > H_THRESH:
+    #    v_cmd = V_MIN / v_max
+    #else:
+    #    v_cmd = min(1.0, v_cmd + ACCEL)
 
     if mode == "suspension":
         return np.array([F_norm], dtype=np.float32), v_cmd
