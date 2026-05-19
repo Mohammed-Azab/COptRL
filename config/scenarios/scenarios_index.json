@@ -1,0 +1,102 @@
+{
+  "sb1_v7_full": {
+    "file": "sb1_v7_full.npz",
+    "source": "Nardo_speedbump1",
+    "desc": "Full speed-bump run at real entry speed (7 m/s).",
+    "v_ref": 7.0,
+    "arc_len_m": 83.0,
+    "n_pts": 8301,
+    "z_std_cm": 1.834,
+    "z_max_cm": 6.4
+  },
+  "sb1_v5_full": {
+    "file": "sb1_v5_full.npz",
+    "source": "Nardo_speedbump1",
+    "desc": "Full speed-bump run replayed at reduced speed (5 m/s).",
+    "v_ref": 5.0,
+    "arc_len_m": 83.0,
+    "n_pts": 8301,
+    "z_std_cm": 1.834,
+    "z_max_cm": 6.4
+  },
+  "sb1_v3_creep": {
+    "file": "sb1_v3_creep.npz",
+    "source": "Nardo_speedbump1",
+    "desc": "Full speed-bump run replayed at creep speed (3 m/s).",
+    "v_ref": 3.0,
+    "arc_len_m": 83.0,
+    "n_pts": 8301,
+    "z_std_cm": 1.834,
+    "z_max_cm": 6.4
+  },
+  "sb1_v7_approach": {
+    "file": "sb1_v7_approach.npz",
+    "source": "Nardo_speedbump1",
+    "desc": "Pre-bump flat approach only (s=0-30 m, v=7 m/s).",
+    "v_ref": 7.0,
+    "arc_len_m": 30.0,
+    "n_pts": 3001,
+    "z_std_cm": 0.885,
+    "z_max_cm": 4.1
+  },
+  "exp_v10_early": {
+    "file": "exp_v10_early.npz",
+    "source": "export",
+    "desc": "Early highway section, smooth-ish (s=0-200 m, v=10 m/s).",
+    "v_ref": 10.0,
+    "arc_len_m": 200.0,
+    "n_pts": 20001,
+    "z_std_cm": 1.497,
+    "z_max_cm": 5.7
+  },
+  "exp_v12_rough": {
+    "file": "exp_v12_rough.npz",
+    "source": "export",
+    "desc": "Roughest 100 m segment at high speed (s=700-800 m, v=12 m/s).",
+    "v_ref": 12.0,
+    "arc_len_m": 99.99,
+    "n_pts": 10000,
+    "z_std_cm": 1.556,
+    "z_max_cm": 7.8
+  },
+  "exp_v9_rough2": {
+    "file": "exp_v9_rough2.npz",
+    "source": "export",
+    "desc": "Second-roughest segment at cruise speed (s=550-650 m, v=9 m/s).",
+    "v_ref": 9.0,
+    "arc_len_m": 99.99,
+    "n_pts": 10000,
+    "z_std_cm": 1.573,
+    "z_max_cm": 6.2
+  },
+  "exp_v14_fast": {
+    "file": "exp_v14_fast.npz",
+    "source": "export",
+    "desc": "High-speed rough section (s=1125-1225 m, v=14 m/s).",
+    "v_ref": 14.0,
+    "arc_len_m": 99.99,
+    "n_pts": 10000,
+    "z_std_cm": 1.523,
+    "z_max_cm": 5.0
+  },
+  "exp_v6_slow": {
+    "file": "exp_v6_slow.npz",
+    "source": "export",
+    "desc": "Early highway at low speed (s=0-150 m, v=6 m/s).",
+    "v_ref": 6.0,
+    "arc_len_m": 150.0,
+    "n_pts": 15001,
+    "z_std_cm": 1.382,
+    "z_max_cm": 5.7
+  },
+  "exp_v10_long": {
+    "file": "exp_v10_long.npz",
+    "source": "export",
+    "desc": "Long mixed-rough section (s=300-600 m, v=10 m/s).",
+    "v_ref": 10.0,
+    "arc_len_m": 299.99,
+    "n_pts": 30000,
+    "z_std_cm": 1.276,
+    "z_max_cm": 6.2
+  }
+}
