@@ -149,9 +149,13 @@ class RoadGenerator:
 
     @classmethod
     def from_scenario_file(cls, path: str, speed: float = None) -> 'RoadGenerator':
-        """Load a pre-processed scenario NPZ and return a ready RoadGenerator."""
-        data = np.load(path)
-        v = float(data['v_ref']) if speed is None else float(speed)
+        """Load a scenario JSON file and return a ready RoadGenerator."""
+        import json as _json
+        with open(path) as fh:
+            d = _json.load(fh)
+        arc = np.array(d['arc_m'], dtype=np.float64)
+        z   = np.array(d['z_m'],   dtype=np.float64)
+        v   = float(d['v_ref']) if speed is None else float(speed)
         gen = cls(profile='recorded', vehicle_speed=v)
-        gen.load_recorded(data['arc_m'], data['z_m'])
+        gen.load_recorded(arc, z)
         return gen
