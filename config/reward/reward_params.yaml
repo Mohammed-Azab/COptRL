@@ -49,3 +49,9 @@ observations:
   obs_enable_prev_action:       true
   obs_enable_curvature:         true
   obs_enable_curvature_preview: false
+
+  # Road preview
+  obs_enable_preview:  true
+  preview_distance:    20.0   # m [lookahead horizon]
+  n_preview_points:    10     # number of evenly-spaced height samples
+  preview_height_clip: 0.15   # m — clip before normalising (matches road-height obs bound)

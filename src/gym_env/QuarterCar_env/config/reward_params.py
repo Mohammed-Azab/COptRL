@@ -56,6 +56,12 @@ class RewardConfig:
     obs_enable_curvature:         bool = True
     obs_enable_curvature_preview: bool = False
 
+    # --- road preview ---
+    obs_enable_preview:  bool  = True   
+    preview_distance:    float = 20.0   # m [lookahead horizon]
+    n_preview_points:    int   = 10     # number of height samples in the preview window
+    preview_height_clip: float = 0.15   # m — clip before normalising (matches OBS_HIGH[4])
+
 
 def load_reward_config() -> RewardConfig:
     """Load RewardConfig from reward_params.yaml. Falls back to dataclass defaults on error."""
@@ -112,9 +118,14 @@ def load_reward_config() -> RewardConfig:
         terminal_penalty = float(t.get("terminal_penalty", -100.0)),
         a_limit          = float(t.get("a_limit",           10.0)),
 
-        obs_enable_accel             = bool(o.get("obs_enable_accel",             True)),
-        obs_enable_jerk              = bool(o.get("obs_enable_jerk",              True)),
-        obs_enable_prev_action       = bool(o.get("obs_enable_prev_action",       True)),
-        obs_enable_curvature         = bool(o.get("obs_enable_curvature",         True)),
-        obs_enable_curvature_preview = bool(o.get("obs_enable_curvature_preview", False)),
+        obs_enable_accel             = bool( o.get("obs_enable_accel",             True)),
+        obs_enable_jerk              = bool( o.get("obs_enable_jerk",              True)),
+        obs_enable_prev_action       = bool( o.get("obs_enable_prev_action",       True)),
+        obs_enable_curvature         = bool( o.get("obs_enable_curvature",         True)),
+        obs_enable_curvature_preview = bool( o.get("obs_enable_curvature_preview", False)),
+
+        obs_enable_preview  = bool( o.get("obs_enable_preview",  True)),
+        preview_distance    = float(o.get("preview_distance",    20.0)),
+        n_preview_points    = int(  o.get("n_preview_points",    10)),
+        preview_height_clip = float(o.get("preview_height_clip", 0.15)),
     )

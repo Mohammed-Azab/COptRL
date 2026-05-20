@@ -315,6 +315,10 @@ class QuarterCarEnv(gym.Env):
         if cfg.obs_enable_curvature:
             extra_high.append(1.0)
             extra_low.append(-1.0)
+        if cfg.obs_enable_preview:
+            # n_preview_points normalised heights, each in [-1, 1]
+            extra_high.extend([1.0] * cfg.n_preview_points)
+            extra_low.extend([-1.0] * cfg.n_preview_points)
 
         high = np.concatenate([OBS_HIGH, extra_high]).astype(np.float32)
         low  = np.concatenate([OBS_LOW,  extra_low ]).astype(np.float32)
@@ -352,6 +356,16 @@ class QuarterCarEnv(gym.Env):
         if cfg.obs_enable_curvature:
             k_norm = np.clip(self._curvature, -cfg.curvature_clip, cfg.curvature_clip) / cfg.curvature_clip
             extras.append(float(k_norm))
+        if cfg.obs_enable_preview:
+            preview = self._road.get_spatial_preview(
+                s_pos=self._s_pos,
+                t_current=self._t,
+                v_current=self._v,
+                lookahead_m=cfg.preview_distance,
+                n_points=cfg.n_preview_points,
+            )
+            clip = cfg.preview_height_clip
+            extras.extend(float(np.clip(h / clip, -1.0, 1.0)) for h in preview)
 
         return np.concatenate([base_obs, extras]).astype(np.float32)
 

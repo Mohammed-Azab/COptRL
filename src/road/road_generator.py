@@ -122,6 +122,60 @@ class RoadGenerator:
             return np.interp(x, self._rec_arc, self._rec_z)
         return np.zeros(len(t))
 
+    def get_spatial_preview(
+        self,
+        s_pos: float,
+        t_current: float,
+        v_current: float,
+        lookahead_m: float,
+        n_points: int,
+    ) -> np.ndarray:
+        """
+        Return road heights at n_points positions ahead of s_pos.
+
+        Samples are evenly spaced over (s_pos, s_pos + lookahead_m], i.e. the first
+        sample is at s_pos + lookahead_m/n_points and the last at s_pos + lookahead_m.
+
+        For spatially-defined profiles (speed_bump, recorded) this is exact.
+        For time-indexed profiles (iso_8608_class_c, sine_sweep) the spatial offset
+        is converted to a time offset using v_current — an instantaneous-speed
+        approximation that is consistent with how the base get_height() works.
+
+        Returns float32 array of shape (n_points,).
+        """
+        v = max(float(v_current), 0.5)  # guard against near-zero speed in division
+        s_offsets = np.linspace(lookahead_m / n_points, lookahead_m, n_points)
+
+        if self.profile == 'flat':
+            return np.zeros(n_points, dtype=np.float32)
+
+        if self.profile == 'speed_bump':
+            x_ahead = s_pos + s_offsets
+            dx = x_ahead - self._bump_x0
+            heights = np.where(
+                (dx >= 0.0) & (dx <= self._bump_L),
+                (self._bump_A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx / self._bump_L)),
+                0.0,
+            )
+            return heights.astype(np.float32)
+
+        if self.profile == 'iso_8608_class_c':
+            t_query = t_current + s_offsets / v
+            idxs = np.mod((t_query / self._iso_dt).astype(int), len(self._iso_h))
+            return self._iso_h[idxs].astype(np.float32)
+
+        if self.profile == 'sine_sweep':
+            t_query = t_current + s_offsets / v
+            ratio = np.clip(t_query / self._ep_duration, 0.0, 1.0)
+            f = self._sweep_f_min + (self._sweep_f_max - self._sweep_f_min) * ratio
+            return (self._sweep_A * np.sin(2.0 * np.pi * f * t_query)).astype(np.float32)
+
+        if self.profile == 'recorded':
+            x_ahead = np.clip(s_pos + s_offsets, self._rec_arc[0], self._rec_arc[-1])
+            return np.interp(x_ahead, self._rec_arc, self._rec_z).astype(np.float32)
+
+        return np.zeros(n_points, dtype=np.float32)
+
     def set_speed(self, v: float) -> None:
         """Update longitudinal speed used by all road-height queries."""
         self.speed = float(v)
