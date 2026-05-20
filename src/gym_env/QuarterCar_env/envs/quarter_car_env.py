@@ -359,6 +359,7 @@ class QuarterCarEnv(gym.Env):
         n   = max(self._step_count, 1)
         rms = np.sqrt(self._accel_sq / n)
         return {
+            'episode_reward': float(self._episode_reward),
             'rms_accel':       float(rms),
             'peak_accel':      float(self._peak_accel),
             'suspension_rms':  float(np.sqrt(self._travel_sq / n)),
