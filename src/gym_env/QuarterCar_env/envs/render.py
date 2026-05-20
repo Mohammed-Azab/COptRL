@@ -76,12 +76,12 @@ def _build_ts_specs(env):
     flags = getattr(env, "_ts_flags", {})
     if flags.get("z", False):
         specs.append(('z_B', 'z_W', 'z (m)', 'b', 'r'))
-    if flags.get("z_ddot", False):
-        specs.append(('z_B_ddot', None, r'$\ddot{z}_B\ (m/s^2)$', 'k', None))
     if flags.get("f", False):
         specs.append(('F', None, r'$F_D\ (N)$', '#008800', None))
     if flags.get("speed", False):
         specs.append(('s_dot', None, r'$\dot{s}\ (m/s)$', '#aa00aa', None))
+    if flags.get("z_ddot", False):
+        specs.append(('z_B_ddot', None, r'$\ddot{z}_B\ (m/s^2)$', 'k', None))
     return specs
 
 
