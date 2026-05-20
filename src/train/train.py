@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -90,11 +91,23 @@ def main() -> None:
 
     seed_everything(seed)
 
-    #  output directories 
-    ts      = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_tag = f"{args.algo}_{args.road}_{ts}" if args.run_name is None else args.run_name
+    #  output directories
+    exp_root = _ROOT / "models" / args.algo / args.road
+    if args.run_name is None:
+        exp_re = re.compile(r"^exp_(\d+)$")
+        exp_ids = []
+        if exp_root.exists():
+            for path in exp_root.iterdir():
+                if path.is_dir():
+                    match = exp_re.match(path.name)
+                    if match:
+                        exp_ids.append(int(match.group(1)))
+        next_id = (max(exp_ids) + 1) if exp_ids else 1
+        run_tag = f"exp_{next_id}"
+    else:
+        run_tag = args.run_name
 
-    model_dir = _ROOT / "models" / args.algo / run_tag
+    model_dir = exp_root / run_tag
     tb_dir    = _ROOT / "logs" / "tensorboard" / run_tag
     mon_dir   = _ROOT / "logs" / "monitor" / run_tag
     model_dir.mkdir(parents=True, exist_ok=True)
@@ -123,7 +136,6 @@ def main() -> None:
         monitor_dir=str(mon_dir / "eval"),
     )
 
-    #  model ─
     model = build_model(
         algo=args.algo,
         venv=train_venv,
@@ -133,7 +145,6 @@ def main() -> None:
         resume=args.resume,
     )
 
-    #  callbacks ─
     callbacks = build_callbacks(
         model_dir=model_dir,
         eval_venv=eval_venv,
@@ -143,8 +154,7 @@ def main() -> None:
         checkpoint_freq=max(train_meta["checkpoint_freq"] // n_envs, 1),
     )
 
-    #  run ─
-    print(f"\n{'─'*58}")
+    print(f"\n{''*58}")
     print(f"  algo       : {args.algo}")
     print(f"  road       : {args.road}  |  eval : {eval_road}")
     print(f"  seed       : {seed}")
@@ -152,7 +162,7 @@ def main() -> None:
     print(f"  n_envs     : {n_envs}")
     print(f"  normalize  : obs={normalize}, reward={norm_reward}")
     print(f"  output     : {model_dir}")
-    print(f"{'─'*58}\n")
+    print(f"{''*58}\n")
 
     model.learn(
         total_timesteps=timesteps,
@@ -161,7 +171,7 @@ def main() -> None:
         reset_num_timesteps=(args.resume is None),
     )
 
-    #  save 
+    # save model
     final_path = model_dir / f"{args.algo}_final"
     model.save(str(final_path))
     train_venv.save(str(model_dir / "vecnormalize.pkl"))
