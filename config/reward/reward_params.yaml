@@ -1,11 +1,13 @@
 weights:
-  w_tracking:      1.0
-  w_accel:         0.5
-  w_jerk:          0.3
-  w_action_smooth: 0.2
-  w_curve:         0.0   # off until curvature is wired externally
+  w_comfort_bonus:  0.8   # per-step bonus for smooth riding
+  w_tracking:       0.8
+  w_accel:          0.5
+  w_jerk:           0.3
+  w_action_smooth:  0.2
+  w_curve:          0.0   # off until curvature is wired externally
 
 enable:
+  comfort_bonus: true
   tracking:      true
   accel:         true
   jerk:          true
@@ -13,7 +15,7 @@ enable:
   curve:         true
 
 velocity:
-  v_max:              20.0   # m/s 
+  v_max:              20.0   # m/s
   a_max:               5.0   # m/s²
   a_lat_comfort:       2.0   # m/s²  [comfort lateral acceleration (curvature_aware mode)]
   min_curve_speed:     2.0   # m/s
@@ -23,12 +25,14 @@ velocity:
 comfort:
   a_comfort:           3.0   # m/s²  [comfortable longitudinal acceleration threshold]
   accel_filter_alpha:  0.8   # IIR coefficient (0=no filter, close to 1=heavy smoothing)
-  accel_clip:         15.0   # m/s²  [clip raw acceleration before squaring]
+  accel_clip:         15.0   # m/s²  [observation clip — wide, for numerical safety]
+  reward_accel_clip:   6.0   # m/s²  [reward-only clip = 2 × a_comfort; bounds worst-case penalty at -4]
 
 jerk:
   j_max:              10.0   # m/s³  [jerk normalization]
   jerk_filter_alpha:   0.8
-  jerk_clip:          50.0   # m/s³
+  jerk_clip:          50.0   # m/s³  [observation clip]
+  reward_jerk_clip:   20.0   # m/s³  [reward-only clip = 2 × j_max; bounds worst-case penalty at -4]
 
 curvature:
   a_lat_max:           4.0   # m/s²  [lateral acceleration normalization]

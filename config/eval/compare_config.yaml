@@ -1,0 +1,25 @@
+# ─── Agent ───────────────────────────────────────────────────────────────────
+algo: PPO                     # PPO | SAC | TD3
+model_path: null              # required: path to trained model .zip
+vecnorm_path: null            # null → auto-inferred from model_path parent dir
+
+# ─── Evaluation ──────────────────────────────────────────────────────────────
+roads:                        # road profiles to evaluate
+  - iso_8608_class_c
+  - speed_bump
+  - sine_sweep
+  - flat
+
+n_episodes: 20               # episodes per (agent × road) pair
+deterministic: true          
+seed: 69                      
+
+# ─── Baselines ───────────────────────────────────────────────────────────────
+baselines:
+  - passive                  
+  - random                   
+
+# ─── Output ──────────────────────────────────────────────────────────────────
+results_dir: eval/results    
+render: false                
+save_graphs: true           

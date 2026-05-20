@@ -22,13 +22,13 @@ F_ks_nlin_max: 100000.0
 
 # timing and episode length
 DT: 0.02
-DT_SIM: 0.001
-EPISODE_STEPS: 360
+DT_SIM: 0.001  
+EPISODE_STEPS: 300
 
 # truncation rules
 TRUNC_TRAVEL: 0.6
 TRUNC_ZS: 0.6
-MAX_DISTANCE: 150
+MAX_DISTANCE: 15
 
 # observation clip bounds
 OBS_HIGH:
