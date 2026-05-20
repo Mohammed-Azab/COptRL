@@ -1,15 +1,3 @@
-"""
-Quarter-car RL training entry point.
-
-Usage
------
-  python src/train/train.py --algo PPO
-  python src/train/train.py --algo SAC --road iso_8608_class_c --seed 7
-  python src/train/train.py --algo PPO --resume models/PPO_20240101/checkpoints/ckpt_50000_steps.zip
-
-All hyperparameters live in config/algo/algo_configs.yaml.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -26,7 +14,7 @@ sys.path.insert(0, str(_ROOT / "src" / "train"))
 from agent import build_model, is_off_policy, load_algo_config, supported_algos
 from monitoring import build_callbacks
 from environment import make_eval_vec_env, make_vec_env
-from reproducibility import seed_everything
+from seed import seed_everything
 
 
 _CONFIG_PATH = _ROOT / "config" / "algo" / "algo_configs.yaml"
@@ -104,9 +92,9 @@ def main() -> None:
 
     #  output directories 
     ts      = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_tag = f"{args.algo}_{ts}" + (f"_{args.run_name}" if args.run_name else "")
+    run_tag = f"{args.algo}_{args.road}_{ts}" if args.run_name is None else args.run_name
 
-    model_dir = _ROOT / "models" / run_tag
+    model_dir = _ROOT / "models" / args.algo / run_tag
     tb_dir    = _ROOT / "logs" / "tensorboard" / run_tag
     mon_dir   = _ROOT / "logs" / "monitor" / run_tag
     model_dir.mkdir(parents=True, exist_ok=True)

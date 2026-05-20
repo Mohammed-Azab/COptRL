@@ -1,4 +1,4 @@
-"""Algorithm registry and model builder."""
+# Algorithm registry and model builder.
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def supported_algos() -> list[str]:
 
 
 def load_algo_config(config_path: str | Path) -> dict[str, Any]:
-    """Load the full algo_configs.yaml and return it as a dict."""
+    # Load the full algo_configs.yaml and return it as a dict
     with open(config_path) as fh:
         return yaml.safe_load(fh)
 
@@ -40,10 +40,7 @@ def build_model(
     resume: str | None = None,
 ) -> BaseAlgorithm:
     """
-    Construct (or load) an SB3 model.
-
-    algo_kwargs: SB3 constructor kwargs for this algo, taken directly from
-    algo_configs.yaml after stripping the 'policy' key.
+    Construct (or load) a model.
     resume: path to a .zip checkpoint to continue training from.
     """
     cls  = _REGISTRY[algo]

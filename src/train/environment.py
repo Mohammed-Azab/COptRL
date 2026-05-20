@@ -1,5 +1,3 @@
-"""Environment factory for training and evaluation."""
-
 from __future__ import annotations
 
 from typing import Callable
@@ -9,6 +7,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 import QuarterCar_env.envs  # noqa: F401 
+from QuarterCar_env.wrappers import EpisodeLogger
 
 ENV_ID = "QuarterCar_env/QuarterCar"
 
@@ -19,17 +18,19 @@ def _make_env(
     monitor_dir: str | None,
     env_kwargs: dict,
 ) -> Callable[[], gym.Env]:
-    """Return a thunk that builds one Monitor-wrapped env instance."""
+    
     def _init() -> gym.Env:
         env = gym.make(ENV_ID, road_profile=road, **env_kwargs)
         env = Monitor(env, monitor_dir)
+        if monitor_dir:
+            env = EpisodeLogger(env, log_dir=monitor_dir)
         env.reset(seed=seed)
         env.action_space.seed(seed)
         env.observation_space.seed(seed)
         return env
     return _init
 
-
+# ?
 def make_vec_env(
     road: str,
     n_envs: int,
@@ -62,7 +63,7 @@ def make_vec_env(
     )
     return venv
 
-
+# ?
 def make_eval_vec_env(
     road: str,
     n_envs: int,

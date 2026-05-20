@@ -1,5 +1,3 @@
-"""Custom SB3 callbacks for the quarter-car environment."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,8 +16,6 @@ class QuarterCarMetricsCallback(BaseCallback):
     """
     Reads ride-comfort and speed-tracking metrics from env info dicts and
     writes them to TensorBoard at every step.
-
-    Works with VecEnv: iterates over the list of info dicts returned by step.
     """
 
     def _on_step(self) -> bool:
@@ -44,10 +40,6 @@ class QuarterCarMetricsCallback(BaseCallback):
 
 
 class VecNormalizeSyncCallback(BaseCallback):
-    """
-    Keeps the eval VecNormalize's obs running stats in sync with the training
-    env so the evaluation sees the same normalisation.
-    """
 
     def __init__(self, train_venv: VecNormalize, eval_venv: VecNormalize, verbose: int = 0):
         super().__init__(verbose)
@@ -68,7 +60,7 @@ def build_callbacks(
     n_eval_episodes: int,
     checkpoint_freq: int,
 ) -> CallbackList:
-    """Assemble all callbacks into a single CallbackList."""
+    #Assemble all callbacks into a single CallbackList
     best_model_path  = model_dir / "best"
     ckpt_path        = model_dir / "checkpoints"
     best_model_path.mkdir(parents=True, exist_ok=True)
