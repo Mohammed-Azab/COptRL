@@ -20,7 +20,7 @@ class QuarterCarMetricsCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         infos: list[dict] = self.locals.get("infos", [])
-        comfort, rms_a, spd_err, ep_reward = [], [], [], []
+        comfort, rms_a, spd_err, ep_reward, preview_max = [], [], [], [], []
 
         for info in infos:
             if "comfort_score" in info:
@@ -31,6 +31,8 @@ class QuarterCarMetricsCallback(BaseCallback):
                 spd_err.append(abs(info["speed_error"]))
             if "episode_reward" in info:
                 ep_reward.append(info["episode_reward"])
+            if "preview_max_height" in info:
+                preview_max.append(info["preview_max_height"])
 
         if comfort:
             self.logger.record("env/comfort_score",  float(np.mean(comfort)))
@@ -40,6 +42,8 @@ class QuarterCarMetricsCallback(BaseCallback):
             self.logger.record("env/speed_error_ms", float(np.mean(spd_err)))
         if ep_reward:
             self.logger.record("env/ep_reward", float(np.mean(ep_reward)))
+        if preview_max:
+            self.logger.record("env/preview_max_height_m", float(np.mean(preview_max)))
         return True
 
 

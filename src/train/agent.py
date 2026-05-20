@@ -11,6 +11,8 @@ from stable_baselines3 import PPO, SAC, TD3
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.vec_env import VecEnv
 
+from preview_extractor import PreviewFeaturesExtractor
+
 _REGISTRY: dict[str, type[BaseAlgorithm]] = {
     "PPO": PPO,
     "SAC": SAC,
@@ -38,14 +40,21 @@ def build_model(
     tensorboard_log: str,
     seed: int,
     resume: str | None = None,
+    n_preview_points: int = 0,
 ) -> BaseAlgorithm:
     """
     Construct (or load) a model.
     resume: path to a .zip checkpoint to continue training from.
+    n_preview_points: when > 0, injects PreviewFeaturesExtractor into policy_kwargs.
     """
     cls  = _REGISTRY[algo]
     kw   = copy.deepcopy(algo_kwargs)
     policy = kw.pop("policy", "MlpPolicy")
+
+    if n_preview_points > 0:
+        pk = kw.setdefault("policy_kwargs", {})
+        pk["features_extractor_class"]  = PreviewFeaturesExtractor
+        pk["features_extractor_kwargs"] = {"n_preview_points": n_preview_points}
 
     if resume:
         model = cls.load(

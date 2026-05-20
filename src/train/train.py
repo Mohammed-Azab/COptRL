@@ -17,6 +17,7 @@ from agent import build_model, is_off_policy, load_algo_config, supported_algos
 from monitoring import build_callbacks
 from environment import make_eval_vec_env, make_vec_env
 from seed import seed_everything
+from QuarterCar_env.config.reward_params import load_reward_config
 
 
 _CONFIG_PATH = _ROOT / "config" / "algo" / "algo_configs.yaml"
@@ -72,12 +73,23 @@ def parse_args() -> argparse.Namespace:
                     "--config",
                     default=str(_CONFIG_PATH),
                     help="Path to algo_configs.yaml.")
-    
+    p.add_argument(
+                    "--render",
+                    action="store_true",
+                    default=False,
+                    help="Enable rendering during training (requires a display; slows training).")
+
     return p.parse_args()
 
 
 def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
+    # SB3 Monitor(env, "/path/to/train") creates "/path/to/train.monitor.csv"
+    # (a sibling file, not a file inside train/).  Check both locations.
     files = sorted(monitor_dir.glob("*.monitor.csv"))
+    if not files:
+        sibling = monitor_dir.parent / f"{monitor_dir.name}.monitor.csv"
+        if sibling.exists():
+            files = [sibling]
     if not files:
         return None
 
@@ -126,6 +138,9 @@ def main() -> None:
 
     seed_everything(seed)
 
+    rcfg = load_reward_config()
+    n_preview_points = rcfg.n_preview_points if rcfg.obs_enable_preview else 0
+
     #  output directories
     exp_root = _ROOT / "models" / args.algo / args.road
     if args.run_name is None:
@@ -154,6 +169,7 @@ def main() -> None:
     # off-policy (SAC/TD3): normalising rewards distorts Q-value targets
     norm_reward = normalize and train_meta.get("norm_reward_ppo", True) and not is_off_policy(args.algo)
 
+    render_mode = "human" if args.render else "none"
     train_venv = make_vec_env(
         road=args.road,
         n_envs=n_envs,
@@ -162,6 +178,7 @@ def main() -> None:
         gamma=gamma,
         norm_obs=normalize,
         norm_reward=norm_reward,
+        env_kwargs={"render_mode": render_mode},
     )
     eval_venv = make_eval_vec_env(
         road=eval_road,
@@ -178,6 +195,7 @@ def main() -> None:
         tensorboard_log=str(tb_dir),
         seed=seed,
         resume=args.resume,
+        n_preview_points=n_preview_points,
     )
 
     callbacks = build_callbacks(
@@ -196,6 +214,8 @@ def main() -> None:
     print(f"  timesteps  : {timesteps:,}")
     print(f"  n_envs     : {n_envs}")
     print(f"  normalize  : obs={normalize}, reward={norm_reward}")
+    print(f"  render     : {args.render}")
+    print(f"  preview    : {n_preview_points} pts over {rcfg.preview_distance}m" if n_preview_points else "  preview    : disabled")
     print(f"  output     : {model_dir}")
     print(f"{''*58}\n")
 
