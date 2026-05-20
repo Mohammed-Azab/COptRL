@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import re
 import sys
 from datetime import datetime
@@ -73,6 +74,40 @@ def parse_args() -> argparse.Namespace:
                     help="Path to algo_configs.yaml.")
     
     return p.parse_args()
+
+
+def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
+    files = sorted(monitor_dir.glob("*.monitor.csv"))
+    if not files:
+        return None
+
+    rewards: list[float] = []
+    lengths: list[int] = []
+
+    for file_path in files:
+        with file_path.open(newline="") as handle:
+            reader = csv.DictReader(
+                row for row in handle if not row.startswith("#")
+            )
+            for row in reader:
+                if "r" in row and "l" in row:
+                    rewards.append(float(row["r"]))
+                    lengths.append(int(row["l"]))
+
+    if not rewards:
+        return None
+
+    total = float(len(rewards))
+    mean_reward = sum(rewards) / total
+    mean_length = sum(lengths) / total
+    return {
+        "episodes": float(len(rewards)),
+        "mean_reward": mean_reward,
+        "mean_length": mean_length,
+        "max_reward": max(rewards),
+        "min_reward": min(rewards),
+        "last_reward": rewards[-1],
+    }
 
 
 def main() -> None:
@@ -179,6 +214,18 @@ def main() -> None:
     print(f"\nModel    → {final_path}.zip")
     print(f"VecNorm  → {model_dir / 'vecnormalize.pkl'}")
     print(f"TB logs  → tensorboard --logdir {tb_dir}")
+
+    summary = _summarize_monitor(mon_dir / "train")
+    if summary:
+        print("\nTraining summary")
+        print(f"  episodes     : {int(summary['episodes'])}")
+        print(f"  mean_reward  : {summary['mean_reward']:.3f}")
+        print(f"  mean_ep_len  : {summary['mean_length']:.1f}")
+        print(f"  max_reward   : {summary['max_reward']:.3f}")
+        print(f"  min_reward   : {summary['min_reward']:.3f}")
+        print(f"  last_reward  : {summary['last_reward']:.3f}")
+    else:
+        print("\nTraining summary: no monitor data found.")
 
     train_venv.close()
     eval_venv.close()
