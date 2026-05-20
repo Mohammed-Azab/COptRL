@@ -1,15 +1,15 @@
-# Quarter-car ODE: 6-state, smooth bumpstop + smooth asymmetric damper, RK4 + Numba JIT.
-#
-# State vector layout
-#   x[0] = ζ − z_W   tyre deflection      (+ = compression)
-#   x[1] = ż_W       wheel velocity
-#   x[2] = z_W − z_B suspension travel    (+ = compression)
-#   x[3] = ż_B       body velocity
-#   x[4] = v         longitudinal speed   (driven by env, not ODE)
-#   x[5] = z_B       body displacement
-#
-# Speed-only control: no active suspension force in this model.
+"""
+Quarter-car ODE: 6-state.
 
+State vector layout
+  x[0] = ζ − z_W   tyre deflection      (+ = compression)
+  x[1] = ż_W       wheel velocity
+  x[2] = z_W − z_B suspension travel    (+ = compression)
+  x[3] = ż_B       body velocity
+  x[4] = v         longitudinal speed   (driven by env, not ODE)
+  x[5] = z_B       body displacement
+
+"""
 import numpy as np
 from numba import njit
 from typing import Callable
@@ -41,8 +41,7 @@ class _P:
             setattr(self, k, float(d[k]))
 
 
-# ── parameter vector layout (must match _build_pvec order) ───────────────────
-# Using named constants avoids magic indices inside numba functions.
+# parameter vector layout  
 _I_MB,  _I_MW  = 0, 1
 _I_CT,  _I_KT, _I_KS, _I_DZS = 2, 3, 4, 5
 _I_D1,  _I_Z1, _I_D2, _I_Z2  = 6, 7, 8, 9
@@ -51,7 +50,7 @@ _I_F1C, _I_F2C, _I_F1R, _I_F2R = 12, 13, 14, 15
 _I_DZC, _I_DZR, _I_FMAX       = 16, 17, 18
 _P_LEN = 19
 
-# ── state vector slot indices ─────────────────────────────────────────────────
+# state vector slot indices
 _X_TYRE = 0   # ζ − z_W   tyre deflection      (+ = compression)
 _X_ZW   = 1   # ż_W       wheel velocity
 _X_SUSP = 2   # z_W − z_B suspension travel     (+ = compression)
@@ -76,7 +75,7 @@ def _build_pvec(d: dict) -> np.ndarray:
     return v
 
 
-# ── numba-jitted ODE kernels ──────────────────────────────────────────────────
+# numba-jitted ODE kernels
 
 @njit(cache=True)
 def _spring_nonlin(dyn: float, p: np.ndarray) -> float:
@@ -111,12 +110,6 @@ def _damper(v_S: float, p: np.ndarray) -> float:
     """
     Smooth asymmetric damper via sigmoid-blended piecewise slopes.
 
-    Replaces the original discontinuous PWA (four if/elif branches).
-    Three sigmoid transitions remove the C0 kinks at v_S = 0, +v_d, -v_z so
-    RK4 achieves true 4th-order accuracy across regime boundaries.
-
-    k=50 keeps the blending region ~0.04 m/s wide — invisible physically.
-
     Compression regimes (v_S > 0): low-speed slope d1, high-speed slope d2.
     Rebound    regimes (v_S < 0): low-speed slope z1, high-speed slope z2.
     """
@@ -147,7 +140,7 @@ def _ode(x: np.ndarray, z_q: float, p: np.ndarray) -> np.ndarray:
 
     x = [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B]
     z_q = ζ̇  (road velocity, m/s)
-    No active suspension — speed-only control mode.
+
     """
     # suspension forces (body–wheel interface)
     F_spring = p[_I_KS] * x[_X_SUSP] + _spring_nonlin(x[_X_SUSP], p)
@@ -190,7 +183,7 @@ def _rk4_loop(x: np.ndarray, zq_pre: np.ndarray, dt: float, p: np.ndarray) -> np
 
 
 class QuarterCarODE:
-    """Fixed-step RK4 integrator for the 6-state quarter-car model (Numba-accelerated)."""
+    """Fixed-step RK4 integrator for the 6-state quarter-car model."""
 
     def __init__(self, params: dict = None):
         d = {**PHYSICS, **(params or {})}
@@ -205,9 +198,6 @@ class QuarterCarODE:
     ) -> tuple[np.ndarray, float]:
         """
         Integrate one control step (DT = N_SUB × DT_SIM) with RK4.
-
-        Road velocities are sampled from z_q_fn in Python first; the tight
-        inner loop runs in compiled Numba code.
 
         Returns (new_state, z_B_ddot) where z_B_ddot is body acceleration
         at end-of-step (used for reward computation).
