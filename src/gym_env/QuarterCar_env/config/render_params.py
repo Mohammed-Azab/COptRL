@@ -1,11 +1,16 @@
-from src.gym_env.QuarterCar_env.config.config_manager import _load_yaml
+from QuarterCar_env.config.config_manager import _load_yaml
 
 
 _cfg = _load_yaml("render_params.yaml")
 
 RENDER_Y_SCALE = int(_cfg["RENDER_Y_SCALE"])
 RENDER_HIST_SECS = float(_cfg["RENDER_HIST_SECS"])
+RENDER_SHOW_TS = bool(_cfg.get("RENDER_SHOW_TS", False))
+RENDER_TS_Z = bool(_cfg.get("RENDER_TS_Z", True))
+RENDER_TS_Z_DDOT = bool(_cfg.get("RENDER_TS_Z_DDOT", True))
+RENDER_TS_SPEED = bool(_cfg.get("RENDER_TS_SPEED", True))
 
+RENDER_FREEZE_EPISODE = bool(_cfg.get("RENDER_FREEZE_EPISODE", False))
 
 RENDER_Y_W_NOM = float(_cfg["RENDER_Y_W_NOM"])
 RENDER_Y_B_NOM = float(_cfg["RENDER_Y_B_NOM"])

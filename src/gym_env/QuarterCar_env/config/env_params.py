@@ -71,11 +71,3 @@ MAX_DISTANCE = float(_cfg["MAX_DISTANCE"])
 OBS_HIGH = np.array(_cfg["OBS_HIGH"], dtype=np.float32)
 OBS_LOW = -OBS_HIGH
 
-ROAD_DEFAULTS = dict(_cfg["ROAD_DEFAULTS"])
-
-VEHICLE_SPEED = float(_cfg["VEHICLE_SPEED"])
-
-V_MAX = float(_cfg["V_MAX"])
-V_MIN = float(_cfg["V_MIN"])
-V_BRAKE_LEAD = float(_cfg["V_BRAKE_LEAD"])
-
