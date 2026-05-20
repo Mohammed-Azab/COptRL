@@ -132,6 +132,7 @@ class QuarterCarEnv(gym.Env):
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
         self._curvature      = 0.0
+        self._last_preview_max = 0.0
 
         self._bump_times     = self._road.get_bump_times()
         self._fig            = None
@@ -142,8 +143,8 @@ class QuarterCarEnv(gym.Env):
         self._freeze_render  = False
         self._ts_flags = {
             "z": bool(show_ts_z),
-            "z_ddot": bool(show_ts_z_ddot),
             "speed": bool(show_ts_speed),
+            "z_ddot": bool(show_ts_z_ddot),
         }
 
     # ------------------------------------------------------------------
@@ -186,6 +187,7 @@ class QuarterCarEnv(gym.Env):
         self._filtered_a     = 0.0
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
+        self._last_preview_max = 0.0
 
         self._bump_times = self._road.get_bump_times()
 
@@ -365,6 +367,7 @@ class QuarterCarEnv(gym.Env):
                 n_points=cfg.n_preview_points,
             )
             clip = cfg.preview_height_clip
+            self._last_preview_max = float(np.max(np.abs(preview))) if len(preview) > 0 else 0.0
             extras.extend(float(np.clip(h / clip, -1.0, 1.0)) for h in preview)
 
         return np.concatenate([base_obs, extras]).astype(np.float32)
@@ -384,8 +387,9 @@ class QuarterCarEnv(gym.Env):
             'z_B_ddot':        float(z_B_ddot),
             'speed':           float(self._v),
             'v_ref':           float(self._v_ref_last),
-            'speed_error':     float(self._v_ref_last - self._v),
-            'speed_error_rms': float(np.sqrt(self._speed_err_sq / n)),
+            'speed_error':       float(self._v_ref_last - self._v),
+            'speed_error_rms':   float(np.sqrt(self._speed_err_sq / n)),
+            'preview_max_height': float(self._last_preview_max),
         }
 
     def get_comfort_metric(self) -> float:
