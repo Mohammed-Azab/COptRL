@@ -10,7 +10,6 @@ class RewardConfig:
     w_jerk:          float = 0.3
     w_action_smooth: float = 0.2
     w_curve:         float = 0.0
-    w_energy:        float = 0.1
 
     # --- per-term enable flags ---
     enable_tracking:      bool = True
@@ -18,7 +17,6 @@ class RewardConfig:
     enable_jerk:          bool = True
     enable_action_smooth: bool = True
     enable_curve:         bool = True
-    enable_energy:        bool = True
 
     # --- velocity ---
     v_max:             float = 20.0
@@ -77,14 +75,12 @@ def load_reward_config() -> RewardConfig:
         w_jerk          = float(w.get("w_jerk",          0.3)),
         w_action_smooth = float(w.get("w_action_smooth", 0.2)),
         w_curve         = float(w.get("w_curve",         0.0)),
-        w_energy        = float(w.get("w_energy",        0.1)),
 
         enable_tracking      = bool(e.get("tracking",      True)),
         enable_accel         = bool(e.get("accel",         True)),
         enable_jerk          = bool(e.get("jerk",          True)),
         enable_action_smooth = bool(e.get("action_smooth", True)),
         enable_curve         = bool(e.get("curve",         True)),
-        enable_energy        = bool(e.get("energy",        True)),
 
         v_max             = float(v.get("v_max",            20.0)),
         a_max             = float(v.get("a_max",             5.0)),

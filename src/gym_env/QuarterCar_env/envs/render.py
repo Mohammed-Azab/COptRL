@@ -4,9 +4,9 @@ from typing import Tuple
 
 import numpy as np
 
-from QuarterCar_env.config.env_params import DT, F_MAX
+from QuarterCar_env.config.env_params import DT
 from QuarterCar_env.config.render_params import (
-    RENDER_Y_SCALE, RENDER_HIST_SECS,
+    RENDER_HIST_SECS,
     RENDER_Y_W_NOM, RENDER_Y_B_NOM,
     RENDER_H_MW, RENDER_W_MW,
     RENDER_H_MB, RENDER_W_MB,
@@ -71,6 +71,22 @@ def _ground_symbol_xy(x_c: float, y: float, half_w: float = 0.55):
     return np.array([x_c - half_w, x_c + half_w]), np.array([y, y])
 
 
+def _build_ts_specs(env):
+    specs = []
+    flags = getattr(env, "_ts_flags", {})
+    if flags.get("z", False):
+        specs.append(('z_B', 'z_W', 'z (m)', 'b', 'r'))
+    if flags.get("z_ddot", False):
+        specs.append(('z_B_ddot', None, r'$\ddot{z}_B\ (m/s^2)$', 'k', None))
+    if flags.get("f", False):
+        specs.append(('F', None, r'$F_D\ (N)$', '#008800', None))
+    if flags.get("speed", False):
+        specs.append(('s_dot', None, r'$\dot{s}\ (m/s)$', '#aa00aa', None))
+    return specs
+
+
+
+
 #  Public render helpers
 
 def render_env(env):
@@ -84,6 +100,9 @@ def render_env(env):
         import matplotlib.pyplot as plt
         env._fig.canvas.draw_idle()
         plt.pause(1e-3)
+        if getattr(env, "_freeze_render", False):
+            env._freeze_render = False
+            plt.show(block=True)
         return None
     env._fig.canvas.draw()
     buf = env._fig.canvas.buffer_rgba()
@@ -108,6 +127,10 @@ def init_render(env):
     from matplotlib.gridspec import GridSpec
     from matplotlib.patches import Rectangle
 
+    ts_specs = _build_ts_specs(env)
+    if env._show_ts and not ts_specs:
+        env._show_ts = False
+
     env._ren_hist = {
         't':        collections.deque(maxlen=_N_HIST),
         'z_B':      collections.deque(maxlen=_N_HIST),
@@ -124,8 +147,9 @@ def init_render(env):
         gs  = GridSpec(1, 2, figure=fig, width_ratios=[3, 2],
                        left=0.06, right=0.97, bottom=0.09, top=0.93, wspace=0.38)
         ax_s = fig.add_subplot(gs[0, 0])
-        gs_r = gs[0, 1].subgridspec(env._n_ts, 1, hspace=0.10)
-        ax_r = [fig.add_subplot(gs_r[i]) for i in range(env._n_ts)]
+        n_ts = len(ts_specs)
+        gs_r = gs[0, 1].subgridspec(n_ts, 1, hspace=0.10)
+        ax_r = [fig.add_subplot(gs_r[i]) for i in range(n_ts)]
     else:
         fig  = plt.figure(figsize=(9, 7))
         ax_s = fig.add_subplot(1, 1, 1)
@@ -204,11 +228,6 @@ def init_render(env):
                           r'$m_B$', ha='left', va='center',
                           fontsize=9, fontweight='bold', color='black', zorder=7)
 
-    # F_D arrow
-    fd_text = ax_s.text(0, RENDER_Y_B_NOM, '',
-                        ha='left', va='center', fontsize=8,
-                        fontweight='bold', color='#0055cc', zorder=8)
-
     # status text
     status_text = ax_s.text(
         0.02, 0.98, '', transform=ax_s.transAxes,
@@ -227,12 +246,7 @@ def init_render(env):
                 handlelength=1.5, borderpad=0.4)
 
     # time-series axes
-    _ts_specs = [
-        ('z_B',    'z_W',       'z (m)',                   'b',     'r'),
-        ('z_B_ddot', None,      r'$\ddot{z}_B\ (m/s^2)$',  'k',     None),
-        ('F',        None,      r'$F_D\ (N)$',             '#008800', None),
-        ('s_dot',    None,      r'$\dot{s}\ (m/s)$',       '#aa00aa', None),
-    ]
+    _ts_specs = ts_specs
     ts = {}
     for i, ax in enumerate(ax_r):
         k1, k2, ylabel, c1, c2 = _ts_specs[i]
@@ -279,7 +293,6 @@ def init_render(env):
         'mb_patch':       mb_patch,
         'mb_dot':         mb_dot,
         'mb_label':       mb_label,
-        'fd_text':        fd_text,
         'status_text':    status_text,
         'ts':             ts,
     }
@@ -294,13 +307,12 @@ def push_history(env):
     h['z_B'].append(z_B)
     h['z_W'].append(z_W)
     h['z_B_ddot'].append(env._last_z_B_ddot)
-    h['F'].append(env._last_F)
+    h['F'].append(0.0)
     h['s_dot'].append(float(env._v))
 
 
 def update_artists(env):
-    """Update all artists in-place. Only the F_D arrow patch is re-allocated."""
-    from matplotlib.patches import FancyArrow
+    """Update all artists in-place."""
 
     art = env._artists
     ys  = env._y_scale
@@ -308,7 +320,6 @@ def update_artists(env):
 
     z_B    = float(x[5])
     z_W    = z_B + float(x[2])
-    F_act  = env._last_F
     zeta_0 = float(env._road.get_height(env._t))
 
     # draw-space heights for the two masses (RENDER_GROUND_Y shifts entire system)
@@ -367,33 +378,11 @@ def update_artists(env):
     art['mb_dot'].set_data([0], [y_B])
     art['mb_label'].set_position((-RENDER_W_MB / 2 + 0.05, y_B))
 
-    # F_D arrow (remove old patch, add fresh one)
-    if env._fd_arrow_patch is not None:
-        env._fd_arrow_patch.remove()
-        env._fd_arrow_patch = None
-    arrow_len = (F_act / F_MAX) * 1.0
-    if abs(arrow_len) > 0.04:
-        x_start = RENDER_W_MB / 2 if F_act > 0 else -RENDER_W_MB / 2
-        al      = abs(arrow_len)
-        arr = FancyArrow(x_start, y_B, arrow_len, 0.0,
-                         width=0.035, length_includes_head=True,
-                         head_width=0.12, head_length=min(al * 0.25, 0.22),
-                         fc='#0055cc', ec='#0055cc', zorder=8)
-        env._ax_s.add_patch(arr)
-        env._fd_arrow_patch = arr
-        txt_x = x_start + arrow_len + (0.08 if F_act > 0 else -0.08)
-        art['fd_text'].set_text(f'$F_D$={F_act:+.0f} N')
-        art['fd_text'].set_position((txt_x, y_B))
-        art['fd_text'].set_ha('left' if F_act > 0 else 'right')
-    else:
-        art['fd_text'].set_text('')
-
     # status text
     art['status_text'].set_text(
         f't={env._t:6.2f} s    s={env._s_pos:6.1f} m\n'
         f'z_B={z_B*100:+.2f} cm  z_W={z_W*100:+.2f} cm\n'
-        f'\u03b6={zeta_0*100:.3f} cm    '
-        f'F_D={F_act:+.0f} N\n'
+        f'\u03b6={zeta_0*100:.3f} cm\n'
         f'v={env._v:.1f} m/s    '
         f'ep reward={env._episode_reward:.2f}'
     )

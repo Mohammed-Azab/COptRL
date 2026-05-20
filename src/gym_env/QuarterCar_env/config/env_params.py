@@ -57,8 +57,6 @@ PHYSICS = {
     "F_ks_nlin_max": F_ks_nlin_max,
 }
 
-F_MAX = float(_cfg["F_MAX"])
-
 DT = float(_cfg["DT"])
 DT_SIM = float(_cfg["DT_SIM"])
 N_SUB = int(DT / DT_SIM)

@@ -4,7 +4,6 @@ weights:
   w_jerk:          0.3
   w_action_smooth: 0.2
   w_curve:         0.0   # off until curvature is wired externally
-  w_energy:        0.1
 
 enable:
   tracking:      true
@@ -12,7 +11,6 @@ enable:
   jerk:          true
   action_smooth: true
   curve:         true
-  energy:        true
 
 velocity:
   v_max:              20.0   # m/s 

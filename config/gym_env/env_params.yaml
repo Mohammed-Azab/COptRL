@@ -20,9 +20,6 @@ dz_cmp: 0.02
 dz_rbd: 0.08
 F_ks_nlin_max: 100000.0
 
-# actuator limit
-F_MAX: 10000.0
-
 # timing and episode length
 DT: 0.02
 DT_SIM: 0.001

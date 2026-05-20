@@ -38,17 +38,23 @@ import gymnasium as gym
 from gymnasium import spaces
 
 from QuarterCar_env.core.ode_model import QuarterCarODE
-from src.road.road_generator import RoadGenerator
+from road.road_generator import RoadGenerator
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
 from QuarterCar_env.reward.reward import compute_reward, compute_v_target, compute_terminal_bonus
 from QuarterCar_env.config.env_params import (
     DT, EPISODE_STEPS,
     TRUNC_TRAVEL, TRUNC_ZS, MAX_DISTANCE,
     OBS_HIGH, OBS_LOW,
-    VEHICLE_SPEED,
-    V_MIN, V_BRAKE_LEAD,
 )
-from QuarterCar_env.config.render_params import RENDER_Y_SCALE
+from QuarterCar_env.config.road_params import VEHICLE_SPEED, V_BRAKE_LEAD
+from QuarterCar_env.config.render_params import (
+    RENDER_Y_SCALE,
+    RENDER_SHOW_TS,
+    RENDER_TS_Z,
+    RENDER_TS_Z_DDOT,
+    RENDER_TS_SPEED,
+    RENDER_FREEZE_EPISODE,
+)
 from .render import render_env, close_env
 
 
@@ -67,6 +73,11 @@ class QuarterCarEnv(gym.Env):
         road_params: dict = None,
         reward_config: RewardConfig = None,
         render_y_scale: int = RENDER_Y_SCALE,
+        show_time_series: bool = RENDER_SHOW_TS,
+        show_ts_z: bool = RENDER_TS_Z,
+        show_ts_z_ddot: bool = RENDER_TS_Z_DDOT,
+        show_ts_speed: bool = RENDER_TS_SPEED,
+        freeze_episode: bool = RENDER_FREEZE_EPISODE,
         start_at_equilibrium: bool = True,
         ref_speed_profile: str = "constant",    # constant | slow_before_bump | custom
         max_episode_steps: int = EPISODE_STEPS,
@@ -125,8 +136,15 @@ class QuarterCarEnv(gym.Env):
         self._bump_times     = self._road.get_bump_times()
         self._fig            = None
         self._ren_hist       = None
-        self._fd_arrow_patch = None
         self._episode_count  = 0
+        self._show_ts        = bool(show_time_series)
+        self._freeze_episode = bool(freeze_episode)
+        self._freeze_render  = False
+        self._ts_flags = {
+            "z": bool(show_ts_z),
+            "z_ddot": bool(show_ts_z_ddot),
+            "speed": bool(show_ts_speed),
+        }
 
     # ------------------------------------------------------------------
     # Gymnasium interface
@@ -171,6 +189,8 @@ class QuarterCarEnv(gym.Env):
 
         self._bump_times = self._road.get_bump_times()
 
+        self._freeze_render = False
+
         return self._obs(), self._info(0.0)
 
     def step(self, action):
@@ -197,9 +217,9 @@ class QuarterCarEnv(gym.Env):
         j_clipped = float(np.clip(jerk, -cfg.jerk_clip, cfg.jerk_clip))
         self._filtered_jerk = alpha_j * self._filtered_jerk + (1.0 - alpha_j) * j_clipped
 
-        # 3. Integrate ODE (no active suspension force in speed-only mode)
+        # 3. Integrate ODE one control step
         new_state, z_B_ddot = self._ode.step(
-            self._state, self._road.get_height_dot, self._t, 0.0
+            self._state, self._road.get_height_dot, self._t
         )
         self._state         = new_state
         self._t            += DT
@@ -245,6 +265,10 @@ class QuarterCarEnv(gym.Env):
             reward += compute_terminal_bonus(rms, cfg)
 
         if self.render_mode == 'human':
+            self.render()
+
+        if (terminated or truncated) and self.render_mode == 'human' and self._freeze_episode:
+            self._freeze_render = True
             self.render()
 
         info = self._info(z_B_ddot)
@@ -360,7 +384,7 @@ class QuarterCarEnv(gym.Env):
 
     def _compute_v_ref(self, t: float) -> float:
         v_max = self._rcfg.v_max
-        v_min = V_MIN
+        v_min = self._rcfg.min_curve_speed
         if self._ref_speed_profile == "constant":
             return v_max
         if self._ref_speed_profile == "custom":
