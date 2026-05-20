@@ -26,7 +26,7 @@ sys.path.insert(0, str(_ROOT / "src"))       # exposes road.road_generator
 sys.path.insert(0, str(_ROOT / "src" / "train"))
 sys.path.insert(0, str(_ROOT / "src" / "tune"))
 
-from objective import Objective
+from trial import Objective
 
 _TUNE_CONFIG_PATH = _ROOT / "config" / "algo" / "tune_config.yaml"
 _RESULTS_DIR      = _ROOT / "tune" / "results"

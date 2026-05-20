@@ -17,16 +17,16 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# ── resolve src tree so this script runs from the project root ────────────────
+# resolve src tree 
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
-sys.path.insert(0, str(_ROOT / "src"))       # exposes road.road_generator
+sys.path.insert(0, str(_ROOT / "src")) 
 sys.path.insert(0, str(_ROOT / "src" / "train"))
 
-from algo_factory import build_model, is_off_policy, load_algo_config, supported_algos
-from callbacks import build_callbacks
-from env_factory import make_eval_vec_env, make_vec_env
-from seed_utils import seed_everything
+from agent import build_model, is_off_policy, load_algo_config, supported_algos
+from monitoring import build_callbacks
+from environment import make_eval_vec_env, make_vec_env
+from reproducibility import seed_everything
 
 
 _CONFIG_PATH = _ROOT / "config" / "algo" / "algo_configs.yaml"
@@ -38,24 +38,51 @@ def parse_args() -> argparse.Namespace:
         description="Train a speed-planning RL agent on the quarter-car environment.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--algo",         default="PPO",  choices=supported_algos())
-    p.add_argument("--road",         default="iso_8608_class_c", choices=_VALID_ROADS)
-    p.add_argument("--eval-road",    default=None,   choices=_VALID_ROADS,
-                   help="Road for eval callbacks. Defaults to training road.")
-    p.add_argument("--seed",         type=int, default=None,
-                   help="Random seed. Overrides algo_configs.yaml.")
-    p.add_argument("--timesteps",    type=int, default=None,
-                   help="Total env steps. Overrides algo_configs.yaml.")
-    p.add_argument("--n-envs",       type=int, default=None,
-                   help="Parallel training envs.")
-    p.add_argument("--no-normalize", action="store_true",
-                   help="Disable VecNormalize.")
-    p.add_argument("--resume",       default=None,
-                   help="Checkpoint .zip to continue training from.")
-    p.add_argument("--run-name",     default=None,
-                   help="Tag appended to the output directory name.")
-    p.add_argument("--config",       default=str(_CONFIG_PATH),
-                   help="Path to algo_configs.yaml.")
+    p.add_argument(
+                    "--algo",
+                    default="PPO",
+                    choices=supported_algos())
+    p.add_argument(
+                    "--road",
+                    default="speed_bump",
+                    choices=_VALID_ROADS)
+    p.add_argument(
+                    "--eval-road",
+                    default="speed_bump",
+                    choices=_VALID_ROADS,
+                    help="Road for eval callbacks")
+    p.add_argument(
+                    "--seed",
+                    type=int,
+                    default=69,
+                    help="Random seed.")
+    p.add_argument(
+                    "--timesteps",
+                    type=int,
+                    default=None,
+                    help="Total env steps.")
+    p.add_argument(
+                    "--n-envs",
+                    type=int, 
+                    default=None,
+                    help="Parallel training envs.")
+    p.add_argument(
+                    "--no-normalize",
+                    action="store_true",
+                    help="Disable VecNormalize.")
+    p.add_argument(
+                    "--resume",
+                    default=None,
+                    help="Checkpoint .zip to continue training from.")
+    p.add_argument(
+                    "--run-name",
+                    default=None,
+                    help="Tag appended to the output directory name.")
+    p.add_argument(
+                    "--config",
+                    default=str(_CONFIG_PATH),
+                    help="Path to algo_configs.yaml.")
+    
     return p.parse_args()
 
 
@@ -75,7 +102,7 @@ def main() -> None:
 
     seed_everything(seed)
 
-    # ── output directories ────────────────────────────────────────────────────
+    #  output directories 
     ts      = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_tag = f"{args.algo}_{ts}" + (f"_{args.run_name}" if args.run_name else "")
 
@@ -86,7 +113,7 @@ def main() -> None:
     tb_dir.mkdir(parents=True, exist_ok=True)
     mon_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── environments ─────────────────────────────────────────────────────────
+    #  environments
     gamma = algo_kwargs.get("gamma", 0.99)
     # off-policy (SAC/TD3): normalising rewards distorts Q-value targets
     norm_reward = normalize and train_meta.get("norm_reward_ppo", True) and not is_off_policy(args.algo)
@@ -108,7 +135,7 @@ def main() -> None:
         monitor_dir=str(mon_dir / "eval"),
     )
 
-    # ── model ─────────────────────────────────────────────────────────────────
+    #  model ─
     model = build_model(
         algo=args.algo,
         venv=train_venv,
@@ -118,7 +145,7 @@ def main() -> None:
         resume=args.resume,
     )
 
-    # ── callbacks ─────────────────────────────────────────────────────────────
+    #  callbacks ─
     callbacks = build_callbacks(
         model_dir=model_dir,
         eval_venv=eval_venv,
@@ -128,7 +155,7 @@ def main() -> None:
         checkpoint_freq=max(train_meta["checkpoint_freq"] // n_envs, 1),
     )
 
-    # ── run ───────────────────────────────────────────────────────────────────
+    #  run ─
     print(f"\n{'─'*58}")
     print(f"  algo       : {args.algo}")
     print(f"  road       : {args.road}  |  eval : {eval_road}")
@@ -146,7 +173,7 @@ def main() -> None:
         reset_num_timesteps=(args.resume is None),
     )
 
-    # ── save ──────────────────────────────────────────────────────────────────
+    #  save 
     final_path = model_dir / f"{args.algo}_final"
     model.save(str(final_path))
     train_venv.save(str(model_dir / "vecnormalize.pkl"))

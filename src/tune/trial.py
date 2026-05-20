@@ -16,8 +16,8 @@ sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
 sys.path.insert(0, str(_ROOT / "src"))       # exposes road.road_generator
 sys.path.insert(0, str(_ROOT / "src" / "train"))
 
-from env_factory import make_eval_vec_env, make_vec_env
-from samplers import sample
+from environment import make_eval_vec_env, make_vec_env
+from search_spaces import sample
 
 _REGISTRY = {"PPO": PPO, "SAC": SAC, "TD3": TD3}
 _OFF_POLICY = {"SAC", "TD3"}

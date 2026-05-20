@@ -13,7 +13,7 @@ import QuarterCar_env.envs  # noqa: F401
 ENV_ID = "QuarterCar_env/QuarterCar"
 
 
-def _make_single_env(
+def _make_env(
     road: str,
     seed: int,
     monitor_dir: str | None,
@@ -48,7 +48,7 @@ def make_vec_env(
     """
     env_kwargs = env_kwargs or {}
     fns = [
-        _make_single_env(road, base_seed + i, monitor_dir, env_kwargs)
+        _make_env(road, base_seed + i, monitor_dir, env_kwargs)
         for i in range(n_envs)
     ]
     venv = DummyVecEnv(fns)
@@ -77,7 +77,7 @@ def make_eval_vec_env(
     """
     env_kwargs = env_kwargs or {}
     fns = [
-        _make_single_env(road, base_seed + i, monitor_dir, env_kwargs)
+        _make_env(road, base_seed + i, monitor_dir, env_kwargs)
         for i in range(n_envs)
     ]
     venv = DummyVecEnv(fns)
