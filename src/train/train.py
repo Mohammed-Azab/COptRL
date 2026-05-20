@@ -1,245 +1,163 @@
+"""
+Quarter-car RL training entry point.
+
+Usage
+-----
+  python src/train/train.py --algo PPO
+  python src/train/train.py --algo SAC --road iso_8608_class_c --seed 7
+  python src/train/train.py --algo PPO --resume models/PPO_20240101/checkpoints/ckpt_50000_steps.zip
+
+All hyperparameters live in config/algo/algo_configs.yaml.
+"""
+
+from __future__ import annotations
+
 import argparse
+import sys
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
-import yaml
+# ── resolve src tree so this script runs from the project root ────────────────
+_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
+sys.path.insert(0, str(_ROOT / "src"))       # exposes road.road_generator
+sys.path.insert(0, str(_ROOT / "src" / "train"))
 
-from stable_baselines3 import SAC, TD3, PPO
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv, VecNormalize
-from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
-from stable_baselines3.common.callbacks import EvalCallback as SB3EvalCallback
-from stable_baselines3.common.monitor import Monitor
-
-from QuarterCar_env.envs import QuarterCarEnv
-from QuarterCar_env.wrappers import ActionRepeat, NormalizeObservation, RewardScaler, EpisodeLogger
-
-ALGOS = {'sac': SAC, 'td3': TD3, 'ppo': PPO}
+from algo_factory import build_model, is_off_policy, load_algo_config, supported_algos
+from callbacks import build_callbacks
+from env_factory import make_eval_vec_env, make_vec_env
+from seed_utils import seed_everything
 
 
-def load_configs(config_path=None):
-    base = (Path(config_path).parent if config_path
-            else Path(__file__).parent / 'configs')
-    with open(base / 'env_config.yaml') as f:
-        env_cfg = yaml.safe_load(f)
-    with open(base / 'algo_configs.yaml') as f:
-        algo_cfg = yaml.safe_load(f)
-    return env_cfg, algo_cfg
+_CONFIG_PATH = _ROOT / "config" / "algo" / "algo_configs.yaml"
+_VALID_ROADS = ["iso_8608_class_c", "speed_bump", "sine_sweep", "flat"]
 
 
-class ComfortCallback(BaseCallback):
-    """Log comfort metrics to TensorBoard each eval cycle."""
-
-    def __init__(self, make_env_fn, eval_freq=10_000, n_eval_eps=5, verbose=0):
-        super().__init__(verbose)
-        self._make_env_fn = make_env_fn
-        self._eval_freq   = eval_freq
-        self._n_eval_eps  = n_eval_eps
-
-    def _on_step(self) -> bool:
-        if self.n_calls % self._eval_freq == 0:
-            self._run_comfort_eval()
-        return True
-
-    def _run_comfort_eval(self):
-        env = self._make_env_fn()
-        buckets = {'rms_accel': [], 'peak_accel': [],
-                   'comfort_score': [], 'suspension_rms': []}
-        for _ in range(self._n_eval_eps):
-            obs, _ = env.reset()
-            done = False
-            while not done:
-                action, _ = self.model.predict(obs, deterministic=True)
-                obs, _, terminated, truncated, info = env.step(action)
-                done = terminated or truncated
-            for k in buckets:
-                buckets[k].append(info.get(k, 0.0))
-        env.close()
-        for k, v in buckets.items():
-            self.logger.record(f'eval/{k}', float(np.mean(v)))
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Train a speed-planning RL agent on the quarter-car environment.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    p.add_argument("--algo",         default="PPO",  choices=supported_algos())
+    p.add_argument("--road",         default="iso_8608_class_c", choices=_VALID_ROADS)
+    p.add_argument("--eval-road",    default=None,   choices=_VALID_ROADS,
+                   help="Road for eval callbacks. Defaults to training road.")
+    p.add_argument("--seed",         type=int, default=None,
+                   help="Random seed. Overrides algo_configs.yaml.")
+    p.add_argument("--timesteps",    type=int, default=None,
+                   help="Total env steps. Overrides algo_configs.yaml.")
+    p.add_argument("--n-envs",       type=int, default=None,
+                   help="Parallel training envs.")
+    p.add_argument("--no-normalize", action="store_true",
+                   help="Disable VecNormalize.")
+    p.add_argument("--resume",       default=None,
+                   help="Checkpoint .zip to continue training from.")
+    p.add_argument("--run-name",     default=None,
+                   help="Tag appended to the output directory name.")
+    p.add_argument("--config",       default=str(_CONFIG_PATH),
+                   help="Path to algo_configs.yaml.")
+    return p.parse_args()
 
 
-def build_vec_env(algo, road, seed, log_dir, env_cfg, gamma):
-    train_cfg     = env_cfg['training']
-    reward_scale  = train_cfg['reward_scale']
-    action_repeat = train_cfg['action_repeat']
-    n_envs        = train_cfg['n_envs'] if algo in ('sac', 'td3') else 1
-    VecClass      = SubprocVecEnv if algo in ('sac', 'td3') else DummyVecEnv
-    # DummyVecEnv for PPO
+def main() -> None:
+    args = parse_args()
 
-    def _single_env(i):
-        def _init():
-            env = QuarterCarEnv(road_profile=road)
-            env = ActionRepeat(env, n_repeat=action_repeat)
-            env = NormalizeObservation(env)
-            env = RewardScaler(env, scale=reward_scale)
-            env = EpisodeLogger(env, log_dir=log_dir)
-            env = Monitor(env)
-            env.reset(seed=seed + i)
-            return env
-        return _init
+    full_cfg   = load_algo_config(args.config)
+    train_meta = full_cfg["training"]
+    algo_kwargs = dict(full_cfg[args.algo])   # shallow copy; build_model pops 'policy'
 
-    venv = VecClass([_single_env(i) for i in range(n_envs)])
-    return VecNormalize(venv, norm_obs=False, norm_reward=True, gamma=gamma)
+    # CLI overrides win over config defaults
+    seed      = args.seed      if args.seed      is not None else train_meta["seed"]
+    timesteps = args.timesteps if args.timesteps is not None else train_meta["total_timesteps"]
+    n_envs    = args.n_envs    if args.n_envs    is not None else train_meta["n_envs"]
+    eval_road = args.eval_road or train_meta["eval_road"]
+    normalize = not args.no_normalize
 
+    seed_everything(seed)
 
-def build_model(algo, venv, algo_kwargs, log_dir, seed, resume=None):
-    if resume:
-        return ALGOS[algo].load(resume, env=venv)
-    return ALGOS[algo](
-        env=venv,
-        verbose=1,
-        tensorboard_log=str(log_dir),
+    # ── output directories ────────────────────────────────────────────────────
+    ts      = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_tag = f"{args.algo}_{ts}" + (f"_{args.run_name}" if args.run_name else "")
+
+    model_dir = _ROOT / "models" / run_tag
+    tb_dir    = _ROOT / "logs" / "tensorboard" / run_tag
+    mon_dir   = _ROOT / "logs" / "monitor" / run_tag
+    model_dir.mkdir(parents=True, exist_ok=True)
+    tb_dir.mkdir(parents=True, exist_ok=True)
+    mon_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── environments ─────────────────────────────────────────────────────────
+    gamma = algo_kwargs.get("gamma", 0.99)
+    # off-policy (SAC/TD3): normalising rewards distorts Q-value targets
+    norm_reward = normalize and train_meta.get("norm_reward_ppo", True) and not is_off_policy(args.algo)
+
+    train_venv = make_vec_env(
+        road=args.road,
+        n_envs=n_envs,
+        base_seed=seed,
+        monitor_dir=str(mon_dir / "train"),
+        gamma=gamma,
+        norm_obs=normalize,
+        norm_reward=norm_reward,
+    )
+    eval_venv = make_eval_vec_env(
+        road=eval_road,
+        n_envs=train_meta["n_eval_envs"],
+        base_seed=seed + 10_000,   # disjoint seed range keeps eval trajectories fresh
+        train_venv=train_venv,
+        monitor_dir=str(mon_dir / "eval"),
+    )
+
+    # ── model ─────────────────────────────────────────────────────────────────
+    model = build_model(
+        algo=args.algo,
+        venv=train_venv,
+        algo_kwargs=algo_kwargs,
+        tensorboard_log=str(tb_dir),
         seed=seed,
-        **algo_kwargs,
+        resume=args.resume,
     )
 
-
-def build_callbacks(algo, eval_road, model_dir, training_venv):
-    def _raw_eval_env():
-        return QuarterCarEnv(road_profile=eval_road)
-
-    # Must match training env wrapper type so SB3 can sync normalization stats.
-    eval_venv = VecNormalize(
-        DummyVecEnv([_raw_eval_env]),
-        norm_obs=False,
-        norm_reward=False,
-        gamma=training_venv.gamma,
+    # ── callbacks ─────────────────────────────────────────────────────────────
+    callbacks = build_callbacks(
+        model_dir=model_dir,
+        eval_venv=eval_venv,
+        train_venv=train_venv,
+        eval_freq=max(train_meta["eval_freq"] // n_envs, 1),
+        n_eval_episodes=train_meta["n_eval_episodes"],
+        checkpoint_freq=max(train_meta["checkpoint_freq"] // n_envs, 1),
     )
 
-    return [
-        SB3EvalCallback(
-            eval_venv,
-            eval_freq=10_000,
-            n_eval_episodes=5,
-            deterministic=True,
-            best_model_save_path=str(model_dir / 'best'),
-            log_path=str(model_dir),
-        ),
-        CheckpointCallback(
-            save_freq=50_000,
-            save_path=str(model_dir / 'checkpoints'),
-            name_prefix=algo,
-        ),
-        ComfortCallback(_raw_eval_env, eval_freq=10_000, n_eval_eps=5),
-    ]
+    # ── run ───────────────────────────────────────────────────────────────────
+    print(f"\n{'─'*58}")
+    print(f"  algo       : {args.algo}")
+    print(f"  road       : {args.road}  |  eval : {eval_road}")
+    print(f"  seed       : {seed}")
+    print(f"  timesteps  : {timesteps:,}")
+    print(f"  n_envs     : {n_envs}")
+    print(f"  normalize  : obs={normalize}, reward={norm_reward}")
+    print(f"  output     : {model_dir}")
+    print(f"{'─'*58}\n")
 
-
-def _passive_baseline(road_profile, n_eps=5):
-    env = QuarterCarEnv(road_profile=road_profile)
-    metrics = {'rms_accel': [], 'peak_accel': [], 'suspension_rms': []}
-    for _ in range(n_eps):
-        obs, _ = env.reset()
-        done = False
-        while not done:
-            obs, _, t, tr, info = env.step(np.array([0.0]))
-            done = t or tr
-        for k in metrics:
-            metrics[k].append(info.get(k, 0.0))
-    env.close()
-    return {k: float(np.mean(v)) for k, v in metrics.items()}
-
-
-def compare_passive_vs_trained(model, eval_road, n_eps=5):
-    passive = _passive_baseline(eval_road, n_eps)
-
-    env     = QuarterCarEnv(road_profile=eval_road)
-    buckets = {'rms_accel': [], 'peak_accel': [], 'suspension_rms': []}
-    for _ in range(n_eps):
-        obs, _ = env.reset()
-        done = False
-        while not done:
-            a, _ = model.predict(obs, deterministic=True)
-            obs, _, term, trunc, info = env.step(a)
-            done = term or trunc
-        for k in buckets:
-            buckets[k].append(info.get(k, 0.0))
-    env.close()
-    trained = {k: float(np.mean(v)) for k, v in buckets.items()}
-
-    print('\n' + '=' * 62)
-    print(f"{'Metric':<22} {'Passive':>10} {'Trained':>10} {'Improv%':>10}")
-    print('-' * 62)
-    for k in ['rms_accel', 'peak_accel', 'suspension_rms']:
-        p, t = passive.get(k, 0.0), trained.get(k, 0.0)
-        imp  = 100.0 * (p - t) / max(abs(p), 1e-9)
-        print(f"{k:<22} {p:>10.4f} {t:>10.4f} {imp:>9.1f}%")
-    print('=' * 62 + '\n')
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description='Train an RL agent for active suspension control on the Quarter Car Model'
+    model.learn(
+        total_timesteps=timesteps,
+        callback=callbacks,
+        progress_bar=True,
+        reset_num_timesteps=(args.resume is None),
     )
-    parser.add_argument(
-        '--algo',
-        type=str,
-        default='sac',
-        choices=['sac', 'td3', 'ppo'],
-        help='RL algorithm to train.',
-    )
-    parser.add_argument(
-        '--timesteps',
-        type=int,
-        default=500_000,
-        help='Total environment steps to train for.',
-    )
-    parser.add_argument(
-        '--road',
-        type=str,
-        default='iso_8608_class_c',
-        choices=['speed_bump', 'iso_8608_class_c', 'sine_sweep', 'flat'],
-        help='Road profile used during training.',
-    )
-    parser.add_argument(
-        '--eval-road',
-        type=str,
-        default='speed_bump',
-        choices=['speed_bump', 'sine_sweep'],
-        help='Road profile used for evaluation callbacks.',
-    )
-    parser.add_argument(
-        '--config',
-        type=str,
-        default=None,
-        help='Path to env_config.yaml. Defaults to training/configs/env_config.yaml.',
-    )
-    parser.add_argument(
-        '--seed',
-        type=int,
-        default=66,
-        help='Random seed.',
-    )
-    parser.add_argument(
-        '--resume',
-        type=str,
-        default=None,
-        help='Path to a checkpoint .zip to resume training from.',
-    )
-    args = parser.parse_args()
 
-    ts        = datetime.now().strftime('%Y%m%d_%H%M%S')
-    model_dir = Path(f'models/{args.algo}_{ts}')
-    log_dir   = Path(f'logs/{args.algo}_{ts}')
-    (model_dir / 'best').mkdir(parents=True, exist_ok=True)
-    (model_dir / 'checkpoints').mkdir(parents=True, exist_ok=True)
-    log_dir.mkdir(parents=True, exist_ok=True)
+    # ── save ──────────────────────────────────────────────────────────────────
+    final_path = model_dir / f"{args.algo}_final"
+    model.save(str(final_path))
+    train_venv.save(str(model_dir / "vecnormalize.pkl"))
 
-    env_cfg, algo_cfg = load_configs(args.config)
-    algo_kwargs = algo_cfg[args.algo].copy()
-    gamma       = algo_kwargs.get('gamma', 0.99)
+    print(f"\nModel    → {final_path}.zip")
+    print(f"VecNorm  → {model_dir / 'vecnormalize.pkl'}")
+    print(f"TB logs  → tensorboard --logdir {tb_dir}")
 
-    venv  = build_vec_env(args.algo, args.road, args.seed, str(log_dir), env_cfg, gamma)
-    model = build_model(args.algo, venv, algo_kwargs, log_dir, args.seed, args.resume)
-    cbs   = build_callbacks(args.algo, args.eval_road, model_dir, venv)
-
-    model.learn(total_timesteps=args.timesteps, callback=cbs, progress_bar=True)
-    model.save(str(model_dir / f'{args.algo}_final'))
-    venv.save(str(model_dir / 'vecnormalize.pkl'))
-    print(f'\nModel saved to {model_dir}')
-
-    compare_passive_vs_trained(model, args.eval_road)
+    train_venv.close()
+    eval_venv.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

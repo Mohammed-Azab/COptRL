@@ -1,3 +1,6 @@
+# Algorithm hyperparameters — passed directly to SB3 constructors.
+# Keys match SB3 API exactly so they can be unpacked with **kwargs.
+
 PPO:
   policy: MlpPolicy
   learning_rate: 3.0e-4
@@ -5,6 +8,11 @@ PPO:
   batch_size: 64
   n_epochs: 10
   gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
   policy_kwargs:
     net_arch:
       pi: [256, 256]
@@ -13,20 +21,39 @@ PPO:
 SAC:
   policy: MlpPolicy
   learning_rate: 3.0e-4
-  buffer_size: 200000
+  buffer_size: 200_000
   batch_size: 256
   tau: 0.005
   gamma: 0.99
   ent_coef: auto
+  train_freq: 1
+  gradient_steps: 1
   policy_kwargs:
     net_arch: [256, 256]
 
 TD3:
   policy: MlpPolicy
   learning_rate: 1.0e-3
-  buffer_size: 200000
+  buffer_size: 200_000
   batch_size: 256
   tau: 0.005
   gamma: 0.99
+  train_freq:
+    - 1
+    - step
   policy_kwargs:
     net_arch: [400, 300]
+
+# ── training meta-settings (not passed to SB3) ──────────────────────────────
+# Consumed by train.py; separate from SB3 kwargs.
+training:
+  seed: 42
+  total_timesteps: 1_000_000
+  n_envs: 1
+  n_eval_envs: 1
+  eval_freq: 20_000        # env steps between evaluation callbacks
+  n_eval_episodes: 5
+  checkpoint_freq: 50_000
+  norm_obs: true
+  norm_reward_ppo: true    # reward normalisation for on-policy only
+  eval_road: speed_bump
