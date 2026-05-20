@@ -124,20 +124,23 @@ def run_episode(
     venv.training    = False
     venv.norm_reward = False
 
-    result = venv.reset()
-    obs = result[0] if isinstance(result, tuple) else result
+    reset_out = venv.reset()
+    obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out  # type: ignore[index]
 
     done = np.array([False])
     ep: dict = defaultdict(list)
 
     while not done[0]:
         action, _ = model.predict(obs, deterministic=deterministic)
-        step = venv.step(action)
-        if len(step) == 5:
-            obs, reward, terminated, truncated, info_list = step
-            done = np.logical_or(terminated, truncated)
+        step_result: tuple = venv.step(action)  # type: ignore[assignment]
+        obs    = step_result[0]
+        reward = step_result[1]
+        if len(step_result) == 5:
+            done      = np.logical_or(step_result[2], step_result[3])
+            info_list = step_result[4]
         else:
-            obs, reward, done, info_list = step
+            done      = step_result[2]
+            info_list = step_result[3]
         _record(ep, float(action[0, 0]), float(reward[0]), info_list[0])
 
     venv.close()
@@ -319,7 +322,7 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
         ax.spines[["top", "right"]].set_visible(False)
 
     fig.suptitle(f"Episode {ep_i + 1} — Deep Inspection", fontsize=12, fontweight="bold")
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
 
     if save_dir:
         fname = save_dir / f"timeseries_ep{ep_i + 1}.png"
