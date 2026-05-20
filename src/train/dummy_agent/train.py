@@ -41,7 +41,6 @@ def run_episodes(road: str, n_episodes: int, render: bool) -> None:
             f"| rms_a={info.get('rms_accel', 0.0):.3f} m/s² "
             f"| speed={info.get('speed', 0.0):.2f} m/s"
         )
-
     env.close()
 
 

@@ -1,5 +1,5 @@
 """
-QuarterCarEnv: A Gymnasium environment for quarter-car active suspension RL.
+QuarterCarEnv: A Gymnasium environment for quarter-car.
 
 State (internal, 6-D float64):
   x[0] = ζ − z_W   tire deflection           [m]
@@ -24,4 +24,10 @@ Action (1,) float32 ∈ [−1, 1]:
   Positive → lifts body / presses wheel down; applied equal-and-opposite.
 """
 
+from gymnasium.envs.registration import register
 from QuarterCar_env.envs.quarter_car_env import QuarterCarEnv
+
+register(
+    id="QuarterCar_env/QuarterCar",
+    entry_point="QuarterCar_env.envs:QuarterCarEnv",
+)
