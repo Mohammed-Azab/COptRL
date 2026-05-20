@@ -1,6 +1,5 @@
 """
-Optuna hyperparameter search for quarter-car suspension RL.
-No ROS imports.
+Optuna hyperparameter search for quarter-car RL agents.
 
 Usage:
   python training/hyperparameter_search.py --algo sac --trials 50 --timesteps 50000
@@ -80,7 +79,7 @@ def _objective(trial: optuna.Trial, algo: str, n_timesteps: int) -> float:
     run_env = _make_env(road='speed_bump', seed=999)
     episode_rewards = []
     for _ in range(3):
-        obs, _ = run_env.reset()
+        run_env.reset()
         ep_r, done = 0.0, False
         while not done:
             a, _ = model.predict(obs, deterministic=True)

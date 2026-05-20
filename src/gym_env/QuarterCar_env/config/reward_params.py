@@ -5,6 +5,7 @@ from QuarterCar_env.config.config_manager import _load_yaml
 @dataclass(frozen=True)
 class RewardConfig:
     # --- weights ---
+    w_comfort_bonus: float = 0.8   # positive per-step bonus for smooth riding
     w_tracking:      float = 1.0
     w_accel:         float = 0.5
     w_jerk:          float = 0.3
@@ -12,6 +13,7 @@ class RewardConfig:
     w_curve:         float = 0.0
 
     # --- per-term enable flags ---
+    enable_comfort_bonus: bool = True
     enable_tracking:      bool = True
     enable_accel:         bool = True
     enable_jerk:          bool = True
@@ -29,12 +31,14 @@ class RewardConfig:
     # --- longitudinal comfort ---
     a_comfort:          float = 3.0
     accel_filter_alpha: float = 0.8
-    accel_clip:         float = 15.0
+    accel_clip:         float = 15.0  # observation clipping bound (wide, for numerical safety)
+    reward_accel_clip:  float = 6.0   # reward-only clip = 2 × a_comfort; keeps worst-case bounded
 
     # --- jerk ---
     j_max:             float = 10.0
     jerk_filter_alpha: float = 0.8
-    jerk_clip:         float = 50.0
+    jerk_clip:         float = 50.0  # observation clipping bound
+    reward_jerk_clip:  float = 20.0  # reward-only clip = 2 × j_max; keeps worst-case bounded
 
     # --- curvature ---
     a_lat_max:      float = 4.0
@@ -70,12 +74,14 @@ def load_reward_config() -> RewardConfig:
     o = cfg.get("observations", {})
 
     return RewardConfig(
+        w_comfort_bonus = float(w.get("w_comfort_bonus", 0.8)),
         w_tracking      = float(w.get("w_tracking",      1.0)),
         w_accel         = float(w.get("w_accel",         0.5)),
         w_jerk          = float(w.get("w_jerk",          0.3)),
         w_action_smooth = float(w.get("w_action_smooth", 0.2)),
         w_curve         = float(w.get("w_curve",         0.0)),
 
+        enable_comfort_bonus = bool(e.get("comfort_bonus",  True)),
         enable_tracking      = bool(e.get("tracking",      True)),
         enable_accel         = bool(e.get("accel",         True)),
         enable_jerk          = bool(e.get("jerk",          True)),
@@ -92,10 +98,12 @@ def load_reward_config() -> RewardConfig:
         a_comfort          = float(c.get("a_comfort",          3.0)),
         accel_filter_alpha = float(c.get("accel_filter_alpha", 0.8)),
         accel_clip         = float(c.get("accel_clip",        15.0)),
+        reward_accel_clip  = float(c.get("reward_accel_clip",  6.0)),
 
         j_max             = float(j.get("j_max",            10.0)),
         jerk_filter_alpha = float(j.get("jerk_filter_alpha", 0.8)),
         jerk_clip         = float(j.get("jerk_clip",        50.0)),
+        reward_jerk_clip  = float(j.get("reward_jerk_clip", 20.0)),
 
         a_lat_max      = float(k.get("a_lat_max",      4.0)),
         curvature_clip = float(k.get("curvature_clip", 0.5)),
