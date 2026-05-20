@@ -27,17 +27,17 @@ def run_episodes(road: str, n_episodes: int, render: bool) -> None:
     for ep in range(n_episodes):
         obs, _ = env.reset()
         done = False
-        ep_return = 0.0
+        ep_reward = 0.0
         step = 0
 
         while not done:
-            obs, reward, terminated, truncated, info = env.step(ZERO_ACTION)
+            obs, reward, terminated, truncated, info = env.step(SPEEDING_UP)
             done = terminated or truncated
-            ep_return += reward
+            ep_reward += reward
             step += 1
 
         print(
-            f"Ep {ep:3d} | steps={step:4d} | return={ep_return:8.2f} "
+            f"Ep {ep:3d} | steps={step:4d} | reward={ep_reward:8.2f} "
             f"| rms_a={info.get('rms_accel', 0.0):.3f} m/s² "
             f"| speed={info.get('speed', 0.0):.2f} m/s"
         )
