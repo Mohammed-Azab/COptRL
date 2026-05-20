@@ -2,6 +2,15 @@
 RENDER_Y_SCALE: 5
 RENDER_HIST_SECS: 5.0
 
+# which time-series to show (if any)
+RENDER_SHOW_TS: true
+RENDER_TS_Z: true
+RENDER_TS_Z_DDOT: true
+RENDER_TS_SPEED: true
+
+# whether to freeze the render on episode end
+RENDER_FREEZE_EPISODE: true
+
 # nominal draw-space sizes
 RENDER_Y_W_NOM: 2.0
 RENDER_Y_B_NOM: 4.0
