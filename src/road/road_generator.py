@@ -2,7 +2,7 @@
 # Profiles: speed_bump, iso_8608_class_c, sine_sweep, flat, recorded.
 import numpy as np
 
-from QuarterCar_env.config.env_params import ROAD_DEFAULTS
+from QuarterCar_env.config.road_params import ROAD_DEFAULTS
 
 
 class RoadGenerator:
