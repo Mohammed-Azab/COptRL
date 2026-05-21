@@ -234,19 +234,19 @@ class QuarterCarEnv(gym.Env):
         self._travel_sq += travel ** 2
         self._peak_accel = max(self._peak_accel, abs(z_B_ddot))
 
-        # 4. Speed reference and reward
+        # 4. Speed band upper limit and reward
         v_ref    = self._compute_v_ref(self._t)
-        v_target = compute_v_target(v_ref, cfg.target_speed_mode, self._curvature, cfg)
-        self._v_ref_last = v_target
+        v_upper  = compute_v_target(v_ref, cfg.target_speed_mode, self._curvature, cfg)
+        self._v_ref_last = v_upper
 
         reward, breakdown = compute_reward(
-            v_new, v_target,
+            v_new, v_upper,
             a_actual, self._filtered_a,
             jerk, self._filtered_jerk,
             self._prev_action, u,
             self._curvature, cfg,
         )
-        self._speed_err_sq   += (v_target - v_new) ** 2
+        self._speed_err_sq   += (v_upper - v_new) ** 2
         self._episode_reward += reward
 
         # 5. Update history

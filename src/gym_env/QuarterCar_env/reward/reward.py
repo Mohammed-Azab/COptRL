@@ -2,19 +2,19 @@
 Comfort-aware reward system for the QuarterCar speed-planning environment.
 
 Reward composition:
-    R = w_comfort_bonus * r_comfort_bonus  — positive per-step reward for smooth riding
-      + w_tracking      * r_tracking       — stay near the reference speed
-      + w_accel         * r_accel          — penalise harsh longitudinal acceleration (ISO 2631)
-      + w_jerk          * r_jerk           — penalise rapid acceleration changes
-      + w_action_smooth * r_action_smooth  — penalise discontinuous commands
-      + w_curve         * r_curve          — penalise lateral discomfort from road curvature
+    R = w_comfort_bonus * r_comfort_bonus  -> positive per-step reward for smooth riding
+      + w_tracking      * r_speed_band     -> stay within [v_min, v_upper]; free to plan inside
+      + w_accel         * r_accel          -> penalise harsh longitudinal acceleration (ISO 2631)
+      + w_jerk          * r_jerk           -> penalise rapid acceleration changes
+      + w_action_smooth * r_action_smooth  -> penalise discontinuous commands
+      + w_curve         * r_curve          -> penalise lateral discomfort from road curvature
+
 
 Step reward range with default config:
-    per-step  ∈ [-5.0,  +0.8]
-    episode   ∈ [-1350, +300]   (theoretical; practical bad-agent range ≈ -500 to 0)
+    per-step  ∈ [-4.8, +0.8]
+    episode   ∈ [-1300, +300]   (theoretical; practical bad-agent range ≈ -400 to 0)
 
-Episode max (+300) is achieved by: perfect tracking + zero accel + terminal bonus.
-References: [15][17][18][19] in refs.txt
+Episode max (+300): perfect comfort bonus every step + terminal bonus.
 """
 
 import numpy as np
@@ -22,52 +22,51 @@ import numpy as np
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
 
 
-def r_tracking(v: float, v_target: float, v_max: float) -> float:
-    """Velocity tracking penalty. Returns 0 when v == v_target, -1 when |error| == v_max."""
-    return -((v - v_target) / v_max) ** 2
+def r_speed_band(v: float, v_min: float, v_upper: float) -> float:
+    # Speed band reward for genuine speed planning.
+    # Returns 0 anywhere inside [v_min, v_upper] -> the agent is free to choose
+    # Returns -1 at v=0 (full stop).
+    if v < v_min:
+        return -((v_min - v) / v_min) ** 2
+    if v > v_upper:
+        return -((v - v_upper) / v_upper) ** 2
+    return 0.0
 
 
 def r_accel(a: float, a_comfort: float, accel_clip: float) -> float:
-    """Longitudinal comfort penalty. Returns -1 when |a| == a_comfort. (ISO 2631)."""
+    # Longitudinal comfort penalty. Returns -1 when |a| == a_comfort. (ISO 2631).
     a_c = float(np.clip(a, -accel_clip, accel_clip))
     return -(a_c / a_comfort) ** 2
 
 
 def r_jerk(jerk: float, j_max: float, jerk_clip: float) -> float:
-    """Jerk penalty. Returns -1 when |jerk| == j_max."""
+    # Jerk penalty. Returns -1 when |jerk| == j_max.
     j_c = float(np.clip(jerk, -jerk_clip, jerk_clip))
     return -(j_c / j_max) ** 2
 
 
 def r_action_smooth(u_t: float, u_prev: float) -> float:
-    """Action smoothness penalty. Penalises sudden command changes. Returns 0 when unchanged."""
+    # Action smoothness penalty. Penalises sudden command changes. Returns 0 when unchanged.
     return -(u_t - u_prev) ** 2
 
 
 def r_curve(v: float, curvature: float, a_lat_max: float, curvature_clip: float) -> float:
-    """Lateral comfort penalty from road curvature. a_lat = v^2 x |curvature|."""
+    # Lateral comfort penalty from road curvature. a_lat = v^2 x |curvature|.
     k = float(np.clip(curvature, -curvature_clip, curvature_clip))
     a_lat = (v ** 2) * abs(k)
     return -(a_lat / a_lat_max) ** 2
 
 
 def r_comfort_bonus(filtered_a: float, a_comfort: float) -> float:
-    """Positive per-step reward for riding inside the comfort envelope.
-
-    Returns +1 when filtered_a == 0 (perfectly smooth ride),
-    0 when |filtered_a| == a_comfort (at the comfort boundary),
-    and is clipped to 0 beyond — r_accel handles the penalty side.
-    """
+    # Positive per-step reward for riding inside the comfort envelope
     return max(0.0, 1.0 - (filtered_a / a_comfort) ** 2)
 
 
 def compute_v_target(v_ref: float, mode: str, curvature: float, cfg: RewardConfig) -> float:
-    """
-    Compute the reward tracking target speed.
+    # Compute the reward tracking target speed.
+    # In "curvature_aware" mode the curvature-safe speed limit is min'd with v_ref.
+    # In "constant" and "external" mode v_ref is returned unchanged.
 
-    In "curvature_aware" mode the curvature-safe speed limit is min'd with v_ref.
-    In "constant" and "external" mode v_ref is returned unchanged.
-    """
     if mode == "curvature_aware":
         curve_limit = float(np.sqrt(cfg.a_lat_comfort / (abs(curvature) + 1e-6)))
         curve_limit = float(np.clip(curve_limit, cfg.min_curve_speed, cfg.max_curve_speed))
@@ -84,7 +83,7 @@ def reward_bounds(cfg: RewardConfig, n_steps: int) -> dict:
       Uses reward_accel_clip / reward_jerk_clip (not the obs clips) for the bound.
 
     Episode bounds stack the terminal bonus/penalty on top of n_steps × per-step.
-    The episode_min is a hard mathematical limit — in practice the IIR filters
+    The episode_min is a hard mathematical limit -> in practice the IIR filters
     prevent simultaneous worst-case on every step, so real bad agents stay
     well above episode_min (typical random-agent range is roughly -500 to 0).
     """
@@ -96,7 +95,7 @@ def reward_bounds(cfg: RewardConfig, n_steps: int) -> dict:
         per_step_max += cfg.w_comfort_bonus * 1.0
 
     if cfg.enable_tracking:
-        # worst: |v - v_target| == v_max  → r_tracking = -1
+        # worst: v == 0 (full stop)  → r_speed_band = -(v_min/v_min)² = -1
         per_step_min += cfg.w_tracking * (-1.0)
 
     if cfg.enable_accel:
@@ -134,7 +133,7 @@ def compute_terminal_bonus(rms_accel: float, cfg: RewardConfig) -> float:
 
 def compute_reward(
     v: float,
-    v_target: float,
+    v_upper: float,
     a_actual: float,
     filtered_a: float,
     jerk: float,
@@ -145,18 +144,16 @@ def compute_reward(
     cfg: RewardConfig,
 ) -> tuple[float, dict]:
     """
-    Assemble total reward from individual terms.
-
     Returns (total_reward, breakdown) where breakdown is a flat dict with every
     term value plus "reward_total". Insert directly into the env's info dict.
 
     Args:
         v:             Current speed [m/s].
-        v_target:      Target speed for tracking term [m/s].
+        v_upper:       Upper band limit [m/s] -> v_max in constant mode, curve-adjusted otherwise.
         a_actual:      Raw finite-difference acceleration [m/s²].
-        filtered_a:    IIR-smoothed acceleration [m/s²] — used for r_accel.
+        filtered_a:    IIR-smoothed acceleration [m/s²] -> used for r_accel.
         jerk:          Raw finite-difference jerk [m/s³].
-        filtered_jerk: IIR-smoothed jerk [m/s³] — used for r_jerk.
+        filtered_jerk: IIR-smoothed jerk [m/s³] -> used for r_jerk.
         prev_action:   Previous normalised action in [-1, 1].
         action:        Current normalised action in [-1, 1].
         curvature:     Road curvature [m^-1].
@@ -166,7 +163,7 @@ def compute_reward(
     total = 0.0
 
     if cfg.enable_tracking:
-        rt = r_tracking(v, v_target, cfg.v_max)
+        rt = r_speed_band(v, cfg.min_curve_speed, v_upper)
         bd["r_tracking"] = rt
         total += cfg.w_tracking * rt
     else:
@@ -180,7 +177,7 @@ def compute_reward(
         bd["r_comfort_bonus"] = 0.0
 
     if cfg.enable_accel:
-        # reward_accel_clip is tighter than the obs clip — limits worst-case penalty
+        # reward_accel_clip is tighter than the obs clip -> limits worst-case penalty
         ra = r_accel(filtered_a, cfg.a_comfort, cfg.reward_accel_clip)
         bd["r_accel"] = ra
         total += cfg.w_accel * ra
@@ -188,7 +185,7 @@ def compute_reward(
         bd["r_accel"] = 0.0
 
     if cfg.enable_jerk:
-        # reward_jerk_clip is tighter than the obs clip — limits worst-case penalty
+        # reward_jerk_clip is tighter than the obs clip -> limits worst-case penalty
         rj = r_jerk(filtered_jerk, cfg.j_max, cfg.reward_jerk_clip)
         bd["r_jerk"] = rj
         total += cfg.w_jerk * rj
