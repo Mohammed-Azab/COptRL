@@ -18,7 +18,7 @@ from stable_baselines3 import PPO, SAC, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 import QuarterCar_env.envs  # noqa: F401
-from QuarterCar_env.reward.reward import reward_bounds
+from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.config.reward_params import load_reward_config
 from QuarterCar_env.config.env_params import EPISODE_STEPS, DT
 

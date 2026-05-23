@@ -40,7 +40,7 @@ from gymnasium import spaces
 from QuarterCar_env.core.ode_model import QuarterCarODE
 from road.road_generator import RoadGenerator
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
-from QuarterCar_env.reward.reward import compute_reward, compute_v_target, compute_terminal_bonus
+from QuarterCar_env.reward.reward import compute_reward, compute_terminal_bonus
 from QuarterCar_env.config.env_params import (
     DT, EPISODE_STEPS,
     TRUNC_TRAVEL, TRUNC_ZS, MAX_DISTANCE,
@@ -236,7 +236,12 @@ class QuarterCarEnv(gym.Env):
 
         # 4. Speed band upper limit and reward
         v_ref    = self._compute_v_ref(self._t)
-        v_upper  = compute_v_target(v_ref, cfg.target_speed_mode, self._curvature, cfg)
+
+        if cfg.target_speed_mode == "curvature_aware":
+            v_upper  = compute_v_target_curve(v_ref, self._curvature, cfg)
+        else:
+            v_upper = v_ref
+            
         self._v_ref_last = v_upper
 
         reward, breakdown = compute_reward(
@@ -427,3 +432,11 @@ class QuarterCarEnv(gym.Env):
                 return v_min + (v_max - v_min) * alpha
             return v_max
         return v_max
+    
+
+def compute_v_target_curve(v_ref: float, curvature: float, cfg: RewardConfig) -> float:
+    # In "curvature_aware" mode the curvature-safe speed limit is min'd with v_ref.
+    curve_limit = float(np.sqrt(cfg.a_lat_comfort / (abs(curvature) + 1e-6)))
+    curve_limit = float(np.clip(curve_limit, cfg.min_curve_speed, cfg.max_curve_speed))
+    return min(v_ref, curve_limit)
+
