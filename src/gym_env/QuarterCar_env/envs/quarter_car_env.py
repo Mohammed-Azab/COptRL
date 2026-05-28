@@ -46,7 +46,7 @@ from QuarterCar_env.config.env_params import (
     TRUNC_TRAVEL, TRUNC_ZS, MAX_DISTANCE,
     OBS_HIGH, OBS_LOW,
 )
-from QuarterCar_env.config.road_params import VEHICLE_SPEED, V_BRAKE_LEAD
+from QuarterCar_env.config.road_params import VEHICLE_SPEED
 from QuarterCar_env.config.render_params import (
     RENDER_Y_SCALE,
     RENDER_SHOW_TS,
@@ -79,7 +79,7 @@ class QuarterCarEnv(gym.Env):
         show_ts_speed: bool = RENDER_TS_SPEED,
         freeze_episode: bool = RENDER_FREEZE_EPISODE,
         start_at_equilibrium: bool = True,
-        ref_speed_profile: str = "constant",    # constant | slow_before_bump | custom
+        ref_speed_profile: str = "constant",    # constant | custom
         max_episode_steps: int = EPISODE_STEPS,
         max_distance: Optional[float] = MAX_DISTANCE,
     ):
@@ -134,7 +134,6 @@ class QuarterCarEnv(gym.Env):
         self._curvature      = 0.0
         self._last_preview_max = 0.0
 
-        self._bump_times     = self._road.get_bump_times()
         self._fig            = None
         self._ren_hist       = None
         self._episode_count  = 0
@@ -188,8 +187,6 @@ class QuarterCarEnv(gym.Env):
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
         self._last_preview_max = 0.0
-
-        self._bump_times = self._road.get_bump_times()
 
         self._freeze_render = False
 
@@ -407,31 +404,9 @@ class QuarterCarEnv(gym.Env):
     # ------------------------------------------------------------------
 
     def _compute_v_ref(self, t: float) -> float:
-        v_max = self._rcfg.v_max
-        v_min = self._rcfg.min_curve_speed
-        if self._ref_speed_profile == "constant":
-            return v_max
-        if self._ref_speed_profile == "custom":
+        if self._ref_speed_profile == "custom" and self._v_ref_fn is not None:
             return float(self._v_ref_fn(t))
-        if self._ref_speed_profile == "slow_before_bump":
-            times = self._bump_times
-            if not times:
-                return v_max
-            t_start, t_center, t_end = times
-            t_brake_start = t_center - V_BRAKE_LEAD
-            t_accel_end   = t_end    + V_BRAKE_LEAD
-            if t < t_brake_start:
-                return v_max
-            if t < t_center:
-                alpha = (t - t_brake_start) / V_BRAKE_LEAD
-                return v_max - (v_max - v_min) * alpha
-            if t <= t_end:
-                return v_min
-            if t <= t_accel_end:
-                alpha = (t - t_end) / V_BRAKE_LEAD
-                return v_min + (v_max - v_min) * alpha
-            return v_max
-        return v_max
+        return self._rcfg.v_max
     
 
 def compute_v_target_curve(v_ref: float, curvature: float, cfg: RewardConfig) -> float:

@@ -1,14 +1,52 @@
-# road profile
-defaults:
-  bump_height: 0.1
-  bump_length: 3.5
-  bump_x_start: 3.0
-  iso_gd0: 0.000256
-  iso_n0: 0.1
-  sweep_amplitude: 0.02
-  episode_duration: 5.0
+# Road profile configuration
 
-# default vehicle speed
-vehicle_speed: 5.0
+# Multi-bump layout
+dis_mode: constant        # constant | custom
 
-v_brake_lead: 2.0
+num_bumps: 4
+
+bump_sequence:
+  - 1
+  - 2
+  - 3
+  - 1
+
+# Gaps between consecutive bump-end and next bump-start.
+custom_dis:  # m
+  - 3
+  - 5
+  - 9
+# (num_bumps - 1) entries.
+
+# Uniform gap
+constant_dis: 5       # m
+
+# X-position where the first bump starts [m]
+bump_x_start: 8.0       # m
+
+# Bump type definitions 
+bump_types:
+  1:
+    bump_height: 0.15
+    bump_length: 5.5
+  2:
+    bump_height: 0.10
+    bump_length: 4.0
+  3:
+    bump_height: 0.20
+    bump_length: 6.0
+  4:
+    bump_height: 0.08
+    bump_length: 3.5
+  5:
+    bump_height: 0.25
+    bump_length: 7.0
+
+# ISO 8608 / sine-sweep params
+iso_gd0: 0.000256
+iso_n0: 0.1
+sweep_amplitude: 0.02
+episode_duration: 5.0
+
+# Default longitudinal speed 
+vehicle_speed: 6.0       # m/s
