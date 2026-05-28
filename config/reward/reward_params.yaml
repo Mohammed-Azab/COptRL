@@ -1,10 +1,9 @@
 weights:
-  w_comfort_bonus:  0.8   # per-step bonus for smooth riding
-  w_tracking:       0.8
-  w_accel:          0.5
+  w_comfort_bonus:  0.2   # per-step bonus for smooth riding
+  w_tracking:       0.5
+  w_accel:          0.8
   w_jerk:           0.3
   w_action_smooth:  0.2
-  w_curve:          0.0   # off until curvature is wired externally
 
 enable:
   comfort_bonus: true
@@ -12,19 +11,15 @@ enable:
   accel:         true
   jerk:          true
   action_smooth: true
-  curve:         true
 
 velocity:
-  v_max:              20.0   # m/s
-  a_max:               5.0   # m/s²
-  a_lat_comfort:       2.0   # m/s²  [comfort lateral acceleration (curvature_aware mode)]
-  min_curve_speed:     2.0   # m/s
-  max_curve_speed:    20.0   # m/s
-  target_speed_mode: "constant"   # [constant | curvature_aware | external]
+  v_max:  20.0   # m/s — target speed (upper bound of speed band)
+  a_max:   5.0   # m/s²
+  v_min:   2.0   # m/s — lower bound of speed band; penalises stopping
 
 comfort:
   a_comfort:           3.0   # m/s²  [comfortable longitudinal acceleration threshold]
-  accel_filter_alpha:  0.8   # IIR coefficient (0=no filter, close to 1=heavy smoothing)
+  accel_filter_alpha:  0.8   # IIR   coefficient (0=no filter, close to 1=heavy smoothing)
   accel_clip:         15.0   # m/s²  [observation clip — wide, for numerical safety]
   reward_accel_clip:   6.0   # m/s²  [reward-only clip = 2 × a_comfort; bounds worst-case penalty at -4]
 
@@ -34,24 +29,18 @@ jerk:
   jerk_clip:          50.0   # m/s³  [observation clip]
   reward_jerk_clip:   20.0   # m/s³  [reward-only clip = 2 × j_max; bounds worst-case penalty at -4]
 
-curvature:
-  a_lat_max:           4.0   # m/s²  [lateral acceleration normalization]
-  curvature_clip:      0.5   # m⁻¹
-
 terminal:
   terminal_bonus:    100.0
   terminal_penalty: -100.0
   a_limit:          10.0    # m/s²  [RMS threshold for terminal bonus]
 
 observations:
-  obs_enable_accel:             true
-  obs_enable_jerk:              true
-  obs_enable_prev_action:       true
-  obs_enable_curvature:         true
-  obs_enable_curvature_preview: false
+  obs_enable_accel:       true
+  obs_enable_jerk:        true
+  obs_enable_prev_action: true
 
-  # Road preview
+  # Road preview: 10 height samples evenly spaced over 'preview_distance' lookahead.
   obs_enable_preview:  true
-  preview_distance:    20.0   # m [lookahead horizon]
-  n_preview_points:    10     # number of evenly-spaced height samples
-  preview_height_clip: 0.15   # m — clip before normalising (matches road-height obs bound)
+  preview_distance:    20.0   # m
+  n_preview_points:    10
+  preview_height_clip: 0.15   # m — normalises to [-1, 1] (matches bump height scale)
