@@ -183,7 +183,7 @@ def _rk4_loop(x: np.ndarray, zq_pre: np.ndarray, dt: float, p: np.ndarray) -> np
 
 
 class QuarterCarODE:
-    """Fixed-step RK4 integrator for the 6-state quarter-car model."""
+    # ODE for the 6-state quarter-car model
 
     def __init__(self, params: dict = None):
         d = {**PHYSICS, **(params or {})}
@@ -196,12 +196,7 @@ class QuarterCarODE:
         z_q_fn: Callable[[float], float],
         t0: float,
     ) -> tuple[np.ndarray, float]:
-        """
-        Integrate one control step (DT = N_SUB × DT_SIM) with RK4.
-
-        Returns (new_state, z_B_ddot) where z_B_ddot is body acceleration
-        at end-of-step (used for reward computation).
-        """
+    
         dt = DT_SIM
         p  = self._pvec
 
@@ -219,10 +214,12 @@ class QuarterCarODE:
         zq_end   = float(z_q_fn(t0 + N_SUB * dt))
         z_B_ddot = float(_ode(xi, zq_end, p)[3])
 
+        # Returns (new_state, z_B_ddot) 
         return xi, z_B_ddot
 
     def reset(self, v0: float = VEHICLE_SPEED) -> np.ndarray:
-        """Zero deflections at static equilibrium; longitudinal velocity = v0."""
+
         x    = np.zeros(6, dtype=np.float64)
+        # Zero deflections at static equilibrium.
         x[4] = v0
         return x
