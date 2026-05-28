@@ -1,34 +1,18 @@
 """
-QuarterCarEnv: Gymnasium speed-planning environment (quarter-car, 6-state ODE).
+QuarterCarEnv: Gymnasium speed-control environment.
 
 Action (1,) float32 in [-1, 1]:
-  u = action[0]
-  a_cmd = u * a_max   [m/s^2]
+  a_cmd = action[0] * a_max   [m/s²]
   v_{t+1} = clip(v_t + a_cmd * DT, 0, v_max)
 
-State (internal, 6-D float64):
-  x[0] = zeta - z_W   tyre deflection              [m]
-  x[1] = dz_W         wheel vertical velocity       [m/s]
-  x[2] = z_W - z_B    suspension travel             [m]
-  x[3] = dz_B         body vertical velocity        [m/s]
-  x[4] = v            longitudinal speed            [m/s]
-  x[5] = z_B          body displacement from eq.    [m]
-
-Observation (float32) indices depend on obs_enable_* flags in RewardConfig:
-  0: z_B              body displacement             [m]
-  1: dz_B             body velocity                 [m/s]
-  2: z_W              wheel displacement            [m]
-  3: dz_W             wheel velocity                [m/s]
-  4: zeta             road height                   [m]
-  5: dzeta            road velocity                 [m/s]
-  6: z_W - z_B        suspension travel             [m]
-  7: zeta - z_W       tyre deflection               [m]
-  8: v / v_max        normalised speed              [-]
-  9: (v_target-v)/v_max  normalised speed error     [-]
-  10 (if obs_enable_accel):       filtered_a / a_comfort  [-]
-  11 (if obs_enable_jerk):        filtered_jerk / j_max   [-]
-  12 (if obs_enable_prev_action): prev_action             [-]
-  13 (if obs_enable_curvature):   curvature / curvature_clip  [-]
+Observation (16,) float32  — see envs/__init__.py for full index map.
+  [0]   ζ          road height at wheel now     [m]
+  [1]   ζ̇          road velocity at wheel now   [m/s]
+  [2]   v/v_max    normalised speed             [-]
+  [3]   filtered_a/a_comfort                   [-]   if obs_enable_accel
+  [4]   filtered_jerk/j_max                    [-]   if obs_enable_jerk
+  [5]   prev_action                            [-]   if obs_enable_prev_action
+  [6–15] preview[0–9]  road heights ahead      [-]   if obs_enable_preview
 """
 
 from typing import Callable, Optional
@@ -106,7 +90,7 @@ class QuarterCarEnv(gym.Env):
             high=np.array([ 1.0], dtype=np.float32),
         )
 
-        # observation space — shape determined once from toggle flags
+        # observation space
         obs_high, obs_low = self._build_obs_bounds()
         self.observation_space = spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
 
@@ -124,7 +108,6 @@ class QuarterCarEnv(gym.Env):
         self._step_count     = 0
         self._accel_sq       = 0.0
         self._peak_accel     = 0.0
-        self._travel_sq      = 0.0
         self._last_z_B_ddot  = 0.0
         self._episode_reward = 0.0
 
@@ -175,7 +158,6 @@ class QuarterCarEnv(gym.Env):
         self._step_count     = 0
         self._accel_sq       = 0.0
         self._peak_accel     = 0.0
-        self._travel_sq      = 0.0
         self._last_z_B_ddot  = 0.0
         self._episode_reward = 0.0
         self._episode_count += 1
@@ -233,10 +215,9 @@ class QuarterCarEnv(gym.Env):
         self._step_count   += 1
         self._last_z_B_ddot = z_B_ddot
 
-        travel = float(new_state[2])
+        travel = float(new_state[2])   # used for truncation check below
 
         self._accel_sq  += z_B_ddot ** 2
-        self._travel_sq += travel ** 2
         self._peak_accel = max(self._peak_accel, abs(z_B_ddot))
 
         # 4. Speed band upper limit and reward
@@ -309,9 +290,9 @@ class QuarterCarEnv(gym.Env):
         """Build observation space bounds once at __init__ from toggle flags."""
         cfg = self._rcfg
 
-        # Speed components always present (values are normalised by v_max)
-        extra_high = [1.0,  1.0]
-        extra_low  = [0.0, -1.0]
+        # Normalised current speed
+        extra_high = [1.0]
+        extra_low  = [0.0]
 
         if cfg.obs_enable_accel:
             bound = cfg.accel_clip / cfg.a_comfort
@@ -337,25 +318,16 @@ class QuarterCarEnv(gym.Env):
         return high, low
 
     def _obs(self) -> np.ndarray:
-        x        = self._state
         zeta     = self._road.get_height(self._t)
         zeta_dot = self._road.get_height_dot(self._t)
-        z_B = float(x[5])
-        z_W = z_B + float(x[2])
 
-        raw = np.array([
-            z_B, float(x[3]), z_W, float(x[1]),
-            zeta, zeta_dot, float(x[2]), float(x[0]),
-        ], dtype=np.float32)
+        raw = np.array([zeta, zeta_dot], dtype=np.float32)
         base_obs = np.clip(raw, OBS_LOW, OBS_HIGH)
 
         cfg = self._rcfg
-        v     = self._v
-        v_ref = self._v_ref_last
 
         extras = [
-            float(np.clip(v / cfg.v_max,           0.0,  1.0)),
-            float(np.clip((v_ref - v) / cfg.v_max, -1.0, 1.0)),
+            float(np.clip(self._v / cfg.v_max, 0.0, 1.0)),
         ]
         if cfg.obs_enable_accel:
             bound = cfg.accel_clip / cfg.a_comfort
@@ -389,7 +361,6 @@ class QuarterCarEnv(gym.Env):
             'episode_reward': float(self._episode_reward),
             'rms_accel':       float(rms),
             'peak_accel':      float(self._peak_accel),
-            'suspension_rms':  float(np.sqrt(self._travel_sq / n)),
             'comfort_score':   float(max(0.0, 1.0 - rms / self._rcfg.a_limit)),
             'road_profile':    self.road_profile,
             'step_count':      self._step_count,

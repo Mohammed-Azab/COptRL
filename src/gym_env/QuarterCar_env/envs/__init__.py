@@ -1,27 +1,72 @@
 """
-QuarterCarEnv: A Gymnasium environment for quarter-car.
+QuarterCarEnv: A Gymnasium environment for vehicle speed control over road bumps.
 
-State (internal, 6-D float64):
-  x[0] = ζ − z_W   tire deflection           [m]
-  x[1] = ż_W       wheel vertical velocity    [m/s]
-  x[2] = z_W − z_B suspension travel          [m]
-  x[3] = ż_B       body vertical velocity     [m/s]
-  x[4] = v         longitudinal velocity      [m/s]
-  x[5] = z_B       body displacement from static eq. [m]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ACTION  (1,) float32  ∈ [−1, 1]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  a_cmd = action[0] × a_max   [m/s²]
+  v_{t+1} = clip(v_t + a_cmd × DT, 0, v_max)
 
-Observation (8,) float32 - clipped to OBS_LOW/OBS_HIGH:
-  idx 0: z_B            body displacement      [m]
-  idx 1: ż_B            body velocity          [m/s]
-  idx 2: z_W = z_B + (z_W−z_B)  wheel displacement [m]
-  idx 3: ż_W            wheel velocity         [m/s]
-  idx 4: ζ              road height            [m]
-  idx 5: ζ̇             road velocity          [m/s]
-  idx 6: z_W − z_B      suspension travel      [m]
-  idx 7: ζ − z_W        tire deflection        [m]
+  +1 → maximum acceleration
+  −1 → maximum braking
 
-Action (1,) float32 ∈ [−1, 1]:
-  F_act = action[0] × F_MAX   (F_MAX = 10 000 N)
-  Positive → lifts body / presses wheel down; applied equal-and-opposite.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OBSERVATION  (16,) float32  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ── Road contact ───────
+  [0]   ζ            road height at wheel          [m]    clip ±0.15
+  [1]   ζ̇           road velocity at wheel         [m/s]  clip ±7.00
+
+  ── Speed ───────────
+  [2]   v / v_max    normalised longitudinal speed      ∈ [0, 1]
+
+  ── Comfort context ───
+  [3]   filtered_a / a_comfort   smoothed accel         if obs_enable_accel
+  [4]   filtered_jerk / j_max    smoothed jerk          if obs_enable_jerk
+  [5]   prev_action              last action sent       if obs_enable_prev_action
+
+  ── Road preview — what is coming ahead 
+  [6]   preview[0]   road height  2m ahead (normalised to ±1)
+  [7]   preview[1]   road height  4m ahead
+  [8]   preview[2]   road height  6m ahead
+  [9]   preview[3]   road height  8m ahead
+  [10]  preview[4]   road height 10m ahead
+  [11]  preview[5]   road height 12m ahead
+  [12]  preview[6]   road height 14m ahead
+  [13]  preview[7]   road height 16m ahead
+  [14]  preview[8]   road height 18m ahead
+  [15]  preview[9]   road height 20m ahead
+
+  Spacing = preview_distance / n_preview_points  (default: 20m / 10 = 2m).
+  Each value is clipped to ±preview_height_clip then divided by it → ±1.
+  Preview is always at the END of obs; indices [6:] shift if n_preview_points
+  or the comfort-context toggles change.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USING THE PREVIEW IN THE POLICY NETWORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use PreviewFeaturesExtractor (src/train/preview_extractor.py) to give the
+agent a spatial prior over the bump profile.  It splits the obs at the
+preview boundary, runs obs[0:6] through an MLP and obs[6:16] through a
+1D Conv, then merges both branches.
+
+  from train.preview_extractor import PreviewFeaturesExtractor
+
+  policy_kwargs = dict(
+      features_extractor_class=PreviewFeaturesExtractor,
+      features_extractor_kwargs=dict(
+          n_preview_points=10,   # must match reward_params.yaml
+          state_hidden_dim=64,
+          conv_channels=8,
+          features_dim=128,
+      ),
+      net_arch=[128, 128],
+  )
+  model = PPO("MlpPolicy", env, policy_kwargs=policy_kwargs)
+
+  WARNING: n_preview_points must equal reward_params.yaml n_preview_points.
+  A mismatch silently feeds wrong values into each branch.
 """
 
 from gymnasium.envs.registration import register
