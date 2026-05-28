@@ -35,11 +35,6 @@ def reward_bounds(cfg: RewardConfig, n_steps: int) -> dict:
         # worst: |u_t - u_prev| == 2  (full swing from -1 to +1) → r_smooth = -4
         per_step_min += cfg.w_action_smooth * (-4.0)
 
-    if cfg.enable_curve:
-        # worst: v == v_max, |curvature| == curvature_clip → a_lat = v_max² × curvature_clip
-        worst_a_lat = (cfg.v_max ** 2) * cfg.curvature_clip
-        per_step_min += cfg.w_curve * -(worst_a_lat / cfg.a_lat_max) ** 2
-
     return {
         "per_step_max": round(per_step_max, 6),
         "per_step_min": round(per_step_min, 6),

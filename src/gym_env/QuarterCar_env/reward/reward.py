@@ -1,11 +1,10 @@
 """
 Reward composition:
-    R = w_comfort_bonus * r_comfort_bonus  
-      + w_tracking      * r_speed_band     
-      + w_accel         * r_accel          
-      + w_jerk          * r_jerk           
-      + w_action_smooth * r_action_smooth  
-      + w_curve         * r_curve    
+    R = w_comfort_bonus * r_comfort_bonus
+      + w_tracking      * r_speed_band
+      + w_accel         * r_accel
+      + w_jerk          * r_jerk
+      + w_action_smooth * r_action_smooth
 """
 
 import numpy as np
@@ -34,12 +33,6 @@ def r_action_smooth(u_t: float, u_prev: float) -> float:
     # Action smoothness 
     return -(u_t - u_prev) ** 2
 
-def r_curve(v: float, curvature: float, a_lat_max: float, curvature_clip: float) -> float:
-    # Lateral penalty from road curvature.
-    k = float(np.clip(curvature, -curvature_clip, curvature_clip))
-    a_lat = (v ** 2) * abs(k)
-    return -(a_lat / a_lat_max) ** 2
-
 def r_comfort_bonus(filtered_a: float, a_comfort: float) -> float:
     # Positive per-step reward
     return max(0.0, 1.0 - (filtered_a / a_comfort) ** 2)
@@ -53,23 +46,19 @@ def compute_terminal_bonus(rms_accel: float, cfg: RewardConfig) -> float:
 def compute_reward(
     v: float,
     v_upper: float,
-    a_actual: float,
     filtered_a: float,
-    jerk: float,
     filtered_jerk: float,
     prev_action: float,
     action: float,
-    curvature: float,
     cfg: RewardConfig,
 ) -> tuple[float, dict]:
-    
+
     # Returns (total_reward, breakdown)
-    # bd -> Breakdown is a flat dict with every term value
     bd: dict = {}
     total = 0.0
 
     if cfg.enable_tracking:
-        rt = r_speed_band(v, cfg.min_curve_speed, v_upper)
+        rt = r_speed_band(v, cfg.v_min, v_upper)
         bd["r_tracking"] = rt
         total += cfg.w_tracking * rt
     else:
@@ -103,14 +92,8 @@ def compute_reward(
     else:
         bd["r_action_smooth"] = 0.0
 
-    if cfg.enable_curve:
-        rc = r_curve(v, curvature, cfg.a_lat_max, cfg.curvature_clip)
-        bd["r_curve"] = rc
-        total += cfg.w_curve * rc
-    else:
-        bd["r_curve"] = 0.0
+    bd["r_curve"] = 0.0
 
-    # guard against NaN/Inf from extreme inputs
     total = float(np.nan_to_num(total, nan=0.0, posinf=0.0, neginf=0.0))
     for key in bd:
         bd[key] = float(np.nan_to_num(bd[key], nan=0.0, posinf=0.0, neginf=0.0))

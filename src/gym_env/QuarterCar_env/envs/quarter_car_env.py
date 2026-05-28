@@ -122,7 +122,6 @@ class QuarterCarEnv(gym.Env):
         self._filtered_a     = 0.0
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
-        self._curvature      = 0.0
         self._last_preview_max = 0.0
 
         self._fig            = None
@@ -223,19 +222,16 @@ class QuarterCarEnv(gym.Env):
         # 4. Speed band upper limit and reward
         v_ref    = self._compute_v_ref(self._t)
 
-        if cfg.target_speed_mode == "curvature_aware":
-            v_upper  = compute_v_target_curve(v_ref, self._curvature, cfg)
-        else:
-            v_upper = v_ref
+        v_upper = v_ref
             
         self._v_ref_last = v_upper
 
         reward, breakdown = compute_reward(
             v_new, v_upper,
-            a_actual, self._filtered_a,
-            jerk, self._filtered_jerk,
+            self._filtered_a,
+            self._filtered_jerk,
             self._prev_action, u,
-            self._curvature, cfg,
+            cfg,
         )
         self._speed_err_sq   += (v_upper - v_new) ** 2
         self._episode_reward += reward
@@ -275,14 +271,6 @@ class QuarterCarEnv(gym.Env):
         close_env(self)
 
     # ------------------------------------------------------------------
-    # External curvature input
-    # ------------------------------------------------------------------
-
-    def set_curvature(self, k: float) -> None:
-        """Set road curvature [m^-1] from an external planner. Call before step()."""
-        self._curvature = float(k)
-
-    # ------------------------------------------------------------------
     # Observation / info helpers
     # ------------------------------------------------------------------
 
@@ -303,9 +291,6 @@ class QuarterCarEnv(gym.Env):
             extra_high.append(bound)
             extra_low.append(-bound)
         if cfg.obs_enable_prev_action:
-            extra_high.append(1.0)
-            extra_low.append(-1.0)
-        if cfg.obs_enable_curvature:
             extra_high.append(1.0)
             extra_low.append(-1.0)
         if cfg.obs_enable_preview:
@@ -337,9 +322,6 @@ class QuarterCarEnv(gym.Env):
             extras.append(float(np.clip(self._filtered_jerk / cfg.j_max, -bound, bound)))
         if cfg.obs_enable_prev_action:
             extras.append(float(self._prev_action))
-        if cfg.obs_enable_curvature:
-            k_norm = np.clip(self._curvature, -cfg.curvature_clip, cfg.curvature_clip) / cfg.curvature_clip
-            extras.append(float(k_norm))
         if cfg.obs_enable_preview:
             preview = self._road.get_spatial_preview(
                 s_pos=self._s_pos,
@@ -411,9 +393,4 @@ class QuarterCarEnv(gym.Env):
         return self._rcfg.v_max
     
 
-def compute_v_target_curve(v_ref: float, curvature: float, cfg: RewardConfig) -> float:
-    # In "curvature_aware" mode the curvature-safe speed limit is min'd with v_ref.
-    curve_limit = float(np.sqrt(cfg.a_lat_comfort / (abs(curvature) + 1e-6)))
-    curve_limit = float(np.clip(curve_limit, cfg.min_curve_speed, cfg.max_curve_speed))
-    return min(v_ref, curve_limit)
 
