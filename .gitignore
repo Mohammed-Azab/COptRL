@@ -229,3 +229,5 @@ install/
 build/
 dist/
 docs/
+*.md
+*.txt
