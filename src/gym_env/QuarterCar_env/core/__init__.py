@@ -1,9 +1,11 @@
 """
-    func reset():
-        Zero deflections at static equilibrium; longitudinal velocity = v0.
+QuarterCarODE -> internal physics engine for the speed-control environment.
 
-    func step():
-        -> Integrate one control step (DT = N_SUB × DT_SIM) with RK4.
-        -> Returns (new_state, z_B_ddot) 
-        -> z_B_ddot is body acceleration at end-of-step (used for reward computation).
+The ODE is a 6-state vehicle dynamics model driven by road input.
+It is a black-box from the agent's perspective: the agent never sees
+its internal state directly; only the road contact signals (ζ, ζ̇) and
+the body vertical acceleration (used for the comfort reward) are exposed.
+
+    reset(v0)  →  zero internal state at static equilibrium, speed = v0
+    step(x, z_q_fn, t0)  →  RK4 over N_SUB substeps, returns (new_state, body_accel)
 """
