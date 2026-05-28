@@ -43,7 +43,7 @@ from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
 from QuarterCar_env.reward.reward import compute_reward, compute_terminal_bonus
 from QuarterCar_env.config.env_params import (
     DT, EPISODE_STEPS,
-    TRUNC_TRAVEL, TRUNC_ZS, MAX_DISTANCE,
+    TRUNC_TRAVEL, TRUNC_ZS,
     OBS_HIGH, OBS_LOW,
 )
 from QuarterCar_env.config.road_params import VEHICLE_SPEED
@@ -69,9 +69,9 @@ class QuarterCarEnv(gym.Env):
         road_profile: str = 'iso_8608_class_c',
         vehicle_speed: float = VEHICLE_SPEED,
         render_mode: str = 'none',
-        physics_params: dict = None,
-        road_params: dict = None,
-        reward_config: RewardConfig = None,
+        physics_params: Optional[dict] = None,
+        road_params: Optional[dict] = None,
+        reward_config: Optional[RewardConfig] = None,
         render_y_scale: int = RENDER_Y_SCALE,
         show_time_series: bool = RENDER_SHOW_TS,
         show_ts_z: bool = RENDER_TS_Z,
@@ -81,7 +81,9 @@ class QuarterCarEnv(gym.Env):
         start_at_equilibrium: bool = True,
         ref_speed_profile: str = "constant",    # constant | custom
         max_episode_steps: int = EPISODE_STEPS,
-        max_distance: Optional[float] = MAX_DISTANCE,
+        max_distance: Optional[float] = None,
+        trunc_travel: float = TRUNC_TRAVEL,
+        trunc_zs: float = TRUNC_ZS,
     ):
         super().__init__()
         self.render_mode        = render_mode
@@ -90,7 +92,8 @@ class QuarterCarEnv(gym.Env):
         self._y_scale           = int(render_y_scale)
         self._ref_speed_profile = ref_speed_profile
         self._max_episode_steps = int(max_episode_steps)
-        self._max_distance      = max_distance
+        self._trunc_travel      = float(trunc_travel)
+        self._trunc_zs          = float(trunc_zs)
         self._start_at_eq       = bool(start_at_equilibrium)
 
         self._v_ref_fn: Optional[Callable[[float], float]] = (road_params or {}).get('v_ref_fn', None)
@@ -109,6 +112,11 @@ class QuarterCarEnv(gym.Env):
 
         self._ode  = QuarterCarODE(physics_params)
         self._road = RoadGenerator(road_profile, vehicle_speed, road_params)
+
+        self._max_distance = (
+            float(max_distance) if max_distance is not None
+            else self._compute_max_distance()
+        )
 
         # episode state
         self._state          = self._ode.reset(self._v0)
@@ -257,8 +265,8 @@ class QuarterCarEnv(gym.Env):
 
         # 6. Termination / truncation
         truncated = bool(
-            abs(travel) > TRUNC_TRAVEL
-            or abs(float(new_state[5])) > TRUNC_ZS
+            abs(travel) > self._trunc_travel
+            or abs(float(new_state[5])) > self._trunc_zs
             or (self._max_distance is not None and self._s_pos >= self._max_distance)
         )
         terminated = False
@@ -402,6 +410,29 @@ class QuarterCarEnv(gym.Env):
     # ------------------------------------------------------------------
     # Speed reference profile
     # ------------------------------------------------------------------
+
+    def _compute_max_distance(self) -> Optional[float]:
+        """
+        Auto-compute a sensible max_distance from road layout and episode budget.
+
+        For speed_bump: last bump end + 5 m buffer, capped by the maximum
+        distance reachable at v_max within the episode step budget.
+
+        For recorded: full track length.
+
+        For iso / sine_sweep / flat: None (step-based termination only).
+        """
+        episode_budget_m = self._max_episode_steps * DT * self._rcfg.v_max
+
+        if self.road_profile == 'speed_bump' and self._road._bumps:
+            x0, _, L = self._road._bumps[-1]
+            last_bump_end = x0 + L
+            return min(last_bump_end + 5.0, episode_budget_m)
+
+        if self.road_profile == 'recorded' and self._road._rec_arc is not None:
+            return min(float(self._road._rec_arc[-1]), episode_budget_m)
+
+        return None  # iso / sine_sweep / flat: no distance limit
 
     def _compute_v_ref(self, t: float) -> float:
         if self._ref_speed_profile == "custom" and self._v_ref_fn is not None:

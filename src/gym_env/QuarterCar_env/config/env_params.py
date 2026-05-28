@@ -64,7 +64,6 @@ EPISODE_STEPS = int(_cfg["EPISODE_STEPS"])
 
 TRUNC_TRAVEL = float(_cfg["TRUNC_TRAVEL"])
 TRUNC_ZS = float(_cfg["TRUNC_ZS"])
-MAX_DISTANCE = float(_cfg["MAX_DISTANCE"])
 
 OBS_HIGH = np.array(_cfg["OBS_HIGH"], dtype=np.float32)
 OBS_LOW = -OBS_HIGH
