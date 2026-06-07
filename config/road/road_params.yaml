@@ -48,5 +48,14 @@ iso_n0: 0.1
 sweep_amplitude: 0.02
 episode_duration: 5.0
 
-# Default longitudinal speed 
+# Default longitudinal speed
 vehicle_speed: 6.0       # m/s
+
+# Per-episode random road parameters (used when random_road_on_reset=True)
+random:
+  num_bumps_range:        [1, 5]
+  bump_height_range:      [0.05, 0.25]
+  bump_length_range:      [1.0, 7.0]
+  min_gap:                2.0
+  flat_start:             8.0
+  v_random_low_factor:    2.0   # v_random_low = v_min * this factor
