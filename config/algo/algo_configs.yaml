@@ -18,19 +18,6 @@ PPO:
       pi: [256, 256]
       vf: [256, 256]
 
-SAC:
-  policy: MlpPolicy
-  learning_rate: 3.0e-4
-  buffer_size: 200_000
-  batch_size: 256
-  tau: 0.005
-  gamma: 0.99
-  ent_coef: auto
-  train_freq: 1
-  gradient_steps: 1
-  policy_kwargs:
-    net_arch: [256, 256]
-
 TD3:
   policy: MlpPolicy
   learning_rate: 1.0e-3

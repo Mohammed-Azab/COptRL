@@ -139,7 +139,7 @@ def main() -> None:
     seed_everything(seed)
 
     rcfg = load_reward_config()
-    n_preview_points = rcfg.n_preview_points if rcfg.obs_enable_preview else 0
+    n_preview_points = rcfg.n_peaks * 3   # each peak: [dist, height, width]
 
     #  output directories
     exp_root = _ROOT / "models" / args.algo / args.road
@@ -215,7 +215,7 @@ def main() -> None:
     print(f"  n_envs     : {n_envs}")
     print(f"  normalize  : obs={normalize}, reward={norm_reward}")
     print(f"  render     : {args.render}")
-    print(f"  preview    : {n_preview_points} pts over {rcfg.preview_distance}m" if n_preview_points else "  preview    : disabled")
+    print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {n_preview_points} features over {rcfg.preview_distance}m")
     print(f"  output     : {model_dir}")
     print(f"{''*58}\n")
 

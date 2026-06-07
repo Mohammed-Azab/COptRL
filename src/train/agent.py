@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from stable_baselines3 import PPO, SAC, TD3
+from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.vec_env import VecEnv
 
@@ -15,12 +15,10 @@ from preview_extractor import PreviewFeaturesExtractor
 
 _REGISTRY: dict[str, type[BaseAlgorithm]] = {
     "PPO": PPO,
-    "SAC": SAC,
     "TD3": TD3,
 }
 
-# off-policy algorithms store transitions in a replay buffer
-_OFF_POLICY = {"SAC", "TD3"}
+_OFF_POLICY = {"TD3"}
 
 
 def supported_algos() -> list[str]:
