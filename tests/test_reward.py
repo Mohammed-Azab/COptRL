@@ -8,15 +8,21 @@ cfg = RewardConfig()
 
 
 def test_r_heave_zero_at_zero():
-    assert r_heave(0.0, cfg.a_B_comfort) == 0.0
+    assert r_heave(0.0, cfg.a_B_comfort, cfg.reward_heave_clip) == 0.0
 
 
 def test_r_heave_negative_for_nonzero():
-    assert r_heave(5.0, cfg.a_B_comfort) < 0.0
+    assert r_heave(0.5, cfg.a_B_comfort, cfg.reward_heave_clip) < 0.0
+
+
+def test_r_heave_capped_at_clip():
+    at_clip  = r_heave(cfg.reward_heave_clip,      cfg.a_B_comfort, cfg.reward_heave_clip)
+    above    = r_heave(cfg.reward_heave_clip * 10,  cfg.a_B_comfort, cfg.reward_heave_clip)
+    assert at_clip == above   # clip makes values beyond the boundary identical
 
 
 def test_r_wheel_negative_for_nonzero():
-    assert r_wheel(10.0, cfg.a_W_comfort) < 0.0
+    assert r_wheel(10.0, cfg.a_W_comfort, cfg.reward_wheel_clip) < 0.0
 
 
 def test_compute_reward_has_heave_key():

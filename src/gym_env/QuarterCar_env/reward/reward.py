@@ -25,12 +25,14 @@ def r_action_smooth(u_t: float, u_prev: float) -> float:
     return -(u_t - u_prev) ** 2
 
 
-def r_heave(z_B_ddot: float, a_B_comfort: float) -> float:
-    return -(z_B_ddot / a_B_comfort) ** 2
+def r_heave(z_B_ddot: float, a_B_comfort: float, heave_clip: float) -> float:
+    z_c = float(np.clip(z_B_ddot, -heave_clip, heave_clip))
+    return -(z_c / a_B_comfort) ** 2
 
 
-def r_wheel(z_W_ddot: float, a_W_comfort: float) -> float:
-    return -(z_W_ddot / a_W_comfort) ** 2
+def r_wheel(z_W_ddot: float, a_W_comfort: float, wheel_clip: float) -> float:
+    z_c = float(np.clip(z_W_ddot, -wheel_clip, wheel_clip))
+    return -(z_c / a_W_comfort) ** 2
 
 
 def compute_terminal_bonus(rms_accel: float, cfg: RewardConfig) -> float:
@@ -55,14 +57,14 @@ def compute_reward(
     core = 0.0
 
     if cfg.enable_heave:
-        rh = r_heave(z_B_ddot, cfg.a_B_comfort)
+        rh = r_heave(z_B_ddot, cfg.a_B_comfort, cfg.reward_heave_clip)
         bd["r_heave"] = rh
         core += cfg.w_heave * rh
     else:
         bd["r_heave"] = 0.0
 
     if cfg.enable_wheel:
-        rw = r_wheel(z_W_ddot, cfg.a_W_comfort)
+        rw = r_wheel(z_W_ddot, cfg.a_W_comfort, cfg.reward_wheel_clip)
         bd["r_wheel"] = rw
         core += cfg.w_wheel * rw
     else:

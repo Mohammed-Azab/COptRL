@@ -11,10 +11,12 @@ class RewardConfig:
     w_action_smooth: float = 0.2
 
     # weights — vertical
-    w_heave:     float = 1.0
-    w_wheel:     float = 0.5
-    a_B_comfort: float = 9.81
+    w_heave:     float = 0.8
+    w_wheel:     float = 0.3
+    a_B_comfort: float = 0.5
     a_W_comfort: float = 30.0
+    reward_heave_clip: float = 1.0
+    reward_wheel_clip: float = 60.0
     enable_heave:       bool = True
     enable_wheel:       bool = True
     enable_vel_scaling: bool = True
@@ -31,21 +33,21 @@ class RewardConfig:
     v_min: float = 2.0
 
     # longitudinal comfort / filter
-    a_comfort:          float = 3.0
+    a_comfort:          float = 2.0
     accel_filter_alpha: float = 0.8
-    accel_clip:         float = 15.0
-    reward_accel_clip:  float = 6.0
+    accel_clip:         float = 8.0
+    reward_accel_clip:  float = 4.0
 
     # jerk
-    j_max:             float = 10.0
+    j_max:             float = 2.0
     jerk_filter_alpha: float = 0.8
-    jerk_clip:         float = 50.0
-    reward_jerk_clip:  float = 20.0
+    jerk_clip:         float = 12.0
+    reward_jerk_clip:  float = 4.0
 
     # terminal
     terminal_bonus:   float = 100.0
     terminal_penalty: float = -100.0
-    a_limit:          float = 10.0
+    a_limit:          float = 1.0
 
     # observation — preview
     preview_distance:    float = 20.0
@@ -81,10 +83,12 @@ def load_reward_config() -> RewardConfig:
         w_jerk          = float(w.get("w_jerk",          0.3)),
         w_action_smooth = float(w.get("w_action_smooth", 0.2)),
 
-        w_heave          = float(vt.get("w_heave",          1.0)),
-        w_wheel          = float(vt.get("w_wheel",          0.5)),
-        a_B_comfort      = float(vt.get("a_B_comfort",      9.81)),
+        w_heave          = float(vt.get("w_heave",          0.8)),
+        w_wheel          = float(vt.get("w_wheel",          0.3)),
+        a_B_comfort      = float(vt.get("a_B_comfort",      0.5)),
         a_W_comfort      = float(vt.get("a_W_comfort",     30.0)),
+        reward_heave_clip = float(vt.get("reward_heave_clip", 1.0)),
+        reward_wheel_clip = float(vt.get("reward_wheel_clip", 60.0)),
         enable_heave         = bool(vt.get("enable_heave",         True)),
         enable_wheel         = bool(vt.get("enable_wheel",         True)),
         enable_vel_scaling   = bool(vt.get("enable_vel_scaling",   True)),
@@ -98,19 +102,19 @@ def load_reward_config() -> RewardConfig:
         a_max = float(v.get("a_max",  5.0)),
         v_min = float(v.get("v_min",  2.0)),
 
-        a_comfort          = float(c.get("a_comfort",          3.0)),
+        a_comfort          = float(c.get("a_comfort",          2.0)),
         accel_filter_alpha = float(c.get("accel_filter_alpha", 0.8)),
-        accel_clip         = float(c.get("accel_clip",        15.0)),
-        reward_accel_clip  = float(c.get("reward_accel_clip",  6.0)),
+        accel_clip         = float(c.get("accel_clip",         8.0)),
+        reward_accel_clip  = float(c.get("reward_accel_clip",  4.0)),
 
-        j_max             = float(j.get("j_max",            10.0)),
-        jerk_filter_alpha = float(j.get("jerk_filter_alpha", 0.8)),
-        jerk_clip         = float(j.get("jerk_clip",        50.0)),
-        reward_jerk_clip  = float(j.get("reward_jerk_clip", 20.0)),
+        j_max             = float(j.get("j_max",             2.0)),
+        jerk_filter_alpha = float(j.get("jerk_filter_alpha",  0.8)),
+        jerk_clip         = float(j.get("jerk_clip",         12.0)),
+        reward_jerk_clip  = float(j.get("reward_jerk_clip",   4.0)),
 
         terminal_bonus   = float(t.get("terminal_bonus",    100.0)),
         terminal_penalty = float(t.get("terminal_penalty", -100.0)),
-        a_limit          = float(t.get("a_limit",           10.0)),
+        a_limit          = float(t.get("a_limit",            1.0)),
 
         preview_distance    = float(o.get("preview_distance",    20.0)),
         h_clip              = float(o.get("h_clip",              0.15)),
