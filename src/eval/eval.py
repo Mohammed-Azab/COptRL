@@ -14,21 +14,23 @@ for _p in ("src/gym_env", "src", "src/train"):
     sys.path.insert(0, str(_ROOT / _p))
 
 import gymnasium as gym
-from stable_baselines3 import PPO, SAC, TD3
+from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 import QuarterCar_env.envs  # noqa: F401
+from QuarterCar_env.wrappers import PreviewWrapper
 from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.config.reward_params import load_reward_config
 from QuarterCar_env.config.env_params import EPISODE_STEPS, DT
 
 
-_ALGO_MAP: dict[str, type] = {"PPO": PPO, "SAC": SAC, "TD3": TD3}
-_VALID_ROADS = ["iso_8608_class_c", "speed_bump", "sine_sweep", "flat"]
+_ALGO_MAP: dict[str, type] = {"PPO": PPO, "TD3": TD3}
+_VALID_ROADS = ["speed_bump", "flat", "recorded"]
 _ENV_ID = "QuarterCar_env/QuarterCar"
 
 _REWARD_TERM_KEYS = [
-    "r_comfort_bonus",
+    "r_heave",
+    "r_wheel",
     "r_tracking",
     "r_accel",
     "r_jerk",
@@ -37,40 +39,31 @@ _REWARD_TERM_KEYS = [
 ]
 
 
-
-# CLI
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Deep single-agent evaluation on the quarter-car environment.",
+        description="Evaluate a trained agent on the COptRL environment.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--algo",
-                   choices=list(_ALGO_MAP), required=True,
-                   help="Algorithm used to train the model.")
+                   choices=list(_ALGO_MAP), required=True)
     p.add_argument("--model_path", required=True,
                    help="Path to trained model .zip file.")
     p.add_argument("--vecnorm-path", default=None,
                    help="Path to vecnormalize.pkl. Auto-inferred from model directory when omitted.")
     p.add_argument("--road",
-                   choices=_VALID_ROADS, default="speed_bump",
-                   help="Road profile to evaluate on.")
-    p.add_argument("--n-episodes", type=int, default=5,
-                   help="Number of episodes to run.")
-    p.add_argument("--seed", type=int, default=0,
-                   help="Base random seed (each episode gets seed + ep_index).")
-    p.add_argument("--render", action="store_true",
-                   help="Enable simulation rendering (requires a display).")
-    p.add_argument("--save-graphs", action="store_true",
+                   choices=_VALID_ROADS, default="speed_bump")
+    p.add_argument("--n-episodes", type=int, default=5)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--render", action="store_true")
+    p.add_argument("--save-plots", action="store_true",
                    help="Save matplotlib figures to results_dir.")
     p.add_argument("--results-dir", default=None,
-                   help="Output directory for JSON + figures (default: eval/results/eval_<timestamp>).")
+                   help="Output directory for JSON + figures.")
     p.add_argument("--no-deterministic", action="store_true",
                    help="Sample from policy stochastically instead of taking the mode.")
     return p.parse_args()
 
 
-
-# Model loading
 def _infer_vecnorm(model_path: Path) -> Path:
     for parent in [model_path.parent, *model_path.parents]:
         candidate = parent / "vecnormalize.pkl"
@@ -91,7 +84,7 @@ def load_model(algo: str, model_path: str, vecnorm_path: str | None):
     if not vp.exists():
         raise FileNotFoundError(f"VecNormalize file not found: {vp}")
 
-    cls = _ALGO_MAP[algo.upper()]
+    cls   = _ALGO_MAP[algo.upper()]
     model = cls.load(str(mp))
     return model, vp
 
@@ -102,9 +95,9 @@ def _record(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["speeds"].append(info.get("speed", 0.0))
     ep["v_refs"].append(info.get("v_ref", 0.0))
     ep["body_accels"].append(info.get("z_B_ddot", 0.0))
+    ep["wheel_accels"].append(info.get("z_W_ddot", 0.0))
     ep["rms_accel_running"].append(info.get("rms_accel", 0.0))
     ep["comfort_score_running"].append(info.get("comfort_score", 0.0))
-    ep["preview_max_height"].append(info.get("preview_max_height", 0.0))
     for k in _REWARD_TERM_KEYS:
         ep[k].append(info.get(k, 0.0))
 
@@ -118,21 +111,26 @@ def run_episode(
     deterministic: bool,
 ) -> dict:
     render_mode = "human" if render else "none"
-    env_fn = lambda r=road, rm=render_mode: gym.make(_ENV_ID, road_profile=r, render_mode=rm)
-    venv = DummyVecEnv([env_fn])
+
+    def _env_fn():
+        env = gym.make(_ENV_ID, road_profile=road, render_mode=render_mode,
+                       random_road_on_reset=False)
+        return PreviewWrapper(env)
+
+    venv = DummyVecEnv([_env_fn])
     venv = VecNormalize.load(str(vecnorm_path), venv)
     venv.training    = False
     venv.norm_reward = False
 
     reset_out = venv.reset()
-    obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out  # type: ignore[index]
+    obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out
 
     done = np.array([False])
     ep: dict = defaultdict(list)
 
     while not done[0]:
         action, _ = model.predict(obs, deterministic=deterministic)
-        step_result: tuple = venv.step(action)  # type: ignore[assignment]
+        step_result = venv.step(action)
         obs    = step_result[0]
         reward = step_result[1]
         if len(step_result) == 5:
@@ -147,8 +145,6 @@ def run_episode(
     return dict(ep)
 
 
-
-# Per-episode metrics
 def episode_metrics(ep: dict) -> dict:
     rewards = np.asarray(ep["rewards"])
     accels  = np.asarray(ep["body_accels"])
@@ -186,7 +182,6 @@ def aggregate_episodes(all_metrics: list[dict]) -> dict:
             "max":  float(np.max(vals)),
         }
     return agg
-
 
 
 def print_episode_line(ep_i: int, n: int, m: dict) -> None:
@@ -239,9 +234,7 @@ def print_summary(agg: dict, bounds: dict, algo: str, road: str) -> None:
     print(f"  {sep}\n")
 
 
-
 def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | None) -> None:
-    """6-panel time-series for one episode: body accel, speed, running RMS, action, reward, breakdown."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -249,12 +242,12 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
 
     t = np.arange(len(ep["rewards"])) * DT
 
-    fig = plt.figure(figsize=(13, 14))
-    gs  = gridspec.GridSpec(6, 1, hspace=0.45)
-    axes = [fig.add_subplot(gs[i]) for i in range(6)]
-    ax_accel, ax_speed, ax_rms, ax_action, ax_reward, ax_breakdown = axes
+    fig = plt.figure(figsize=(13, 16))
+    gs  = gridspec.GridSpec(7, 1, hspace=0.45)
+    axes = [fig.add_subplot(gs[i]) for i in range(7)]
+    ax_accel, ax_wheel, ax_speed, ax_rms, ax_action, ax_reward, ax_breakdown = axes
 
-    # Body acceleration + comfort / discomfort bands
+    # Body acceleration
     ax_accel.plot(t, ep["body_accels"], color="#1565C0", lw=1.4, label="body accel z̈_B")
     ax_accel.axhspan( rcfg.a_comfort,  rcfg.a_limit,   alpha=0.06, color="orange")
     ax_accel.axhspan(-rcfg.a_limit,   -rcfg.a_comfort, alpha=0.06, color="orange")
@@ -267,6 +260,14 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
     ax_accel.set_ylabel("body accel [m/s²]", fontsize=9)
     ax_accel.legend(fontsize=7, loc="upper right", ncol=2)
 
+    # Wheel acceleration
+    ax_wheel.plot(t, ep["wheel_accels"], color="#00838F", lw=1.4, label="wheel accel z̈_W")
+    ax_wheel.axhline( rcfg.a_W_comfort, color="#26C6DA", ls="--", lw=1.2,
+                      label=f"comfort ±{rcfg.a_W_comfort} m/s²")
+    ax_wheel.axhline(-rcfg.a_W_comfort, color="#26C6DA", ls="--", lw=1.2)
+    ax_wheel.set_ylabel("wheel accel [m/s²]", fontsize=9)
+    ax_wheel.legend(fontsize=7, loc="upper right")
+
     # Speed vs reference
     ax_speed.fill_between(t, ep["speeds"], ep["v_refs"],
                           alpha=0.12, color="#1B5E20", label="tracking error")
@@ -275,7 +276,7 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
     ax_speed.set_ylabel("speed [m/s]", fontsize=9)
     ax_speed.legend(fontsize=7, loc="upper right")
 
-    # Running RMS accel (comfort trend)
+    # Running RMS accel
     ax_rms.plot(t, ep["rms_accel_running"], color="#6A1B9A", lw=1.4, label="running RMS accel")
     ax_rms.axhline(rcfg.a_comfort, color="#F57C00", ls="--", lw=1.2,
                    label=f"comfort ({rcfg.a_comfort} m/s²)")
@@ -299,9 +300,10 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
     ax_reward.set_ylabel("step reward", fontsize=9)
     ax_reward.legend(fontsize=7, loc="upper right", ncol=2)
 
-    # Per-term reward breakdown
+    # Per-term breakdown
     term_colors = {
-        "r_comfort_bonus": "#43A047",
+        "r_heave":         "#00897B",
+        "r_wheel":         "#26A69A",
         "r_tracking":      "#1E88E5",
         "r_accel":         "#E53935",
         "r_jerk":          "#FB8C00",
@@ -321,7 +323,7 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
         ax.grid(alpha=0.2)
         ax.spines[["top", "right"]].set_visible(False)
 
-    fig.suptitle(f"Episode {ep_i + 1} — Deep Inspection", fontsize=12, fontweight="bold")
+    fig.suptitle(f"Episode {ep_i + 1}", fontsize=12, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.97))
 
     if save_dir:
@@ -333,7 +335,6 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
 
 def plot_episode_comparison(all_metrics: list[dict], rcfg, bounds: dict,
                              save_dir: Path | None) -> None:
-    """2×2 bar chart comparing key metrics across all evaluated episodes."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -341,7 +342,7 @@ def plot_episode_comparison(all_metrics: list[dict], rcfg, bounds: dict,
     n = len(all_metrics)
     ep_labels = [f"ep{i+1}" for i in range(n)]
     x = np.arange(n)
-    colors = plt.cm.tab10(np.linspace(0, 0.9, n))  # type: ignore[attr-defined]
+    colors = plt.cm.tab10(np.linspace(0, 0.9, n))
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle("Per-Episode Metrics Comparison", fontsize=12, fontweight="bold")
@@ -360,18 +361,18 @@ def plot_episode_comparison(all_metrics: list[dict], rcfg, bounds: dict,
         ax.spines[["top", "right"]].set_visible(False)
 
     _bar(axes[0, 0],
-         [m["total_return"]   for m in all_metrics], "episode return",   "Episode Return",
+         [m["total_return"]  for m in all_metrics], "episode return", "Episode Return",
          [(bounds["episode_max"], f"max={bounds['episode_max']:.0f}", "green", "--"),
           (0, "zero", "gray", ":")])
     _bar(axes[0, 1],
-         [m["rms_accel"]      for m in all_metrics], "RMS accel [m/s²]", "RMS Body Acceleration",
+         [m["rms_accel"]     for m in all_metrics], "RMS accel [m/s²]", "RMS Body Acceleration",
          [(rcfg.a_comfort, f"comfort ({rcfg.a_comfort})", "#F57C00", "--"),
           (rcfg.a_limit,   f"limit ({rcfg.a_limit})",    "crimson",  "--")])
     _bar(axes[1, 0],
-         [m["comfort_score"]  for m in all_metrics], "comfort score [0-1]", "Comfort Score",
+         [m["comfort_score"] for m in all_metrics], "comfort score [0-1]", "Comfort Score",
          [(1.0, "perfect=1.0", "green", "--")])
     _bar(axes[1, 1],
-         [m["speed_rmse"]     for m in all_metrics], "speed RMSE [m/s]",   "Speed Tracking RMSE",
+         [m["speed_rmse"]    for m in all_metrics], "speed RMSE [m/s]", "Speed Tracking RMSE",
          [(0, "perfect=0", "green", ":")])
 
     fig.tight_layout()
@@ -383,7 +384,6 @@ def plot_episode_comparison(all_metrics: list[dict], rcfg, bounds: dict,
 
 
 def plot_reward_breakdown(all_metrics: list[dict], save_dir: Path | None) -> None:
-    """Stacked bar showing each term's total contribution per episode."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -392,9 +392,9 @@ def plot_reward_breakdown(all_metrics: list[dict], save_dir: Path | None) -> Non
     ep_labels = [f"ep{i+1}" for i in range(n)]
     x = np.arange(n)
 
-    terms = [k for k in _REWARD_TERM_KEYS
-             if any(m.get(f"total_{k}", 0) != 0 for m in all_metrics)]
-    colors = ["#43A047", "#1E88E5", "#E53935", "#FB8C00", "#8E24AA", "#00ACC1"]
+    terms  = [k for k in _REWARD_TERM_KEYS
+               if any(m.get(f"total_{k}", 0) != 0 for m in all_metrics)]
+    colors = ["#00897B", "#26A69A", "#1E88E5", "#E53935", "#FB8C00", "#8E24AA", "#00ACC1"]
 
     fig, ax = plt.subplots(figsize=(max(8, n * 1.2), 5))
     fig.suptitle("Reward Term Breakdown (total per episode)", fontsize=12, fontweight="bold")
@@ -403,10 +403,10 @@ def plot_reward_breakdown(all_metrics: list[dict], save_dir: Path | None) -> Non
     neg_bottom = np.zeros(n)
 
     for i, k in enumerate(terms):
-        vals      = np.array([m.get(f"total_{k}", 0.0) for m in all_metrics])
-        pos_vals  = np.where(vals >= 0, vals, 0)
-        neg_vals  = np.where(vals <  0, vals, 0)
-        color     = colors[i % len(colors)]
+        vals     = np.array([m.get(f"total_{k}", 0.0) for m in all_metrics])
+        pos_vals = np.where(vals >= 0, vals, 0)
+        neg_vals = np.where(vals <  0, vals, 0)
+        color    = colors[i % len(colors)]
         ax.bar(x, pos_vals, bottom=pos_bottom, label=k, color=color, alpha=0.82, edgecolor="white")
         ax.bar(x, neg_vals, bottom=neg_bottom,            color=color, alpha=0.82, edgecolor="white")
         pos_bottom += pos_vals
@@ -428,13 +428,10 @@ def plot_reward_breakdown(all_metrics: list[dict], save_dir: Path | None) -> Non
     plt.close(fig)
 
 
-
-# JSON export
-
 def save_json(agg: dict, all_metrics: list[dict], algo: str, road: str,
               model_path: str, save_dir: Path) -> None:
     save_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts       = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = save_dir / f"eval_{algo}_{road}_{ts}.json"
 
     export = {
@@ -452,7 +449,6 @@ def save_json(agg: dict, all_metrics: list[dict], algo: str, road: str,
     print(f"  JSON saved → {out_path}")
 
 
-
 def main() -> None:
     args = parse_args()
     deterministic = not args.no_deterministic
@@ -467,10 +463,10 @@ def main() -> None:
     )
 
     print(f"\n{'═'*60}")
-    print(f"  QUARTER-CAR EVAL")
+    print(f"  COptRL EVAL")
     print(f"  algo={args.algo}  road={args.road}  episodes={args.n_episodes}")
     print(f"  model: {args.model_path}")
-    print(f"  deterministic={deterministic}  render={args.render}")
+    print(f"  deterministic={deterministic}  render={args.render}  save_plots={args.save_plots}")
     print(f"{'═'*60}\n")
 
     model, vecnorm_path = load_model(args.algo, args.model_path, args.vecnorm_path)
@@ -491,7 +487,7 @@ def main() -> None:
         all_metrics.append(m)
         print_episode_line(ep_i, args.n_episodes, m)
 
-        if args.save_graphs:
+        if args.save_plots:
             save_dir.mkdir(parents=True, exist_ok=True)
             plot_timeseries(ep, ep_i, rcfg, bounds, save_dir)
 
@@ -501,13 +497,13 @@ def main() -> None:
     save_dir.mkdir(parents=True, exist_ok=True)
     save_json(agg, all_metrics, args.algo, args.road, args.model_path, save_dir)
 
-    if args.save_graphs:
+    if args.save_plots:
         print("\n  Generating summary figures ...")
         plot_episode_comparison(all_metrics, rcfg, bounds, save_dir)
         plot_reward_breakdown(all_metrics, save_dir)
-        print(f"  All figures saved to {save_dir}")
+        print(f"  All plots saved to {save_dir}")
     else:
-        print("  (pass --save-graphs to generate figures)")
+        print("  (pass --save-plots to generate figures)")
 
 
 if __name__ == "__main__":

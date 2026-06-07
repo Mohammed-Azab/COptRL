@@ -145,9 +145,7 @@ def main() -> None:
 
     seed_everything(seed)
 
-    rcfg = load_reward_config()
-    n_preview_points = rcfg.n_peaks * 3   # each peak: [dist, height, width]
-
+    rcfg           = load_reward_config()
     curriculum_cfg = load_curriculum_config(_CURRICULUM_PATH) if args.curriculum else None
 
     #  output directories
@@ -205,7 +203,6 @@ def main() -> None:
         tensorboard_log=str(tb_dir),
         seed=seed,
         resume=args.resume,
-        n_preview_points=n_preview_points,
     )
 
     callbacks = build_callbacks(
@@ -225,7 +222,7 @@ def main() -> None:
     print(f"  n_envs     : {n_envs}")
     print(f"  normalize  : obs={normalize}, reward={norm_reward}")
     print(f"  render     : {args.render}")
-    print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {n_preview_points} features over {rcfg.preview_distance}m")
+    print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
     print(f"  curriculum : {'on (' + str(len(curriculum_cfg['thresholds'])) + ' levels)' if curriculum_cfg else 'off'}")
     print(f"  output     : {model_dir}")
     print(f"{''*58}\n")
