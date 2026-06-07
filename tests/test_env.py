@@ -3,12 +3,14 @@ import sys
 sys.path.insert(0, "src/road")
 import gymnasium as gym
 import QuarterCar_env.envs  # noqa: registers the env
+from QuarterCar_env.wrappers import PreviewWrapper
 
 ENV_ID = "QuarterCar_env/QuarterCar"
 
 
 def _make(road="speed_bump", **kwargs):
-    return gym.make(ENV_ID, road_profile=road, **kwargs)
+    env = gym.make(ENV_ID, road_profile=road, **kwargs)
+    return PreviewWrapper(env)
 
 
 def test_obs_shape_speed_bump():
@@ -43,7 +45,7 @@ def test_obs_in_bounds():
 def test_preview_slots_non_negative():
     env = _make("speed_bump")
     obs, _ = env.reset(seed=3)
-    preview = obs[6:]
+    preview = obs[6:]   # base env gives 6 scalars; wrapper appends n_peaks*3
     assert np.all(preview >= 0.0), f"negative preview values: {preview}"
     env.close()
 

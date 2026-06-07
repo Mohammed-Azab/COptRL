@@ -6,8 +6,8 @@ import gymnasium as gym
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-import QuarterCar_env.envs  # noqa: F401 
-from QuarterCar_env.wrappers import EpisodeLogger
+import QuarterCar_env.envs  # noqa: F401
+from QuarterCar_env.wrappers import EpisodeLogger, PreviewWrapper
 
 ENV_ID = "QuarterCar_env/QuarterCar"
 
@@ -18,9 +18,10 @@ def _make_env(
     monitor_dir: str | None,
     env_kwargs: dict,
 ) -> Callable[[], gym.Env]:
-    
+
     def _init() -> gym.Env:
         env = gym.make(ENV_ID, road_profile=road, **env_kwargs)
+        env = PreviewWrapper(env)
         env = Monitor(env, monitor_dir)
         if monitor_dir:
             env = EpisodeLogger(env, log_dir=monitor_dir)
@@ -30,7 +31,7 @@ def _make_env(
         return env
     return _init
 
-# ?
+
 def make_vec_env(
     road: str,
     n_envs: int,
@@ -63,7 +64,7 @@ def make_vec_env(
     )
     return venv
 
-# ?
+
 def make_eval_vec_env(
     road: str,
     n_envs: int,
@@ -85,12 +86,11 @@ def make_eval_vec_env(
     eval_venv = VecNormalize(
         venv,
         norm_obs=True,
-        norm_reward=False,  # never normalise reward at eval
+        norm_reward=False,
         gamma=train_venv.gamma,
         clip_obs=train_venv.clip_obs,
     )
-    # copy running stats so eval sees the same scaling as training
     eval_venv.obs_rms  = train_venv.obs_rms
     eval_venv.ret_rms  = train_venv.ret_rms
-    eval_venv.training = False   # freeze stats during evaluation
+    eval_venv.training = False
     return eval_venv

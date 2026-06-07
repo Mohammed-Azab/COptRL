@@ -20,7 +20,6 @@ from typing import Callable, Optional
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-from scipy.signal import find_peaks
 
 from QuarterCar_env.core.ode_model import QuarterCarODE
 from road.road_generator import RoadGenerator
@@ -41,10 +40,6 @@ from QuarterCar_env.config.render_params import (
     RENDER_FREEZE_EPISODE,
 )
 from .render import render_env, close_env
-
-# number of evenly-spaced points sampled over the preview horizon for peak detection
-_PREVIEW_DENSE_N = 200
-
 
 class QuarterCarEnv(gym.Env):
     metadata = {
@@ -142,9 +137,6 @@ class QuarterCarEnv(gym.Env):
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
         self._last_preview_max = 0.0
-        self._filtered_preview = np.tile(
-            [1.0, 0.0, 0.0], self._rcfg.n_peaks
-        ).astype(np.float32)
 
         self._fig            = None
         self._ren_hist       = None
@@ -212,9 +204,6 @@ class QuarterCarEnv(gym.Env):
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
         self._last_preview_max = 0.0
-        self._filtered_preview = np.tile(
-            [1.0, 0.0, 0.0], self._rcfg.n_peaks
-        ).astype(np.float32)
 
         self._freeze_render = False
 
@@ -320,14 +309,11 @@ class QuarterCarEnv(gym.Env):
         cfg     = self._rcfg
         a_bound = cfg.accel_clip / cfg.a_comfort
         j_bound = cfg.jerk_clip  / cfg.j_max
-        n_prev  = cfg.n_peaks * 3
 
-        extra_high = np.array(
-            [1.0, a_bound, j_bound, 1.0] + [1.0] * n_prev, dtype=np.float32
-        )
-        extra_low = np.array(
-            [0.0, -a_bound, -j_bound, -1.0] + [0.0] * n_prev, dtype=np.float32
-        )
+        # base obs: [ζ, ζ̇, v/v_max, filtered_a, filtered_jerk, prev_action]
+        # PreviewWrapper appends the peak slots on top of this
+        extra_high = np.array([1.0, a_bound, j_bound, 1.0], dtype=np.float32)
+        extra_low  = np.array([0.0, -a_bound, -j_bound, -1.0], dtype=np.float32)
         high = np.concatenate([OBS_HIGH, extra_high])
         low  = np.concatenate([OBS_LOW,  extra_low])
         return high, low
@@ -350,58 +336,7 @@ class QuarterCarEnv(gym.Env):
             float(self._prev_action),
         ], dtype=np.float32)
 
-        preview = self._compute_peak_preview()
-
-        return np.concatenate([base_obs, scalars, preview])
-
-    def _compute_peak_preview(self) -> np.ndarray:
-        cfg = self._rcfg
-
-        heights = self._road.get_spatial_preview(
-            s_pos=self._s_pos,
-            t_current=self._t,
-            v_current=max(self._v, 0.5),
-            lookahead_m=cfg.preview_distance,
-            n_points=_PREVIEW_DENSE_N,
-        )
-
-        ds = cfg.preview_distance / _PREVIEW_DENSE_N
-        min_dist_samples = max(1, int(cfg.peak_distance_min_m / ds))
-
-        peaks, props = find_peaks(
-            heights,
-            height=cfg.peak_height_min,
-            distance=min_dist_samples,
-            width=0,
-        )
-
-        # default slot: bump sitting at the horizon with zero height and width
-        peak_arr = np.tile([1.0, 0.0, 0.0], cfg.n_peaks).astype(np.float32)
-
-        for i, pk in enumerate(peaks[: cfg.n_peaks]):
-            peak_arr[i * 3]     = float(pk * ds / cfg.preview_distance)
-            peak_arr[i * 3 + 1] = float(np.clip(heights[pk] / cfg.h_clip, 0.0, 1.0))
-            peak_arr[i * 3 + 2] = float(
-                np.clip(props["widths"][i] * ds / cfg.preview_distance, 0.0, 1.0)
-            )
-
-        if cfg.noise_active and self.np_random is not None:
-            rng = self.np_random
-            for i in range(cfg.n_peaks):
-                if peak_arr[i * 3] < 1.0:   # only real (detected) peaks
-                    scale = peak_arr[i * 3]
-                    peak_arr[i * 3]     += float(rng.normal(0, cfg.noise_distance_std)) * scale
-                    peak_arr[i * 3 + 1] += float(rng.normal(0, cfg.noise_height_std))   * scale
-                    peak_arr[i * 3 + 2] += float(rng.normal(0, cfg.noise_width_std))    * scale
-            peak_arr = np.clip(peak_arr, 0.0, 1.0)
-
-        alpha = DT / (cfg.pt1_tau + DT)
-        self._filtered_preview = (
-            self._filtered_preview + alpha * (peak_arr - self._filtered_preview)
-        )
-        self._last_preview_max = float(np.max(self._filtered_preview[1::3]))
-
-        return np.clip(self._filtered_preview, 0.0, 1.0)
+        return np.concatenate([base_obs, scalars])
 
     def _info(self, z_B_ddot: float) -> dict:
         n   = max(self._step_count, 1)
@@ -420,7 +355,6 @@ class QuarterCarEnv(gym.Env):
             'v_ref':           float(self._v_ref_last),
             'speed_error':       float(self._v_ref_last - self._v),
             'speed_error_rms':   float(np.sqrt(self._speed_err_sq / n)),
-            'preview_max_height': float(self._last_preview_max),
         }
 
     def get_comfort_metric(self) -> float:
