@@ -231,6 +231,7 @@ dist/
 docs/
 *.md
 !README.md
+!REPORT.md
 !config/README.md
 !config/reward/params_dict.txt
 *.txt
