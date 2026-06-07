@@ -1,16 +1,3 @@
-"""
-PreviewWrapper — appends peak-detected road preview to the observation.
-
-Mirrors the ba_azab PreviewWrapper pattern: detects up to n_peaks bumps in the
-lookahead window, encodes each as [dist/D, height/h_clip, width/D], applies
-Gaussian noise to detected peaks, then PT1-filters the result.
-
-The base env exposes its road state via unwrapped attributes:
-    _road, _s_pos, _t, _v
-
-The wrapper exposes `self.preview` (the last raw peak array, shape (n_peaks*3,))
-so that reward wrappers can query it via get_wrapper_attr("preview").
-"""
 from __future__ import annotations
 
 import numpy as np
@@ -21,18 +8,11 @@ from scipy.signal import find_peaks
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
 from QuarterCar_env.config.env_params import DT
 
-# dense spatial resolution for peak detection
-_DENSE_N = 200
+_DENSE_N = 200   # spatial samples for peak detection over the preview horizon
 
 
 class PreviewWrapper(gym.ObservationWrapper):
-    """
-    Appends [dist, height, width] × n_peaks to the base observation.
-
-    Args:
-        env:    wrapped QuarterCarEnv (or any env that exposes _road, _s_pos, _t, _v).
-        cfg:    RewardConfig — reads preview/noise/PT1 params. Loads from YAML if None.
-    """
+    # appends [dist, height, width] × n_peaks to the base observation
 
     def __init__(self, env: gym.Env, cfg: RewardConfig | None = None):
         super().__init__(env)
@@ -100,7 +80,7 @@ class PreviewWrapper(gym.ObservationWrapper):
                 np.clip(props["widths"][i] * ds / cfg.preview_distance, 0.0, 1.0)
             )
 
-        # expose raw (pre-noise) peaks so reward wrappers can query them
+        # raw peaks (pre-noise) available via get_wrapper_attr("preview")
         self.preview = peak_arr.copy()
 
         if cfg.noise_active and self.np_random is not None:
