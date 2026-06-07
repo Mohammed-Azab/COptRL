@@ -21,10 +21,19 @@ build-gym-env:
 install-dashboard:
     {{pip}} install optuna-dashboard
 
-# Train PPO -> use --c for curriculum -> just train speed_bump --c --n-envs 4
+# train PPO — road defaults to speed_bump
+# usage:  just train                           (speed_bump, no curriculum)
+#         just train speed_bump --c            (explicit road + curriculum shorthand)
+#         just train --curriculum              (flags only → road defaults to speed_bump)
+#         just train speed_bump --c --n-envs 4
 train road="speed_bump" *args="":
-    PYTHONPATH=src {{venv}} src/train/train.py --algo PPO --road {{road}} \
-        $(echo "{{args}}" | sed 's/--c\b/--curriculum/g')
+    #!/usr/bin/env bash
+    r="{{road}}"
+    extra="{{args}}"
+    # if the "road" slot received a flag (user skipped road name), fall back to default
+    if [[ "$r" == --* ]]; then extra="$r $extra"; r="speed_bump"; fi
+    extra=$(echo "$extra" | sed 's/--c\b/--curriculum/g')
+    PYTHONPATH=src {{venv}} src/train/train.py --algo PPO --road "$r" $extra
 
 # Run dummy agent
 dummy *args="":
