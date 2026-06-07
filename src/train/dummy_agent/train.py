@@ -47,9 +47,9 @@ def run_episodes(road: str, n_episodes: int, render: bool) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Constant-speed dummy agent")
     parser.add_argument(
-                        "--road", 
+                        "--road",
                         default="speed_bump",
-                        choices=["speed_bump", "iso_8608_class_c", "sine_sweep", "flat"])
+                        choices=["speed_bump", "flat", "recorded"])
     parser.add_argument(
                         "--episodes",
                         type=int,

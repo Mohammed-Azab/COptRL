@@ -126,11 +126,30 @@ def main() -> None:
     print(f"  curriculum  : {'on' if use_curriculum else 'off'}")
     print(f"  seed        : {seed}\n")
 
+    best_so_far: float | None = None
+
+    def _on_trial_end(study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
+        nonlocal best_so_far
+        if trial.value is None:
+            return
+        completed = len([t for t in study.trials if t.value is not None])
+        is_best   = best_so_far is None or trial.value > best_so_far
+        if is_best:
+            best_so_far = trial.value
+            print(f"  trial {completed:>3d}/{args.trials}  return={trial.value:+.3f}  ★ new best"
+                  f"  lr={trial.params.get('learning_rate', '?'):.1e}"
+                  f"  n_steps={trial.params.get('n_steps', '?')}"
+                  f"  clip={trial.params.get('clip_range', '?')}")
+        elif completed % 5 == 0:
+            print(f"  trial {completed:>3d}/{args.trials}  return={trial.value:+.3f}"
+                  f"  best={best_so_far:+.3f}")
+
     study.optimize(
         objective,
         n_trials=args.trials,
         n_jobs=args.n_jobs,
         show_progress_bar=True,
+        callbacks=[_on_trial_end],
     )
 
     print("\n  Best hyperparameters:")
