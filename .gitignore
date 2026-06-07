@@ -231,3 +231,4 @@ dist/
 docs/
 *.md
 *.txt
+tune.db
