@@ -7,6 +7,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 # resolve src tree 
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
@@ -128,6 +130,31 @@ def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
     }
 
 
+def _best_model_step(best_dir: Path) -> int | None:
+    eval_file = best_dir / "evaluations.npz"
+    if not eval_file.exists():
+        return None
+
+    with np.load(eval_file) as data:
+        if "timesteps" not in data or "results" not in data:
+            return None
+
+        timesteps = np.asarray(data["timesteps"]).reshape(-1)
+        results = np.asarray(data["results"])
+
+    if timesteps.size == 0 or results.size == 0:
+        return None
+
+    mean_rewards = results.mean(axis=1)
+    if mean_rewards.size == 0:
+        return None
+
+    best_so_far = np.maximum.accumulate(mean_rewards)
+    improved = np.r_[True, best_so_far[1:] > best_so_far[:-1]]
+    last_best_idx = int(np.where(improved)[0][-1])
+    return int(timesteps[last_best_idx])
+
+
 def main() -> None:
     args = parse_args()
 
@@ -166,6 +193,7 @@ def main() -> None:
     model_dir = exp_root / run_tag
     tb_dir    = _ROOT / "logs" / "tensorboard" / run_tag
     mon_dir   = _ROOT / "logs" / "monitor" / run_tag
+    best_path = model_dir / "best" / "best_model"
     model_dir.mkdir(parents=True, exist_ok=True)
     tb_dir.mkdir(parents=True, exist_ok=True)
     mon_dir.mkdir(parents=True, exist_ok=True)
@@ -241,7 +269,13 @@ def main() -> None:
         train_venv.close()
         eval_venv.close()
 
-    print(f"\nModel    → {final_path}.zip")
+    print(f"\nFinal Model    → {final_path}.zip")
+    print(f"\nBest Model     → {best_path}.zip")
+    best_step = _best_model_step(model_dir / "best")
+    if best_step is not None:
+        print(f"Best Step      → {best_step:,}")
+    else:
+        print("Best Step      → unknown (no eval history found)")
     print(f"VecNorm  → {model_dir / 'vecnormalize.pkl'}")
     print(f"TB logs  → tensorboard --logdir {tb_dir}")
 
