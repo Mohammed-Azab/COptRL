@@ -195,8 +195,8 @@ class QuarterCarODE:
         x: np.ndarray,
         z_q_fn: Callable[[float], float],
         t0: float,
-    ) -> tuple[np.ndarray, float]:
-    
+    ) -> tuple[np.ndarray, float, float]:
+
         dt = DT_SIM
         p  = self._pvec
 
@@ -210,12 +210,12 @@ class QuarterCarODE:
 
         xi = _rk4_loop(x, zq_pre, dt, p)
 
-        # body acceleration at the terminal state for the reward signal
         zq_end   = float(z_q_fn(t0 + N_SUB * dt))
-        z_B_ddot = float(_ode(xi, zq_end, p)[3])
+        dx_end   = _ode(xi, zq_end, p)
+        z_B_ddot = float(dx_end[3])
+        z_W_ddot = float(dx_end[1])
 
-        # Returns (new_state, z_B_ddot) 
-        return xi, z_B_ddot
+        return xi, z_B_ddot, z_W_ddot
 
     def reset(self, v0: float = VEHICLE_SPEED) -> np.ndarray:
 

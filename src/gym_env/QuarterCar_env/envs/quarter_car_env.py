@@ -109,6 +109,7 @@ class QuarterCarEnv(gym.Env):
         self._accel_sq       = 0.0
         self._peak_accel     = 0.0
         self._last_z_B_ddot  = 0.0
+        self._last_z_W_ddot  = 0.0
         self._episode_reward = 0.0
 
         # speed state
@@ -158,6 +159,7 @@ class QuarterCarEnv(gym.Env):
         self._accel_sq       = 0.0
         self._peak_accel     = 0.0
         self._last_z_B_ddot  = 0.0
+        self._last_z_W_ddot  = 0.0
         self._episode_reward = 0.0
         self._episode_count += 1
 
@@ -206,13 +208,14 @@ class QuarterCarEnv(gym.Env):
         self._filtered_jerk = alpha_j * self._filtered_jerk + (1.0 - alpha_j) * j_clipped
 
         # 3. Integrate ODE one control step
-        new_state, z_B_ddot = self._ode.step(
+        new_state, z_B_ddot, z_W_ddot = self._ode.step(
             self._state, self._road.get_height_dot, self._t
         )
         self._state         = new_state
         self._t            += DT
         self._step_count   += 1
         self._last_z_B_ddot = z_B_ddot
+        self._last_z_W_ddot = z_W_ddot
 
         travel = float(new_state[2])   # used for truncation check below
 
