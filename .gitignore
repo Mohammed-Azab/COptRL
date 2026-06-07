@@ -232,6 +232,7 @@ docs/
 *.md
 !README.md
 !REPORT.md
+!TRIAL_ERROR.md
 !config/README.md
 !config/reward/params_dict.txt
 *.txt
