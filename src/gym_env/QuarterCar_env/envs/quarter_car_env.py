@@ -20,6 +20,7 @@ from typing import Callable, Optional
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
+from scipy.signal import find_peaks
 
 from QuarterCar_env.core.ode_model import QuarterCarODE
 from road.road_generator import RoadGenerator
@@ -40,6 +41,9 @@ from QuarterCar_env.config.render_params import (
     RENDER_FREEZE_EPISODE,
 )
 from .render import render_env, close_env
+
+# number of evenly-spaced points sampled over the preview horizon for peak detection
+_PREVIEW_DENSE_N = 200
 
 
 class QuarterCarEnv(gym.Env):
@@ -68,11 +72,13 @@ class QuarterCarEnv(gym.Env):
         max_distance: Optional[float] = None,
         trunc_travel: float = TRUNC_TRAVEL,
         trunc_zs: float = TRUNC_ZS,
+        random_road_on_reset: bool = True,
     ):
         super().__init__()
         self.render_mode        = render_mode
         self.road_profile       = road_profile
         self._v0                = float(vehicle_speed)
+        self._random_road_on_reset = bool(random_road_on_reset)
         self._y_scale           = int(render_y_scale)
         self._ref_speed_profile = ref_speed_profile
         self._max_episode_steps = int(max_episode_steps)
@@ -118,12 +124,27 @@ class QuarterCarEnv(gym.Env):
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
+        # random road config — read once, forwarded to from_random each reset
+        from QuarterCar_env.config.config_manager import _load_yaml
+        _rd_cfg = _load_yaml("road_params.yaml").get("random", {})
+        self._random_road_kwargs = {
+            "num_bumps_range":   tuple(_rd_cfg.get("num_bumps_range",   [1, 5])),
+            "bump_height_range": tuple(_rd_cfg.get("bump_height_range", [0.05, 0.25])),
+            "bump_length_range": tuple(_rd_cfg.get("bump_length_range", [1.0, 7.0])),
+            "min_gap":           float(_rd_cfg.get("min_gap",           2.0)),
+            "flat_start":        float(_rd_cfg.get("flat_start",        8.0)),
+        }
+        self._v_random_low = self._rcfg.v_min * float(_rd_cfg.get("v_random_low_factor", 2.0))
+
         # filter state — cleared in reset()
         self._prev_a         = 0.0
         self._filtered_a     = 0.0
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
         self._last_preview_max = 0.0
+        self._filtered_preview = np.tile(
+            [1.0, 0.0, 0.0], self._rcfg.n_peaks
+        ).astype(np.float32)
 
         self._fig            = None
         self._ren_hist       = None
@@ -144,11 +165,25 @@ class QuarterCarEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         rng = self.np_random
+        cfg = self._rcfg
+        opts = options or {}
 
-        self._road.reset(seed=int(rng.integers(0, 2**31)))
-        self._road.set_speed(self._v0)
+        randomize       = opts.get("randomize_road",  self._random_road_on_reset)
+        randomize_speed = opts.get("randomize_speed", True)
 
-        x = self._ode.reset(self._v0)
+        if self.road_profile == 'speed_bump' and randomize:
+            v = float(rng.uniform(self._v_random_low, cfg.v_max)) if randomize_speed else self._v0
+            self._road = RoadGenerator.from_random(
+                rng, vehicle_speed=v, **self._random_road_kwargs
+            )
+            self._v = self._road.speed
+        else:
+            self._road.reset(seed=int(rng.integers(0, 2**31)))
+            self._road.set_speed(self._v0)
+            self._v = self._v0
+
+        v_init = self._v   # set by road branch above; use it to seed ODE speed slot
+        x = self._ode.reset(v_init)
         if not self._start_at_eq:
             x[0:4] += rng.normal(0.0, 0.005, size=4)
             x[5]   += rng.normal(0.0, 0.001)
@@ -167,7 +202,6 @@ class QuarterCarEnv(gym.Env):
             close_env(self)
         self._ren_hist = None
 
-        self._v              = self._v0
         self._v_ref_last     = self._rcfg.v_max
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
@@ -178,6 +212,9 @@ class QuarterCarEnv(gym.Env):
         self._filtered_jerk  = 0.0
         self._prev_action    = 0.0
         self._last_preview_max = 0.0
+        self._filtered_preview = np.tile(
+            [1.0, 0.0, 0.0], self._rcfg.n_peaks
+        ).astype(np.float32)
 
         self._freeze_render = False
 
@@ -231,6 +268,8 @@ class QuarterCarEnv(gym.Env):
 
         reward, breakdown = compute_reward(
             v_new, v_upper,
+            self._last_z_B_ddot,
+            self._last_z_W_ddot,
             self._filtered_a,
             self._filtered_jerk,
             self._prev_action, u,
@@ -278,66 +317,91 @@ class QuarterCarEnv(gym.Env):
     # ------------------------------------------------------------------
 
     def _build_obs_bounds(self):
-        """Build observation space bounds once at __init__ from toggle flags."""
-        cfg = self._rcfg
+        cfg     = self._rcfg
+        a_bound = cfg.accel_clip / cfg.a_comfort
+        j_bound = cfg.jerk_clip  / cfg.j_max
+        n_prev  = cfg.n_peaks * 3
 
-        # Normalised current speed
-        extra_high = [1.0]
-        extra_low  = [0.0]
-
-        if cfg.obs_enable_accel:
-            bound = cfg.accel_clip / cfg.a_comfort
-            extra_high.append(bound)
-            extra_low.append(-bound)
-        if cfg.obs_enable_jerk:
-            bound = cfg.jerk_clip / cfg.j_max
-            extra_high.append(bound)
-            extra_low.append(-bound)
-        if cfg.obs_enable_prev_action:
-            extra_high.append(1.0)
-            extra_low.append(-1.0)
-        if cfg.obs_enable_preview:
-            # n_preview_points normalised heights, each in [-1, 1]
-            extra_high.extend([1.0] * cfg.n_preview_points)
-            extra_low.extend([-1.0] * cfg.n_preview_points)
-
-        high = np.concatenate([OBS_HIGH, extra_high]).astype(np.float32)
-        low  = np.concatenate([OBS_LOW,  extra_low ]).astype(np.float32)
+        extra_high = np.array(
+            [1.0, a_bound, j_bound, 1.0] + [1.0] * n_prev, dtype=np.float32
+        )
+        extra_low = np.array(
+            [0.0, -a_bound, -j_bound, -1.0] + [0.0] * n_prev, dtype=np.float32
+        )
+        high = np.concatenate([OBS_HIGH, extra_high])
+        low  = np.concatenate([OBS_LOW,  extra_low])
         return high, low
 
     def _obs(self) -> np.ndarray:
-        zeta     = self._road.get_height(self._t)
-        zeta_dot = self._road.get_height_dot(self._t)
-
-        raw = np.array([zeta, zeta_dot], dtype=np.float32)
-        base_obs = np.clip(raw, OBS_LOW, OBS_HIGH)
-
         cfg = self._rcfg
 
-        extras = [
-            float(np.clip(self._v / cfg.v_max, 0.0, 1.0)),
-        ]
-        if cfg.obs_enable_accel:
-            bound = cfg.accel_clip / cfg.a_comfort
-            extras.append(float(np.clip(self._filtered_a / cfg.a_comfort, -bound, bound)))
-        if cfg.obs_enable_jerk:
-            bound = cfg.jerk_clip / cfg.j_max
-            extras.append(float(np.clip(self._filtered_jerk / cfg.j_max, -bound, bound)))
-        if cfg.obs_enable_prev_action:
-            extras.append(float(self._prev_action))
-        if cfg.obs_enable_preview:
-            preview = self._road.get_spatial_preview(
-                s_pos=self._s_pos,
-                t_current=self._t,
-                v_current=self._v,
-                lookahead_m=cfg.preview_distance,
-                n_points=cfg.n_preview_points,
-            )
-            clip = cfg.preview_height_clip
-            self._last_preview_max = float(np.max(np.abs(preview))) if len(preview) > 0 else 0.0
-            extras.extend(float(np.clip(h / clip, -1.0, 1.0)) for h in preview)
+        zeta     = self._road.get_height(self._t)
+        zeta_dot = self._road.get_height_dot(self._t)
+        base_obs = np.clip(
+            np.array([zeta, zeta_dot], dtype=np.float32), OBS_LOW, OBS_HIGH
+        )
 
-        return np.concatenate([base_obs, extras]).astype(np.float32)
+        a_bound = cfg.accel_clip / cfg.a_comfort
+        j_bound = cfg.jerk_clip  / cfg.j_max
+        scalars = np.array([
+            float(np.clip(self._v / cfg.v_max, 0.0, 1.0)),
+            float(np.clip(self._filtered_a / cfg.a_comfort, -a_bound, a_bound)),
+            float(np.clip(self._filtered_jerk / cfg.j_max, -j_bound, j_bound)),
+            float(self._prev_action),
+        ], dtype=np.float32)
+
+        preview = self._compute_peak_preview()
+
+        return np.concatenate([base_obs, scalars, preview])
+
+    def _compute_peak_preview(self) -> np.ndarray:
+        cfg = self._rcfg
+
+        heights = self._road.get_spatial_preview(
+            s_pos=self._s_pos,
+            t_current=self._t,
+            v_current=max(self._v, 0.5),
+            lookahead_m=cfg.preview_distance,
+            n_points=_PREVIEW_DENSE_N,
+        )
+
+        ds = cfg.preview_distance / _PREVIEW_DENSE_N
+        min_dist_samples = max(1, int(cfg.peak_distance_min_m / ds))
+
+        peaks, props = find_peaks(
+            heights,
+            height=cfg.peak_height_min,
+            distance=min_dist_samples,
+            width=0,
+        )
+
+        # default slot: bump sitting at the horizon with zero height and width
+        peak_arr = np.tile([1.0, 0.0, 0.0], cfg.n_peaks).astype(np.float32)
+
+        for i, pk in enumerate(peaks[: cfg.n_peaks]):
+            peak_arr[i * 3]     = float(pk * ds / cfg.preview_distance)
+            peak_arr[i * 3 + 1] = float(np.clip(heights[pk] / cfg.h_clip, 0.0, 1.0))
+            peak_arr[i * 3 + 2] = float(
+                np.clip(props["widths"][i] * ds / cfg.preview_distance, 0.0, 1.0)
+            )
+
+        if cfg.noise_active and self.np_random is not None:
+            rng = self.np_random
+            for i in range(cfg.n_peaks):
+                if peak_arr[i * 3] < 1.0:   # only real (detected) peaks
+                    scale = peak_arr[i * 3]
+                    peak_arr[i * 3]     += float(rng.normal(0, cfg.noise_distance_std)) * scale
+                    peak_arr[i * 3 + 1] += float(rng.normal(0, cfg.noise_height_std))   * scale
+                    peak_arr[i * 3 + 2] += float(rng.normal(0, cfg.noise_width_std))    * scale
+            peak_arr = np.clip(peak_arr, 0.0, 1.0)
+
+        alpha = DT / (cfg.pt1_tau + DT)
+        self._filtered_preview = (
+            self._filtered_preview + alpha * (peak_arr - self._filtered_preview)
+        )
+        self._last_preview_max = float(np.max(self._filtered_preview[1::3]))
+
+        return np.clip(self._filtered_preview, 0.0, 1.0)
 
     def _info(self, z_B_ddot: float) -> dict:
         n   = max(self._step_count, 1)
@@ -351,6 +415,7 @@ class QuarterCarEnv(gym.Env):
             'step_count':      self._step_count,
             'episode_time':    self._t,
             'z_B_ddot':        float(z_B_ddot),
+            'z_W_ddot':        float(self._last_z_W_ddot),
             'speed':           float(self._v),
             'v_ref':           float(self._v_ref_last),
             'speed_error':       float(self._v_ref_last - self._v),
