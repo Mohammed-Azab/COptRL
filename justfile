@@ -21,16 +21,16 @@ build-gym-env:
 install-dashboard:
     {{pip}} install optuna-dashboard
 
-# train PPO — use --c for curriculum, e.g. just train speed_bump --c --n-envs 4
+# Train PPO -> use --c for curriculum -> just train speed_bump --c --n-envs 4
 train road="speed_bump" *args="":
     PYTHONPATH=src {{venv}} src/train/train.py --algo PPO --road {{road}} \
         $(echo "{{args}}" | sed 's/--c\b/--curriculum/g')
 
-# dummy constant-speed baseline
+# Run dummy agent
 dummy *args="":
     PYTHONPATH=src {{venv}} src/train/dummy_agent/train.py {{args}}
 
-# evaluate a trained model — e.g. just eval models/.../PPO_final.zip --save-plots
+# Evaluate a trained model -> just eval models/.../PPO_final.zip --save-plots
 eval model *args="":
     PYTHONPATH=src {{venv}} src/eval/eval.py --algo PPO --model_path {{model}} {{args}}
 
@@ -47,8 +47,9 @@ tune-db study="myPPO_study" *args="":
     PYTHONPATH=src:src/tune:src/train {{venv}} src/tune/tune.py \
         --storage sqlite:///tune.db --study-name {{study}} {{args}}
 
-# open Optuna dashboard (requires: just install-dashboard)
+# open Optuna dashboard — run just install-dashboard first if missing
 dashboard db="tune.db":
+    @test -f .venv/bin/optuna-dashboard || (echo "not installed — run: just install-dashboard" && exit 1)
     .venv/bin/optuna-dashboard sqlite:///{{db}}
 
 # TensorBoard for all runs

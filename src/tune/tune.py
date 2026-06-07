@@ -17,9 +17,10 @@ sys.path.insert(0, str(_ROOT / "src" / "tune"))
 
 from trial import Objective
 
-_TUNE_CONFIG_PATH = _ROOT / "config" / "algo" / "tune_config.yaml"
-_RESULTS_DIR      = _ROOT / "tune" / "results"
-_VALID_ROADS      = ["speed_bump", "flat", "recorded"]
+_TUNE_CONFIG_PATH  = _ROOT / "config" / "algo" / "tune_config.yaml"
+_ALGO_CONFIG_PATH  = _ROOT / "config" / "algo" / "algo_configs.yaml"
+_RESULTS_DIR       = _ROOT / "tune" / "results"
+_VALID_ROADS       = ["speed_bump", "flat", "recorded"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,21 +28,21 @@ def parse_args() -> argparse.Namespace:
         description="Optuna PPO hyperparameter search for COptRL.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--trials",       type=int, default=50)
-    p.add_argument("--timesteps",    type=int, default=None,
+    p.add_argument("--trials",        type=int, default=50)
+    p.add_argument("--timesteps",     type=int, default=None,
                    help="Env steps per trial. Defaults to tune_config.yaml.")
-    p.add_argument("--train-road",   default=None, choices=_VALID_ROADS)
-    p.add_argument("--eval-road",    default=None, choices=_VALID_ROADS)
-    p.add_argument("--seed",         type=int, default=None)
-    p.add_argument("--n-jobs",       type=int, default=1,
+    p.add_argument("--train-road",    default=None, choices=_VALID_ROADS)
+    p.add_argument("--eval-road",     default=None, choices=_VALID_ROADS)
+    p.add_argument("--seed",          type=int, default=None)
+    p.add_argument("--n-jobs",        type=int, default=1,
                    help="Parallel Optuna workers (requires --storage).")
-    p.add_argument("--study-name",   default=None,
+    p.add_argument("--study-name",    default=None,
                    help="Reuse an existing study by name.")
-    p.add_argument("--storage",      default=None,
+    p.add_argument("--storage",       default=None,
                    help="Optuna storage URL, e.g. sqlite:///tune.db")
     p.add_argument("--no-curriculum", action="store_true",
                    help="Disable curriculum wrapper during tuning trials.")
-    p.add_argument("--config",       default=str(_TUNE_CONFIG_PATH))
+    p.add_argument("--config",        default=str(_TUNE_CONFIG_PATH))
     return p.parse_args()
 
 
@@ -81,19 +82,52 @@ def save_results(study: optuna.Study, output_path: Path) -> None:
     }
     with open(output_path, "w") as fh:
         json.dump(payload, fh, indent=2, default=str)
-    print(f"\nResults saved → {output_path}")
+    print(f"Results (JSON) → {output_path}")
+
+
+class _InlineLists(yaml.Dumper):
+    # render Python lists as inline YAML sequences: [256, 256] not block style
+    pass
+
+_InlineLists.add_representer(
+    list,
+    lambda dumper, data: dumper.represent_sequence(
+        "tag:yaml.org,2002:seq", data, flow_style=True
+    ),
+)
+
+
+def save_best_yaml(study: optuna.Study, study_name: str) -> None:
+    """Write best params as a YAML file in the same format as algo_configs.yaml."""
+    with open(_ALGO_CONFIG_PATH) as fh:
+        base = yaml.safe_load(fh).get("PPO", {})
+
+    best = dict(study.best_params)
+    n_units = int(best.pop("n_units", 256))
+
+    config = {**base, **best}
+    config["policy_kwargs"] = {
+        "net_arch": {"pi": [n_units, n_units], "vf": [n_units, n_units]}
+    }
+
+    out_path = _RESULTS_DIR / f"{study_name}_best.yaml"
+    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w") as fh:
+        yaml.dump({"PPO": config}, fh, Dumper=_InlineLists,
+                  default_flow_style=False, sort_keys=False)
+    print(f"Best params (YAML) → {out_path}")
 
 
 def main() -> None:
     args     = parse_args()
     defaults = _load_defaults(args.config)
 
-    timesteps       = args.timesteps  or defaults.get("timesteps_per_trial", 100_000)
-    train_road      = args.train_road or defaults.get("train_road", "speed_bump")
-    eval_road       = args.eval_road  or defaults.get("eval_road",  "speed_bump")
-    seed            = args.seed       or defaults.get("seed", 0)
-    n_eval_ep       = defaults.get("n_eval_episodes", 5)
-    use_curriculum  = not args.no_curriculum and defaults.get("use_curriculum", True)
+    timesteps      = args.timesteps  if args.timesteps  is not None else defaults.get("timesteps_per_trial", 100_000)
+    train_road     = args.train_road or defaults.get("train_road", "speed_bump")
+    eval_road      = args.eval_road  or defaults.get("eval_road",  "speed_bump")
+    seed           = args.seed       if args.seed       is not None else defaults.get("seed", 0)
+    n_eval_ep      = defaults.get("n_eval_episodes", 5)
+    use_curriculum = not args.no_curriculum and defaults.get("use_curriculum", True)
 
     study_name   = args.study_name or "myPPO_study"
     results_path = _RESULTS_DIR / f"{study_name}.json"
@@ -161,8 +195,9 @@ def main() -> None:
         print("\n  Best hyperparameters:")
         for k, v in study.best_params.items():
             print(f"    {k:20s}: {v}")
-        print(f"    {'value':20s}: {study.best_value:.4f}")
+        print(f"    {'value':20s}: {study.best_value:.4f}\n")
         save_results(study, results_path)
+        save_best_yaml(study, study_name)
 
 
 if __name__ == "__main__":
