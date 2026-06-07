@@ -19,7 +19,7 @@ from trial import Objective
 
 _TUNE_CONFIG_PATH  = _ROOT / "config" / "algo" / "tune_config.yaml"
 _ALGO_CONFIG_PATH  = _ROOT / "config" / "algo" / "algo_configs.yaml"
-_RESULTS_DIR       = _ROOT / "tune" / "results"
+_TUNE_ROOT         = _ROOT / "tune"
 _VALID_ROADS       = ["speed_bump", "flat", "recorded"]
 
 
@@ -62,9 +62,7 @@ def _trial_to_dict(trial: optuna.trial.FrozenTrial) -> dict:
     }
 
 
-def save_results(study: optuna.Study, output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
+def save_results(study: optuna.Study, out_dir: Path) -> None:
     best = study.best_trial
     payload = {
         "study_name":         study.study_name,
@@ -80,9 +78,10 @@ def save_results(study: optuna.Study, output_path: Path) -> None:
         },
         "all_trials": [_trial_to_dict(t) for t in study.trials],
     }
-    with open(output_path, "w") as fh:
+    out_path = out_dir / "results.json"
+    with open(out_path, "w") as fh:
         json.dump(payload, fh, indent=2, default=str)
-    print(f"Results (JSON) → {output_path}")
+    print(f"Results (JSON)     → {out_path}")
 
 
 class _InlineLists(yaml.Dumper):
@@ -97,8 +96,7 @@ _InlineLists.add_representer(
 )
 
 
-def save_best_yaml(study: optuna.Study, study_name: str) -> None:
-    """Write best params as a YAML file in the same format as algo_configs.yaml."""
+def save_best_yaml(study: optuna.Study, out_dir: Path) -> None:
     with open(_ALGO_CONFIG_PATH) as fh:
         base = yaml.safe_load(fh).get("PPO", {})
 
@@ -110,8 +108,7 @@ def save_best_yaml(study: optuna.Study, study_name: str) -> None:
         "net_arch": {"pi": [n_units, n_units], "vf": [n_units, n_units]}
     }
 
-    out_path = _RESULTS_DIR / f"{study_name}_best.yaml"
-    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "best_params.yaml"
     with open(out_path, "w") as fh:
         yaml.dump({"PPO": config}, fh, Dumper=_InlineLists,
                   default_flow_style=False, sort_keys=False)
@@ -129,8 +126,16 @@ def main() -> None:
     n_eval_ep      = defaults.get("n_eval_episodes", 5)
     use_curriculum = not args.no_curriculum and defaults.get("use_curriculum", True)
 
-    study_name   = args.study_name or "myPPO_study"
-    results_path = _RESULTS_DIR / f"{study_name}.json"
+    study_name = args.study_name or "myPPO_study"
+
+    # auto-increment exp_n inside tune/<study_name>/<train_road>/
+    study_root = _TUNE_ROOT / study_name / train_road
+    study_root.mkdir(parents=True, exist_ok=True)
+    existing = [int(p.name.split("_")[1]) for p in study_root.iterdir()
+                if p.is_dir() and p.name.startswith("exp_") and p.name.split("_")[1].isdigit()]
+    exp_id  = (max(existing) + 1) if existing else 1
+    out_dir = study_root / f"exp_{exp_id}"
+    out_dir.mkdir()
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -153,6 +158,7 @@ def main() -> None:
 
     print(f"\n  COptRL — PPO Hyperparameter Search")
     print(f"  study       : {study_name}")
+    print(f"  output      : {out_dir}")
     print(f"  trials      : {args.trials}")
     print(f"  steps/trial : {timesteps:,}")
     print(f"  train road  : {train_road}  |  eval : {eval_road}")
@@ -196,8 +202,8 @@ def main() -> None:
         for k, v in study.best_params.items():
             print(f"    {k:20s}: {v}")
         print(f"    {'value':20s}: {study.best_value:.4f}\n")
-        save_results(study, results_path)
-        save_best_yaml(study, study_name)
+        save_results(study, out_dir)
+        save_best_yaml(study, out_dir)
 
 
 if __name__ == "__main__":

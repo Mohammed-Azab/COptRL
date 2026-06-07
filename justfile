@@ -2,7 +2,7 @@ set dotenv-load
 set shell := ["bash", "-c"]
 
 venv := ".venv/bin/python3"
-pip  := ".venv/bin/pip"
+pip  := ".venv/bin/pip3"
 
 default:
     @just --list
