@@ -164,9 +164,12 @@ class QuarterCarEnv(gym.Env):
         randomize_speed = opts.get("randomize_speed", True)
 
         if self.road_profile == 'speed_bump' and randomize:
-            v = float(rng.uniform(self._v_random_low, cfg.v_max)) if randomize_speed else self._v0
+            road_kwargs = opts.get("road_kwargs", self._random_road_kwargs)
+            v_low  = float(opts.get("v_random_low",  self._v_random_low))
+            v_high = float(opts.get("v_random_high", cfg.v_max))
+            v = float(rng.uniform(v_low, v_high)) if randomize_speed else self._v0
             self._road = RoadGenerator.from_random(
-                rng, vehicle_speed=v, **self._random_road_kwargs
+                rng, vehicle_speed=v, **road_kwargs
             )
             self._v = self._road.speed
         else:

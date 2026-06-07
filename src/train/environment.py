@@ -7,7 +7,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 import QuarterCar_env.envs  # noqa: F401
-from QuarterCar_env.wrappers import EpisodeLogger, PreviewWrapper
+from QuarterCar_env.wrappers import EpisodeLogger, PreviewWrapper, CurriculumWrapper, load_curriculum_config
 
 ENV_ID = "QuarterCar_env/QuarterCar"
 
@@ -17,11 +17,15 @@ def _make_env(
     seed: int,
     monitor_dir: str | None,
     env_kwargs: dict,
+    curriculum_cfg: dict | None = None,
+    n_envs: int = 1,
 ) -> Callable[[], gym.Env]:
 
     def _init() -> gym.Env:
         env = gym.make(ENV_ID, road_profile=road, **env_kwargs)
         env = PreviewWrapper(env)
+        if curriculum_cfg is not None and road == 'speed_bump':
+            env = CurriculumWrapper(env, curriculum_cfg, n_envs=n_envs)
         env = Monitor(env, monitor_dir)
         if monitor_dir:
             env = EpisodeLogger(env, log_dir=monitor_dir)
@@ -41,6 +45,7 @@ def make_vec_env(
     norm_obs: bool = True,
     norm_reward: bool = True,
     env_kwargs: dict | None = None,
+    curriculum_cfg: dict | None = None,
 ) -> VecNormalize:
     """
     Build a DummyVecEnv wrapped in VecNormalize.
@@ -50,7 +55,7 @@ def make_vec_env(
     """
     env_kwargs = env_kwargs or {}
     fns = [
-        _make_env(road, base_seed + i, monitor_dir, env_kwargs)
+        _make_env(road, base_seed + i, monitor_dir, env_kwargs, curriculum_cfg, n_envs)
         for i in range(n_envs)
     ]
     venv = DummyVecEnv(fns)
@@ -73,6 +78,7 @@ def make_eval_vec_env(
     monitor_dir: str | None = None,
     env_kwargs: dict | None = None,
 ) -> VecNormalize:
+    # eval env never uses curriculum — always runs at full difficulty
     """
     Build an evaluation VecNormalize that shares normalisation stats with the
     training env (obs running mean/var, no reward normalisation).

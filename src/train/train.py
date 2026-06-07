@@ -18,9 +18,11 @@ from monitoring import build_callbacks
 from environment import make_eval_vec_env, make_vec_env
 from seed import seed_everything
 from QuarterCar_env.config.reward_params import load_reward_config
+from QuarterCar_env.wrappers.curriculum import load_curriculum_config
 
 
-_CONFIG_PATH = _ROOT / "config" / "algo" / "algo_configs.yaml"
+_CONFIG_PATH      = _ROOT / "config" / "algo" / "algo_configs.yaml"
+_CURRICULUM_PATH  = _ROOT / "config" / "curriculum" / "curriculum_params.yaml"
 _VALID_ROADS = ["speed_bump", "flat", "recorded"]
 
 
@@ -78,6 +80,11 @@ def parse_args() -> argparse.Namespace:
                     action="store_true",
                     default=False,
                     help="Enable rendering during training (requires a display; slows training).")
+    p.add_argument(
+                    "--curriculum",
+                    action="store_true",
+                    default=False,
+                    help="Wrap training env with CurriculumWrapper (speed_bump only).")
 
     return p.parse_args()
 
@@ -141,6 +148,8 @@ def main() -> None:
     rcfg = load_reward_config()
     n_preview_points = rcfg.n_peaks * 3   # each peak: [dist, height, width]
 
+    curriculum_cfg = load_curriculum_config(_CURRICULUM_PATH) if args.curriculum else None
+
     #  output directories
     exp_root = _ROOT / "models" / args.algo / args.road
     if args.run_name is None:
@@ -179,6 +188,7 @@ def main() -> None:
         norm_obs=normalize,
         norm_reward=norm_reward,
         env_kwargs={"render_mode": render_mode},
+        curriculum_cfg=curriculum_cfg,
     )
     eval_venv = make_eval_vec_env(
         road=eval_road,
@@ -216,6 +226,7 @@ def main() -> None:
     print(f"  normalize  : obs={normalize}, reward={norm_reward}")
     print(f"  render     : {args.render}")
     print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {n_preview_points} features over {rcfg.preview_distance}m")
+    print(f"  curriculum : {'on (' + str(len(curriculum_cfg['thresholds'])) + ' levels)' if curriculum_cfg else 'off'}")
     print(f"  output     : {model_dir}")
     print(f"{''*58}\n")
 

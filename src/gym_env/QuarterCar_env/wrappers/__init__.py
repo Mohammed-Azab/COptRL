@@ -3,3 +3,4 @@ from QuarterCar_env.wrappers.action_repeat import ActionRepeat
 from QuarterCar_env.wrappers.reward_scaler import RewardScaler
 from QuarterCar_env.wrappers.episode_logger import EpisodeLogger
 from QuarterCar_env.wrappers.preview import PreviewWrapper
+from QuarterCar_env.wrappers.curriculum import CurriculumWrapper, load_curriculum_config
