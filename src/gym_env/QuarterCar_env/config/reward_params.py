@@ -4,77 +4,91 @@ from QuarterCar_env.config.config_manager import _load_yaml
 
 @dataclass(frozen=True)
 class RewardConfig:
-    # --- weights ---
-    w_comfort_bonus: float = 0.8   # positive per-step bonus for smooth riding
-    w_tracking:      float = 1.0
-    w_accel:         float = 0.5
+    # weights — longitudinal
+    w_tracking:      float = 0.5
+    w_accel:         float = 0.8
     w_jerk:          float = 0.3
     w_action_smooth: float = 0.2
 
-    # --- per-term enable flags ---
-    enable_comfort_bonus: bool = True
+    # weights — vertical
+    w_heave:     float = 1.0
+    w_wheel:     float = 0.5
+    a_B_comfort: float = 9.81
+    a_W_comfort: float = 30.0
+    enable_heave:       bool = True
+    enable_wheel:       bool = True
+    enable_vel_scaling: bool = True
+
+    # enable flags — longitudinal
     enable_tracking:      bool = True
     enable_accel:         bool = True
     enable_jerk:          bool = True
     enable_action_smooth: bool = True
 
-    # --- velocity ---
+    # velocity
     v_max: float = 20.0
     a_max: float = 5.0
-    v_min: float = 2.0   # lower bound of speed band; penalises stopping
+    v_min: float = 2.0
 
-    # --- longitudinal comfort ---
+    # longitudinal comfort / filter
     a_comfort:          float = 3.0
     accel_filter_alpha: float = 0.8
-    accel_clip:         float = 15.0  # observation clipping bound (wide, for numerical safety)
-    reward_accel_clip:  float = 6.0   # reward-only clip = 2 × a_comfort; keeps worst-case bounded
+    accel_clip:         float = 15.0
+    reward_accel_clip:  float = 6.0
 
-    # --- jerk ---
+    # jerk
     j_max:             float = 10.0
     jerk_filter_alpha: float = 0.8
-    jerk_clip:         float = 50.0  # observation clipping bound
-    reward_jerk_clip:  float = 20.0  # reward-only clip = 2 × j_max; keeps worst-case bounded
+    jerk_clip:         float = 50.0
+    reward_jerk_clip:  float = 20.0
 
-    # --- terminal ---
+    # terminal
     terminal_bonus:   float = 100.0
     terminal_penalty: float = -100.0
-    a_limit:          float = 10.0   # RMS threshold for terminal bonus / comfort_score
+    a_limit:          float = 10.0
 
-    # --- observation toggles (read once at env __init__) ---
-    obs_enable_accel:       bool = True
-    obs_enable_jerk:        bool = True
-    obs_enable_prev_action: bool = True
-
-    # --- road preview ---
-    obs_enable_preview:  bool  = True   
-    preview_distance:    float = 20.0   # m [lookahead horizon]
-    n_preview_points:    int   = 10     # number of height samples in the preview window
-    preview_height_clip: float = 0.15   # m — clip before normalising (matches OBS_HIGH[4])
+    # observation — preview
+    preview_distance:    float = 20.0
+    h_clip:              float = 0.15
+    n_peaks:             int   = 3
+    peak_height_min:     float = 0.01
+    peak_distance_min_m: float = 0.5
+    noise_active:        bool  = True
+    noise_height_std:    float = 0.005
+    noise_distance_std:  float = 0.5
+    noise_width_std:     float = 0.05
+    pt1_tau:             float = 0.2
 
 
 def load_reward_config() -> RewardConfig:
-    """Load RewardConfig from reward_params.yaml. Falls back to dataclass defaults on error."""
     try:
         cfg = _load_yaml("reward_params.yaml")
     except FileNotFoundError:
         return RewardConfig()
 
-    w = cfg.get("weights",      {})
-    e = cfg.get("enable",       {})
-    v = cfg.get("velocity",     {})
-    c = cfg.get("comfort",      {})
-    j = cfg.get("jerk",         {})
-    t = cfg.get("terminal",     {})
-    o = cfg.get("observations", {})
+    w  = cfg.get("weights",      {})
+    vt = cfg.get("vertical",     {})
+    e  = cfg.get("enable",       {})
+    v  = cfg.get("velocity",     {})
+    c  = cfg.get("comfort",      {})
+    j  = cfg.get("jerk",         {})
+    t  = cfg.get("terminal",     {})
+    o  = cfg.get("observations", {})
 
     return RewardConfig(
-        w_comfort_bonus = float(w.get("w_comfort_bonus", 0.8)),
-        w_tracking      = float(w.get("w_tracking",      1.0)),
-        w_accel         = float(w.get("w_accel",         0.5)),
+        w_tracking      = float(w.get("w_tracking",      0.5)),
+        w_accel         = float(w.get("w_accel",         0.8)),
         w_jerk          = float(w.get("w_jerk",          0.3)),
         w_action_smooth = float(w.get("w_action_smooth", 0.2)),
 
-        enable_comfort_bonus = bool(e.get("comfort_bonus",  True)),
+        w_heave          = float(vt.get("w_heave",          1.0)),
+        w_wheel          = float(vt.get("w_wheel",          0.5)),
+        a_B_comfort      = float(vt.get("a_B_comfort",      9.81)),
+        a_W_comfort      = float(vt.get("a_W_comfort",     30.0)),
+        enable_heave         = bool(vt.get("enable_heave",         True)),
+        enable_wheel         = bool(vt.get("enable_wheel",         True)),
+        enable_vel_scaling   = bool(vt.get("enable_vel_scaling",   True)),
+
         enable_tracking      = bool(e.get("tracking",      True)),
         enable_accel         = bool(e.get("accel",         True)),
         enable_jerk          = bool(e.get("jerk",          True)),
@@ -98,12 +112,14 @@ def load_reward_config() -> RewardConfig:
         terminal_penalty = float(t.get("terminal_penalty", -100.0)),
         a_limit          = float(t.get("a_limit",           10.0)),
 
-        obs_enable_accel       = bool(o.get("obs_enable_accel",       True)),
-        obs_enable_jerk        = bool(o.get("obs_enable_jerk",        True)),
-        obs_enable_prev_action = bool(o.get("obs_enable_prev_action", True)),
-
-        obs_enable_preview  = bool( o.get("obs_enable_preview",  True)),
         preview_distance    = float(o.get("preview_distance",    20.0)),
-        n_preview_points    = int(  o.get("n_preview_points",    10)),
-        preview_height_clip = float(o.get("preview_height_clip", 0.15)),
+        h_clip              = float(o.get("h_clip",              0.15)),
+        n_peaks             = int(  o.get("n_peaks",             3)),
+        peak_height_min     = float(o.get("peak_height_min",     0.01)),
+        peak_distance_min_m = float(o.get("peak_distance_min_m", 0.5)),
+        noise_active        = bool( o.get("noise_active",        True)),
+        noise_height_std    = float(o.get("noise_height_std",    0.005)),
+        noise_distance_std  = float(o.get("noise_distance_std",  0.5)),
+        noise_width_std     = float(o.get("noise_width_std",     0.05)),
+        pt1_tau             = float(o.get("pt1_tau",             0.2)),
     )

@@ -1,46 +1,54 @@
 weights:
-  w_comfort_bonus:  0.2   # per-step bonus for smooth riding
   w_tracking:       0.5
   w_accel:          0.8
   w_jerk:           0.3
   w_action_smooth:  0.2
 
+vertical:
+  w_heave:          1.0
+  w_wheel:          0.5
+  a_B_comfort:      9.81   # m/s²  body accel normaliser
+  a_W_comfort:     30.0    # m/s²  wheel accel normaliser
+  enable_heave:     true
+  enable_wheel:     true
+  enable_vel_scaling: true
+
 enable:
-  comfort_bonus: true
   tracking:      true
   accel:         true
   jerk:          true
   action_smooth: true
 
 velocity:
-  v_max:  20.0   # m/s — target speed (upper bound of speed band)
-  a_max:   5.0   # m/s²
-  v_min:   2.0   # m/s — lower bound of speed band; penalises stopping
+  v_max:  20.0
+  a_max:   5.0
+  v_min:   2.0
 
 comfort:
-  a_comfort:           3.0   # m/s²  [comfortable longitudinal acceleration threshold]
-  accel_filter_alpha:  0.8   # IIR   coefficient (0=no filter, close to 1=heavy smoothing)
-  accel_clip:         15.0   # m/s²  [observation clip — wide, for numerical safety]
-  reward_accel_clip:   6.0   # m/s²  [reward-only clip = 2 × a_comfort; bounds worst-case penalty at -4]
+  a_comfort:           3.0
+  accel_filter_alpha:  0.8
+  accel_clip:         15.0
+  reward_accel_clip:   6.0
 
 jerk:
-  j_max:              10.0   # m/s³  [jerk normalization]
+  j_max:              10.0
   jerk_filter_alpha:   0.8
-  jerk_clip:          50.0   # m/s³  [observation clip]
-  reward_jerk_clip:   20.0   # m/s³  [reward-only clip = 2 × j_max; bounds worst-case penalty at -4]
+  jerk_clip:          50.0
+  reward_jerk_clip:   20.0
 
 terminal:
   terminal_bonus:    100.0
   terminal_penalty: -100.0
-  a_limit:          10.0    # m/s²  [RMS threshold for terminal bonus]
+  a_limit:          10.0
 
 observations:
-  obs_enable_accel:       true
-  obs_enable_jerk:        true
-  obs_enable_prev_action: true
-
-  # Road preview: 10 height samples evenly spaced over 'preview_distance' lookahead.
-  obs_enable_preview:  true
-  preview_distance:    20.0   # m
-  n_preview_points:    10
-  preview_height_clip: 0.15   # m — normalises to [-1, 1] (matches bump height scale)
+  preview_distance:    20.0
+  h_clip:              0.15
+  n_peaks:             3
+  peak_height_min:     0.01
+  peak_distance_min_m: 0.5
+  noise_active:        true
+  noise_height_std:    0.005
+  noise_distance_std:  0.5
+  noise_width_std:     0.05
+  pt1_tau:             0.2
