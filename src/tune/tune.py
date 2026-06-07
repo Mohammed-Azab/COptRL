@@ -144,20 +144,26 @@ def main() -> None:
             print(f"  trial {completed:>3d}/{args.trials}  return={trial.value:+.3f}"
                   f"  best={best_so_far:+.3f}")
 
-    study.optimize(
-        objective,
-        n_trials=args.trials,
-        n_jobs=args.n_jobs,
-        show_progress_bar=True,
-        callbacks=[_on_trial_end],
-    )
-
-    print("\n  Best hyperparameters:")
-    for k, v in study.best_params.items():
-        print(f"    {k:20s}: {v}")
-    print(f"    {'value':20s}: {study.best_value:.4f}")
-
-    save_results(study, results_path)
+    try:
+        study.optimize(
+            objective,
+            n_trials=args.trials,
+            n_jobs=args.n_jobs,
+            show_progress_bar=True,
+            callbacks=[_on_trial_end],
+        )
+    except KeyboardInterrupt:
+        print("\nInterrupted — saving results so far...")
+    finally:
+        completed = [t for t in study.trials if t.value is not None]
+        if not completed:
+            print("No trials completed — nothing to save.")
+            return
+        print("\n  Best hyperparameters:")
+        for k, v in study.best_params.items():
+            print(f"    {k:20s}: {v}")
+        print(f"    {'value':20s}: {study.best_value:.4f}")
+        save_results(study, results_path)
 
 
 if __name__ == "__main__":

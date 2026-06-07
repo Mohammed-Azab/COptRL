@@ -90,8 +90,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
-    # SB3 Monitor(env, "/path/to/train") creates "/path/to/train.monitor.csv"
-    # (a sibling file, not a file inside train/).  Check both locations.
+    # SB3 Monitor
     files = sorted(monitor_dir.glob("*.monitor.csv"))
     if not files:
         sibling = monitor_dir.parent / f"{monitor_dir.name}.monitor.csv"
@@ -226,17 +225,21 @@ def main() -> None:
     print(f"  output     : {model_dir}")
     print(f"{''*58}\n")
 
-    model.learn(
-        total_timesteps=timesteps,
-        callback=callbacks,
-        progress_bar=True,
-        reset_num_timesteps=(args.resume is None),
-    )
-
-    # save model
-    final_path = model_dir / f"{args.algo}_final"
-    model.save(str(final_path))
-    train_venv.save(str(model_dir / "vecnormalize.pkl"))
+    try:
+        model.learn(
+            total_timesteps=timesteps,
+            callback=callbacks,
+            progress_bar=True,
+            reset_num_timesteps=(args.resume is None),
+        )
+    except KeyboardInterrupt:
+        print("\nInterrupted — saving checkpoint...")
+    finally:
+        final_path = model_dir / f"{args.algo}_final"
+        model.save(str(final_path))
+        train_venv.save(str(model_dir / "vecnormalize.pkl"))
+        train_venv.close()
+        eval_venv.close()
 
     print(f"\nModel    → {final_path}.zip")
     print(f"VecNorm  → {model_dir / 'vecnormalize.pkl'}")
@@ -253,9 +256,6 @@ def main() -> None:
         print(f"  last_reward  : {summary['last_reward']:.3f}")
     else:
         print("\nTraining summary: no monitor data found.")
-
-    train_venv.close()
-    eval_venv.close()
 
 
 if __name__ == "__main__":
