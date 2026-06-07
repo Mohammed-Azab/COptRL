@@ -4,7 +4,8 @@ import argparse
 import csv
 import re
 import sys
-from datetime import datetime
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -130,6 +131,113 @@ def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
     }
 
 
+def _write_summary(
+    path: Path,
+    args,
+    algo_kwargs: dict,
+    timesteps: int,
+    n_envs: int,
+    seed: int,
+    curriculum: bool,
+    final_path: Path,
+    best_path: Path,
+    best_step: int | None,
+    monitor_summary: dict | None,
+    interrupted: bool,
+    error: str | None,
+) -> None:
+    lines: list[str] = []
+
+    def s(text: str = "") -> None:
+        lines.append(text)
+
+    s("# Training Run Summary")
+    s(f"date        : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    s(f"status      : {'INTERRUPTED' if interrupted else ('ERROR — ' + error) if error else 'COMPLETED'}")
+    s()
+
+    s("## Run Configuration")
+    s(f"algo        : {args.algo}")
+    s(f"road        : {args.road}")
+    s(f"curriculum  : {'yes' if curriculum else 'no'}")
+    s(f"timesteps   : {timesteps:,}")
+    s(f"n_envs      : {n_envs}")
+    s(f"seed        : {seed}")
+    s(f"normalize   : obs=True, reward={not args.no_normalize}")
+    s(f"resume      : {args.resume or 'no'}")
+    s()
+
+    s("## Hyperparameters (PPO)")
+    for k, v in algo_kwargs.items():
+        if k == "policy_kwargs":
+            arch = v.get("net_arch", {})
+            s(f"  net_arch    : pi={arch.get('pi', '?')}  vf={arch.get('vf', '?')}")
+        else:
+            s(f"  {k:<20}: {v}")
+    s()
+
+    s("## Output Paths")
+    s(f"final model : {final_path}.zip")
+    s(f"best model  : {best_path}.zip")
+    s(f"best step   : {f'{best_step:,}' if best_step is not None else 'unknown'}")
+    s(f"vecnorm     : {final_path.parent / 'vecnormalize.pkl'}")
+    s()
+
+    s("## Training Statistics")
+    if monitor_summary:
+        s(f"episodes    : {int(monitor_summary['episodes'])}")
+        s(f"mean_reward : {monitor_summary['mean_reward']:.3f}")
+        s(f"max_reward  : {monitor_summary['max_reward']:.3f}")
+        s(f"min_reward  : {monitor_summary['min_reward']:.3f}")
+        s(f"last_reward : {monitor_summary['last_reward']:.3f}")
+        s(f"mean_ep_len : {monitor_summary['mean_length']:.1f}")
+        s()
+        # flags for Claude to catch obvious failure modes
+        flags: list[str] = []
+        mr = monitor_summary["mean_reward"]
+        mn = monitor_summary["min_reward"]
+        mx = monitor_summary["max_reward"]
+        ep = int(monitor_summary["episodes"])
+        if mr < 0:
+            flags.append(f"mean_reward={mr:.1f} is negative — reward shaping may need review")
+        if mx - mr > abs(mr) * 3:
+            flags.append(f"high reward variance (max={mx:.1f}, mean={mr:.1f}) — unstable training")
+        if mn < -500:
+            flags.append(f"extreme negative episode (min={mn:.1f}) — possible truncation or reward bug")
+        if ep < 100:
+            flags.append(f"only {ep} episodes completed — likely insufficient timesteps or early truncation")
+        if flags:
+            s("## Warnings / Diagnostics")
+            for f in flags:
+                s(f"  ! {f}")
+            s()
+        else:
+            s("## Warnings / Diagnostics")
+            s("  none — training stats look normal")
+            s()
+    else:
+        s("  no monitor data found — training may not have completed any episodes")
+        s()
+
+    if error:
+        s("## Error Traceback")
+        s(error)
+        s()
+
+    s("## What To Check Next")
+    if error:
+        s("  - Read the traceback above and fix the crash before retraining")
+    elif interrupted:
+        s("  - Resume from checkpoint: just train --resume <final_path>.zip")
+    else:
+        s("  - Evaluate: just eval <final_path>.zip --save-plots")
+        s("  - Compare vs baselines: just compare <final_path>.zip")
+        s("  - If mean_reward is low, check TRIAL_ERROR.md for known failure patterns")
+        s("  - View training curves: just tb")
+
+    path.write_text("\n".join(lines) + "\n")
+
+
 def _best_model_step(best_dir: Path) -> int | None:
     eval_file = best_dir / "evaluations.npz"
     if not eval_file.exists():
@@ -253,6 +361,10 @@ def main() -> None:
     print(f"  output     : {model_dir}")
     print(f"{''*58}\n")
 
+    _interrupted = False
+    _error: str | None = None
+    final_path = model_dir / f"{args.algo}_final"
+
     try:
         model.learn(
             total_timesteps=timesteps,
@@ -261,35 +373,55 @@ def main() -> None:
             reset_num_timesteps=(args.resume is None),
         )
     except KeyboardInterrupt:
+        _interrupted = True
         print("\nInterrupted — saving checkpoint...")
+    except Exception:
+        _error = traceback.format_exc()
+        print(f"\nTraining crashed:\n{_error}")
     finally:
-        final_path = model_dir / f"{args.algo}_final"
         model.save(str(final_path))
         train_venv.save(str(model_dir / "vecnormalize.pkl"))
         train_venv.close()
         eval_venv.close()
 
-    print(f"\nFinal Model    → {final_path}.zip")
-    print(f"\nBest Model     → {best_path}.zip")
-    best_step = _best_model_step(model_dir / "best")
-    if best_step is not None:
-        print(f"Best Step      → {best_step:,}")
-    else:
-        print("Best Step      → unknown (no eval history found)")
+    print(f"\nModel    → {final_path}.zip")
     print(f"VecNorm  → {model_dir / 'vecnormalize.pkl'}")
     print(f"TB logs  → tensorboard --logdir {tb_dir}")
 
-    summary = _summarize_monitor(mon_dir / "train")
-    if summary:
+    best_step    = _best_model_step(model_dir / "best")
+    mon_summary  = _summarize_monitor(mon_dir / "train")
+
+    print(f"\nBest Model     → {best_path}.zip")
+    print(f"Best Step      → {f'{best_step:,}' if best_step is not None else 'unknown'}")
+
+    if mon_summary:
         print("\nTraining summary")
-        print(f"  episodes     : {int(summary['episodes'])}")
-        print(f"  mean_reward  : {summary['mean_reward']:.3f}")
-        print(f"  mean_ep_len  : {summary['mean_length']:.1f}")
-        print(f"  max_reward   : {summary['max_reward']:.3f}")
-        print(f"  min_reward   : {summary['min_reward']:.3f}")
-        print(f"  last_reward  : {summary['last_reward']:.3f}")
+        print(f"  episodes     : {int(mon_summary['episodes'])}")
+        print(f"  mean_reward  : {mon_summary['mean_reward']:.3f}")
+        print(f"  mean_ep_len  : {mon_summary['mean_length']:.1f}")
+        print(f"  max_reward   : {mon_summary['max_reward']:.3f}")
+        print(f"  min_reward   : {mon_summary['min_reward']:.3f}")
+        print(f"  last_reward  : {mon_summary['last_reward']:.3f}")
     else:
         print("\nTraining summary: no monitor data found.")
+
+    summary_path = model_dir / "summary.md"
+    _write_summary(
+        path=summary_path,
+        args=args,
+        algo_kwargs=algo_kwargs,
+        timesteps=timesteps,
+        n_envs=n_envs,
+        seed=seed,
+        curriculum=args.curriculum,
+        final_path=final_path,
+        best_path=best_path,
+        best_step=best_step,
+        monitor_summary=mon_summary,
+        interrupted=_interrupted,
+        error=_error,
+    )
+    print(f"Summary  → {summary_path}")
 
 
 if __name__ == "__main__":
