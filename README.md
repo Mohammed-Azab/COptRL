@@ -1,12 +1,13 @@
-# Quarter-Car Speed Planning via Deep Reinforcement Learning
+# COptRL — Comfort Optimizer RL
 
 > *Teach a car to slow down before the pothole, not after.*
 
-A quarter-car suspension simulation and training framework where a deep RL agent
-learns **longitudinal speed profiles** that minimise ride discomfort (body acceleration,
-ISO 2631) while tracking a target velocity. Instead of the classical active-suspension
-approach (where the actuator fights the bump in real time), this framing asks:
-*can the agent plan its speed so the bump never causes discomfort in the first place?*
+COptRL (Comfort Optimizer RL) is a quarter-car suspension simulation and training
+framework where a deep RL agent learns **longitudinal speed profiles** that minimise
+ride discomfort (body acceleration, ISO 2631) while tracking a target velocity.
+Instead of the classical active-suspension approach (where the actuator fights the
+bump in real time), this framing asks: *can the agent plan its speed so the bump
+never causes discomfort in the first place?*
 
 Built on Gymnasium · Stable-Baselines3 · Numba.
 
@@ -35,7 +36,7 @@ Observation (up to 14-D) ──► Agent ──► u ∈ [-1, 1]
 ## Repository Layout
 
 ```
-quarter_car_sim/
+COptRL/
 │
 ├── config/                         # All YAML configuration
 │   ├── algo/algo_configs.yaml      # SB3 hyperparameters (PPO / SAC / TD3)
@@ -184,7 +185,7 @@ for numerical safety — no trained-model breakage when changing reward clips.
 
 ```bash
 git clone <repo>
-cd quarter_car_sim
+cd COptRL
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e src/gym_env
