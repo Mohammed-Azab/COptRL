@@ -1,4 +1,4 @@
-# COptRL — Comfort-Optimising Reinforcement Learning for Active Speed Planning
+# COptRL: Comfort-Optimising Reinforcement Learning for Active Speed Planning
 
 ## Abstract
 
@@ -10,7 +10,7 @@ The environment is built on a nonlinear 6-state quarter-car model integrated at 
 
 ## 1. Motivation and Problem Framing
 
-Classical active suspension systems act *reactively*: a sensor detects a bump and an actuator generates a counterforce within milliseconds. This demands fast, expensive hardware and still suffers from actuator latency. An alternative — explored here — is *predictive speed planning*: if the vehicle arrives at a speed bump slowly enough, the passive suspension absorbs the disturbance without exceeding comfort thresholds. No actuator is needed; the agent's only control variable is the longitudinal acceleration command.
+Classical active suspension systems act *reactively*: a sensor detects a bump and an actuator generates a counterforce within milliseconds. This demands fast, expensive hardware and still suffers from actuator latency. An alternative - explored here - is *predictive speed planning*: if the vehicle arrives at a speed bump slowly enough, the passive suspension absorbs the disturbance without exceeding comfort thresholds. No actuator is needed; the agent's only control variable is the longitudinal acceleration command.
 
 This framing raises a well-defined RL problem:
 
@@ -92,7 +92,7 @@ The `PreviewWrapper` samples 200 evenly-spaced height values over the lookahead 
 [distance_ahead / D,  height / h_clip,  width / D]
 ```
 
-Missing peaks (fewer than *n* detected) fill with `[1.0, 0.0, 0.0]`, representing a bump at the horizon with zero height — the neutral state.
+Missing peaks (fewer than *n* detected) fill with `[1.0, 0.0, 0.0]`, representing a bump at the horizon with zero height - the neutral state.
 
 Gaussian noise is added to each detected peak, scaled by the peak's distance normalisation (closer bumps have proportionally larger noise), then a first-order PT1 filter (τ = 0.2 s) is applied. This mimics the behaviour of an imperfect real-world sensor and introduces a structured stochastic element that improves policy robustness.
 
@@ -133,7 +133,7 @@ Default weights: w_heave = 1.0, w_wheel = 0.5, w_track = 0.5, w_accel = 0.8, w_j
 
 ### 4.1 Algorithm
 
-**Proximal Policy Optimisation (PPO)** with a standard `MlpPolicy` [256, 256] for both actor and critic. Reward normalisation is enabled via `VecNormalize`. The flat MLP sees the full observation — including preview slots — without architectural separation, following the approach used in the reference implementation (ba_azab).
+**Proximal Policy Optimisation (PPO)** with a standard `MlpPolicy` [256, 256] for both actor and critic. Reward normalisation is enabled via `VecNormalize`. The flat MLP sees the full observation - including preview slots - without architectural separation, following the approach used in the reference implementation (ba_azab).
 
 ### 4.2 Curriculum Learning
 
@@ -232,7 +232,7 @@ pip install -e src/gym_env
 # PPO with 3-level curriculum (recommended)
 python src/train/train.py --algo PPO --road speed_bump --curriculum
 
-# PPO without curriculum — random road every episode, full difficulty from start
+# PPO without curriculum - random road every episode, full difficulty from start
 python src/train/train.py --algo PPO --road speed_bump
 
 # Resume from checkpoint
@@ -262,7 +262,7 @@ tensorboard --logdir logs/tensorboard
 ### Evaluation
 
 ```bash
-# Deep single-model evaluation — 5 episodes, saves time-series plots
+# Deep single-model evaluation - 5 episodes, saves time-series plots
 python src/eval/eval.py \
     --algo PPO \
     --model_path models/PPO/speed_bump/exp_1/PPO_final.zip \
@@ -283,8 +283,7 @@ python src/eval/compare.py \
 ### Hyperparameter Search
 
 ```bash
-python src/tune/hyperparameter_search.py \
-    --algo ppo --trials 50 --timesteps 100000
+python src/tune/tune.py --trials 50 --timesteps 100000
 ```
 
 ### Tests
@@ -297,40 +296,20 @@ PYTHONPATH=src .venv/bin/pytest tests/ -v
 
 ## 7. Configuration Reference
 
-### `config/reward/reward_params.yaml`
+All YAML files in `config/` are documented in **[config/README.md](config/README.md)**, including every parameter, its units, and when to change it.
 
-```yaml
-weights:
-  w_tracking:       0.5
-  w_accel:          0.8
-  w_jerk:           0.3
-  w_action_smooth:  0.2
+Key files at a glance:
 
-vertical:
-  w_heave:          1.0
-  w_wheel:          0.5
-  a_B_comfort:      9.81   # m/s²  body accel normaliser
-  a_W_comfort:     30.0    # m/s²  wheel accel normaliser
-  enable_vel_scaling: true
-
-observations:
-  preview_distance:    20.0   # m  lookahead horizon
-  h_clip:              0.15   # m  height normalisation clip
-  n_peaks:             3      # number of peak slots in observation
-  noise_active:        true
-  pt1_tau:             0.2    # s  PT1 filter time constant
-```
-
-### `config/curriculum/curriculum_params.yaml`
-
-```yaml
-thresholds: [200_000, 500_000]   # env steps at which each level unlocks
-
-levels:
-  0: {num_bumps_range: [1, 2], bump_height_range: [0.05, 0.10], ...}
-  1: {num_bumps_range: [1, 3], bump_height_range: [0.05, 0.15], ...}
-  2: {num_bumps_range: [1, 5], bump_height_range: [0.05, 0.25], ...}
-```
+| File | Controls |
+|------|----------|
+| `algo/algo_configs.yaml` | PPO hyperparameters and training budget |
+| `algo/tune_config.yaml` | Optuna search space and tuning defaults |
+| `reward/reward_params.yaml` | Reward weights, vertical terms, preview config |
+| `road/road_params.yaml` | Fixed bump layout and random road bounds |
+| `curriculum/curriculum_params.yaml` | Difficulty levels and step thresholds |
+| `gym_env/env_params.yaml` | Physics constants and episode length |
+| `eval/compare_config.yaml` | Defaults for comparison evaluation |
+| `scenarios/` | Recorded real-world road profiles |
 
 ---
 
@@ -349,22 +328,3 @@ levels:
 **Geometry-safe speed clamping.** `from_random` clamps the sampled vehicle speed to a limit derived from the bump height-to-length ratio, calibrated from two physical test runs. This prevents the training distribution from containing physically unreasonable scenarios (e.g., a 0.25 m bump traversed at 20 m/s).
 
 ---
-
-## 9. Dependencies
-
-| Package | Role |
-|---------|------|
-| Gymnasium ≥ 0.29 | RL environment interface |
-| Stable-Baselines3 ≥ 2.3 | PPO / TD3 implementation |
-| Numba ≥ 0.59 | JIT-compiled ODE kernels (RK4 at 1 ms) |
-| SciPy ≥ 1.11 | `find_peaks` for preview encoding |
-| NumPy ≥ 1.24 | Array operations throughout |
-| Matplotlib ≥ 3.7 | Evaluation plots |
-| PyYAML ≥ 6.0 | Configuration loading |
-| Optuna ≥ 3.0 | Hyperparameter search |
-| TensorBoard ≥ 2.14 | Training metrics visualisation |
-| PyTorch ≥ 2.0 | Neural network backend (CPU-only build sufficient) |
-
----
-
-*Python 3.10 · Linux / macOS (Parallels)*

@@ -230,5 +230,7 @@ build/
 dist/
 docs/
 *.md
+!README.md
+!config/README.md
 *.txt
 tune.db
