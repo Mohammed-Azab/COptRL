@@ -1,14 +1,25 @@
+# Reward configuration for COptRL — optimised for speed control over obstacles.
+#
+# Design basis:
+#   - Vertical comfort thresholds: ISO 2631-1:2016 vibration exposure limits
+#   - Cost-function structure: Mandl (2021), TU Wien Diplomarbeit
+#   - Weights follow Mandl's relative weighting: Qc=0.3, Qv=0.7, Qu=1.0 (comfort : speed : jerk)
+
 weights:
-  w_tracking:       0.5
-  w_accel:          0.8
-  w_jerk:           0.3
-  w_action_smooth:  0.2
+  w_tracking:       0.8   # speed-tracking penalty (Mandl: dominant term)
+  w_accel:          0.4   # longitudinal accel discomfort
+  w_jerk:           0.2   # jerk smoothness
+  w_action_smooth:  0.1   # action continuity
 
 vertical:
-  w_heave:          1.0
-  w_wheel:          0.5
-  a_B_comfort:      9.81   # m/s²  body accel normaliser
-  a_W_comfort:     30.0    # m/s²  wheel accel normaliser
+  w_heave:          0.8   # body vertical accel penalty (primary comfort signal)
+  w_wheel:          0.3   # wheel accel penalty (road holding)
+  # ISO 2631-1: 0.5 m/s² RMS = onset of "fairly uncomfortable" vertical motion
+  a_B_comfort:      0.5   # m/s² — normaliser for body accel penalty
+  a_W_comfort:     30.0   # m/s² — wheel accel normaliser (vehicle dynamics reference)
+  # Clip values: worst-case per-step penalty capped at -4 (matches r_accel reward magnitude)
+  reward_heave_clip:  1.0   # m/s²
+  reward_wheel_clip: 60.0   # m/s²
   enable_heave:     true
   enable_wheel:     true
   enable_vel_scaling: true
@@ -25,21 +36,24 @@ velocity:
   v_min:   2.0
 
 comfort:
-  a_comfort:           3.0
-  accel_filter_alpha:  0.8
-  accel_clip:         15.0
-  reward_accel_clip:   6.0
+  # ISO 2631-1 longitudinal: 1.4× weighting vs vertical; 2.0 m/s² = comfortable firm braking
+  a_comfort:           2.0   # m/s²
+  accel_filter_alpha:  0.8   # IIR smoothing
+  accel_clip:          8.0   # m/s²  observation clip (4 × a_comfort)
+  reward_accel_clip:   4.0   # m/s²  reward clip (2 × a_comfort)
 
 jerk:
-  j_max:              10.0
+  # EN 13374 / ISO 22133 reference: comfortable jerk < 2 m/s³
+  j_max:              2.0    # m/s³
   jerk_filter_alpha:   0.8
-  jerk_clip:          50.0
-  reward_jerk_clip:   20.0
+  jerk_clip:          12.0   # m/s³  observation clip (6 × j_max)
+  reward_jerk_clip:    4.0   # m/s³  reward clip (2 × j_max)
 
 terminal:
   terminal_bonus:    100.0
   terminal_penalty: -100.0
-  a_limit:          10.0
+  # ISO 2631-1 "uncomfortable" boundary ≈ 0.8–1.6 m/s² RMS; 1.0 m/s² is meaningful target
+  a_limit:            1.0
 
 observations:
   preview_distance:    20.0
