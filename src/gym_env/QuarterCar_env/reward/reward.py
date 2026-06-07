@@ -1,12 +1,3 @@
-"""
-Reward composition:
-    R_step = (v / v_max) * (
-        w_heave * r_heave + w_wheel * r_wheel
-        + w_tracking * r_tracking + w_accel * r_accel
-        + w_jerk * r_jerk + w_action_smooth * r_action_smooth
-    )
-"""
-
 import numpy as np
 
 from QuarterCar_env.config.reward_params import RewardConfig

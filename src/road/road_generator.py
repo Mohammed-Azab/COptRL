@@ -1,7 +1,3 @@
-"""
-Road profile generator.
-Profiles: speed_bump, flat, recorded.
-"""
 from __future__ import annotations
 from typing import Optional
 import numpy as np

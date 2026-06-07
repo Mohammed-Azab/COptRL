@@ -1,20 +1,3 @@
-"""
-QuarterCarEnv: Gymnasium speed-control environment.
-
-Action (1,) float32 in [-1, 1]:
-  a_cmd = action[0] * a_max   [m/s²]
-  v_{t+1} = clip(v_t + a_cmd * DT, 0, v_max)
-
-Observation (16,) float32  — see envs/__init__.py for full index map.
-  [0]   ζ          road height at wheel now     [m]
-  [1]   ζ̇          road velocity at wheel now   [m/s]
-  [2]   v/v_max    normalised speed             [-]
-  [3]   filtered_a/a_comfort                   [-]   if obs_enable_accel
-  [4]   filtered_jerk/j_max                    [-]   if obs_enable_jerk
-  [5]   prev_action                            [-]   if obs_enable_prev_action
-  [6–15] preview[0–9]  road heights ahead      [-]   if obs_enable_preview
-"""
-
 from typing import Callable, Optional
 
 import numpy as np

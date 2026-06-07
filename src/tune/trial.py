@@ -1,7 +1,3 @@
-"""
-Optuna objective: build a model from sampled params, train briefly, evaluate.
-"""
-
 from __future__ import annotations
 
 import sys
@@ -9,28 +5,21 @@ from pathlib import Path
 
 import numpy as np
 import optuna
-from stable_baselines3 import PPO, SAC, TD3
+from stable_baselines3 import PPO, TD3
 
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
-sys.path.insert(0, str(_ROOT / "src"))       # exposes road.road_generator
+sys.path.insert(0, str(_ROOT / "src"))
 sys.path.insert(0, str(_ROOT / "src" / "train"))
 
 from environment import make_eval_vec_env, make_vec_env
 from search_spaces import sample
 
-_REGISTRY = {"PPO": PPO, "SAC": SAC, "TD3": TD3}
-_OFF_POLICY = {"SAC", "TD3"}
+_REGISTRY = {"PPO": PPO, "TD3": TD3}
+_OFF_POLICY = {"TD3"}
 
 
 class Objective:
-    """
-    Callable Optuna objective.
-
-    Keeps all state (algo, roads, timestep budget, seed) in the instance so
-    the trial function is a clean `__call__(trial) -> float`.
-    """
-
     def __init__(
         self,
         algo: str,
@@ -48,10 +37,9 @@ class Objective:
         self.seed            = seed
 
     def __call__(self, trial: optuna.Trial) -> float:
-        params = sample(self.algo, trial)
+        params     = sample(self.algo, trial)
         trial_seed = self.seed + trial.number
 
-        # short-lived envs: no reward normalisation (too short to converge stats)
         train_venv = make_vec_env(
             road=self.train_road,
             n_envs=1,
@@ -71,7 +59,6 @@ class Objective:
         model.learn(total_timesteps=self.timesteps)
         train_venv.close()
 
-        # evaluation on a fresh env with frozen normalisation stats
         eval_venv = make_eval_vec_env(
             road=self.eval_road,
             n_envs=1,

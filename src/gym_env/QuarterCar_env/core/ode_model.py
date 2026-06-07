@@ -1,15 +1,3 @@
-"""
-Quarter-car ODE: 6-state.
-
-State vector layout
-  x[0] = ζ − z_W   tyre deflection      (+ = compression)
-  x[1] = ż_W       wheel velocity
-  x[2] = z_W − z_B suspension travel    (+ = compression)
-  x[3] = ż_B       body velocity
-  x[4] = v         longitudinal speed   (driven by env, not ODE)
-  x[5] = z_B       body displacement
-
-"""
 import numpy as np
 from numba import njit
 from typing import Callable
@@ -19,7 +7,6 @@ from QuarterCar_env.config.road_params import VEHICLE_SPEED
 
 
 class _P:
-    """Flat parameter struct for the quarter-car ODE model."""
     __slots__ = (
         # masses
         'm_B', 'm_W',
@@ -60,7 +47,7 @@ _X_POS  = 5   # z_B       body displacement
 
 
 def _build_pvec(d: dict) -> np.ndarray:
-    """Pack physics dict into a contiguous float64 array for Numba."""
+    # pack physics dict into flat float64 array for Numba
     v = np.empty(_P_LEN, dtype=np.float64)
     v[_I_MB]  = d['m_B'];      v[_I_MW]  = d['m_W']
     v[_I_CT]  = d['c_T'];      v[_I_KT]  = d['k_T']
@@ -79,11 +66,7 @@ def _build_pvec(d: dict) -> np.ndarray:
 
 @njit(cache=True)
 def _spring_nonlin(dyn: float, p: np.ndarray) -> float:
-    """
-    Exponential bumpstop beyond the linear clearance zone.
-    dyn = x[_X_SUSP] = z_W − z_B  (+ = compression, − = rebound)
-    Returns 0 inside the linear zone; ramps exponentially outside.
-    """
+    # exponential bumpstop: 0 in linear zone, ramps outside (dyn = z_W - z_B)
     dz_cmp = p[_I_DZC];   dz_rbd = p[_I_DZR]
     k_S    = p[_I_KS];    dz_s   = p[_I_DZS]
     F_max  = p[_I_FMAX]
@@ -107,12 +90,7 @@ def _spring_nonlin(dyn: float, p: np.ndarray) -> float:
 
 @njit(cache=True)
 def _damper(v_S: float, p: np.ndarray) -> float:
-    """
-    Smooth asymmetric damper via sigmoid-blended piecewise slopes.
-
-    Compression regimes (v_S > 0): low-speed slope d1, high-speed slope d2.
-    Rebound    regimes (v_S < 0): low-speed slope z1, high-speed slope z2.
-    """
+    # sigmoid-blended piecewise damper: d1/d2 in compression, z1/z2 in rebound
     d1 = p[_I_D1];  z1 = p[_I_Z1]
     d2 = p[_I_D2];  z2 = p[_I_Z2]
     v_d = p[_I_VD]; v_z = p[_I_VZ]
@@ -135,13 +113,7 @@ def _damper(v_S: float, p: np.ndarray) -> float:
 
 @njit(cache=True)
 def _ode(x: np.ndarray, z_q: float, p: np.ndarray) -> np.ndarray:
-    """
-    6-state quarter-car equations of motion.
-
-    x = [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B]
-    z_q = ζ̇  (road velocity, m/s)
-
-    """
+    # x = [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B];  z_q = ζ̇  (road velocity)
     # suspension forces (body–wheel interface)
     F_spring = p[_I_KS] * x[_X_SUSP] + _spring_nonlin(x[_X_SUSP], p)
     F_damp   = _damper(x[_X_ZW] - x[_X_ZB], p)   # v_S = ż_W − ż_B
@@ -162,12 +134,7 @@ def _ode(x: np.ndarray, z_q: float, p: np.ndarray) -> np.ndarray:
 
 @njit(cache=True)
 def _rk4_loop(x: np.ndarray, zq_pre: np.ndarray, dt: float, p: np.ndarray) -> np.ndarray:
-    """
-    Fixed-step RK4 over N_SUB substeps using pre-sampled road velocities.
-
-    zq_pre: shape (N_SUB, 3) — columns are [z_q(t), z_q(t+dt/2), z_q(t+dt)]
-    Road velocities are precomputed in Python so this loop is pure-numba.
-    """
+    # fixed-step RK4; zq_pre shape (N_SUB, 3): [z_q(t), z_q(t+dt/2), z_q(t+dt)]
     xi = x.copy()
     n  = zq_pre.shape[0]
     for i in range(n):

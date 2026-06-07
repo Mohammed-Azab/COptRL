@@ -1,27 +1,3 @@
-"""
-compare.py — Trained-agent vs baseline comparison across road profiles.
-
-Runs the trained RL agent against passive and random baselines on all configured
-road types, aggregates physics metrics over N episodes, exports a JSON summary,
-and optionally saves matplotlib figures.
-
-Usage examples
---------------
-    # Minimal — must point at a trained model:
-    python compare.py --algo PPO --model-path models/PPO/my_run/PPO_final.zip
-
-    # Full config file with CLI overrides:
-    python compare.py --config config/eval/compare_config.yaml --n-episodes 10
-
-    # Single road, save graphs:
-    python compare.py --algo PPO --model-path ... --road speed_bump --save-graphs
-
-    # Render simulation (requires a display):
-    python compare.py --algo PPO --model-path ... --render
-
-    # Skip baselines, only evaluate trained agent:
-    python compare.py --algo PPO --model-path ... --no-baselines
-"""
 from __future__ import annotations
 
 import argparse
@@ -34,23 +10,22 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-# ── path bootstrap (mirrors train.py) ────────────────────────────────────────
 _ROOT = Path(__file__).resolve().parents[2]
 for _p in ("src/gym_env", "src", "src/train"):
     sys.path.insert(0, str(_ROOT / _p))
 
 import gymnasium as gym
-from stable_baselines3 import PPO, SAC, TD3
+from stable_baselines3 import PPO, TD3
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-import QuarterCar_env.envs  # noqa: F401 — registers the gym entry point
-from QuarterCar_env.reward.reward import reward_bounds
+import QuarterCar_env.envs  # noqa: F401
+from QuarterCar_env.wrappers import PreviewWrapper
+from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.config.reward_params import load_reward_config
 from QuarterCar_env.config.env_params import EPISODE_STEPS
 
-# ── constants ─────────────────────────────────────────────────────────────────
-_ALGO_MAP: dict[str, type] = {"PPO": PPO, "SAC": SAC, "TD3": TD3}
-_VALID_ROADS = ["iso_8608_class_c", "speed_bump", "sine_sweep", "flat"]
+_ALGO_MAP: dict[str, type] = {"PPO": PPO, "TD3": TD3}
+_VALID_ROADS = ["speed_bump", "flat", "recorded"]
 _DEFAULT_CFG = _ROOT / "config" / "eval" / "compare_config.yaml"
 _ENV_ID = "QuarterCar_env/QuarterCar"
 
@@ -64,9 +39,7 @@ _SCALAR_KEYS = [
     "action_smoothness_rms",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
 # CLI + config
-# ─────────────────────────────────────────────────────────────────────────────
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -82,13 +55,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--vecnorm-path", default=None,
                    help="Path to vecnormalize .pkl. Auto-inferred when omitted.")
     p.add_argument("--road", choices=_VALID_ROADS + ["all"], default=None,
-                   help="Road profile(s). 'all' evaluates all four.")
+                   help="Road profile(s). 'all' evaluates all three.")
     p.add_argument("--n-episodes", type=int, default=None,
                    help="Episodes per (agent × road) pair.")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--render", action="store_true",
                    help="Enable simulation rendering (requires a display).")
-    p.add_argument("--save-graphs", action="store_true",
+    p.add_argument("--save-plots", action="store_true",
                    help="Save matplotlib figures to results_dir.")
     p.add_argument("--results-dir", default=None,
                    help="Output directory for JSON + figures.")
@@ -111,7 +84,7 @@ def build_config(args: argparse.Namespace) -> dict:
     if args.n_episodes is not None: cfg["n_episodes"]  = args.n_episodes
     if args.seed is not None:       cfg["seed"]        = args.seed
     if args.render:                 cfg["render"]      = True
-    if args.save_graphs:            cfg["save_graphs"] = True
+    if args.save_plots:             cfg["save_plots"]  = True
     if args.results_dir:            cfg["results_dir"] = args.results_dir
     if args.no_baselines:           cfg["baselines"]   = []
 
@@ -123,9 +96,7 @@ def build_config(args: argparse.Namespace) -> dict:
 
     return cfg
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Agent loading
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _infer_vecnorm(model_path: Path) -> Path:
     candidate = model_path.parent / "vecnormalize.pkl"
@@ -138,7 +109,6 @@ def _infer_vecnorm(model_path: Path) -> Path:
 
 
 def load_agent(cfg: dict):
-    """Return (model, vecnorm_path) for the trained agent."""
     model_path = Path(cfg["model_path"])
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found: {model_path}")
@@ -154,9 +124,7 @@ def load_agent(cfg: dict):
     model = cls.load(str(model_path))
     return model, vecnorm_path
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Episode rollout helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _record_step(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["rewards"].append(reward)
@@ -166,7 +134,7 @@ def _record_step(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["body_accels"].append(info.get("z_B_ddot", 0.0))
     ep["comfort_scores"].append(info.get("comfort_score", 0.0))
     ep["rms_accel_running"].append(info.get("rms_accel", 0.0))
-    for key in ("r_tracking", "r_accel", "r_jerk", "r_action_smooth", "r_curve"):
+    for key in ("r_heave", "r_wheel", "r_tracking", "r_accel", "r_jerk", "r_action_smooth", "r_curve"):
         ep[key].append(info.get(key, 0.0))
 
 
@@ -191,7 +159,7 @@ def _summarize(ep: dict) -> dict:
 
 
 def _reset_vec(venv: VecNormalize):
-    """VecNormalize.reset() returns (obs, info) in SB3 ≥ 2.0, just obs otherwise."""
+    # SB3 >= 2.0 returns (obs, info); older returns just obs
     result = venv.reset()
     return result[0] if isinstance(result, tuple) else result
 
@@ -204,8 +172,13 @@ def rollout_trained(
     deterministic: bool,
 ) -> dict:
     render_mode = "human" if render else "none"
-    env_fn = lambda r=road, rm=render_mode: gym.make(_ENV_ID, road_profile=r, render_mode=rm)
-    venv = DummyVecEnv([env_fn])
+
+    def _env_fn():
+        env = gym.make(_ENV_ID, road_profile=road, render_mode=render_mode,
+                       random_road_on_reset=False)
+        return PreviewWrapper(env)
+
+    venv = DummyVecEnv([_env_fn])
     venv = VecNormalize.load(str(vecnorm_path), venv)
     venv.training = False
     venv.norm_reward = False
@@ -231,7 +204,9 @@ def rollout_trained(
 
 def rollout_baseline(road: str, policy: str, seed: int, render: bool) -> dict:
     render_mode = "human" if render else "none"
-    env = gym.make(_ENV_ID, road_profile=road, render_mode=render_mode)
+    env = gym.make(_ENV_ID, road_profile=road, render_mode=render_mode,
+                   random_road_on_reset=False)
+    env = PreviewWrapper(env)
     obs, _ = env.reset(seed=seed)
     done = False
     ep: dict = defaultdict(list)
@@ -250,9 +225,7 @@ def rollout_baseline(road: str, policy: str, seed: int, render: bool) -> dict:
     env.close()
     return _summarize(ep)
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Multi-episode runner + aggregation
-# ─────────────────────────────────────────────────────────────────────────────
 
 def run_agent(
     agent_name: str,
@@ -299,9 +272,7 @@ def aggregate(episodes: list[dict]) -> dict:
     out["representative_ts"] = episodes[0]["ts"]
     return out
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Console output
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _table(title: str, metric: str, unit: str, results: dict) -> None:
     agents = list(results.keys())
@@ -346,9 +317,7 @@ def print_summary(results: dict, bounds: dict, cfg: dict) -> None:
     _table("COMFORT SCORE [0–1]",     "comfort_score", "",       results)
     print()
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Plotting
-# ─────────────────────────────────────────────────────────────────────────────
 
 _AGENT_COLORS = ["#2196F3", "#F44336", "#4CAF50", "#FF9800", "#9C27B0"]
 
@@ -358,8 +327,7 @@ def _agent_color(i: int) -> str:
 
 
 def _bar_group(ax, roads, agents, data_fn, ylabel, title, ref_lines=None):
-    """Generic grouped bar chart helper."""
-    import matplotlib.pyplot as plt  # noqa: F401 (plt unused here, ax is passed in)
+    import matplotlib.pyplot as plt  # noqa: F401
 
     n_agents = len(agents)
     x = np.arange(len(roads))
@@ -497,7 +465,6 @@ def plot_return_distributions(results: dict, bounds: dict, save_dir: Path | None
 
 
 def plot_timeseries(results: dict, bounds: dict, rcfg, save_dir: Path | None) -> None:
-    """One figure per road — overlays all agents' representative episode time-series."""
     import matplotlib.pyplot as plt
 
     agents = list(results.keys())
@@ -570,9 +537,7 @@ def save_plots(results: dict, bounds: dict, rcfg, cfg: dict, save_dir: Path) -> 
     print(f"  Saved: returns.png, rms_accel.png, return_distributions.png,"
           f" timeseries_<road>.png")
 
-# ─────────────────────────────────────────────────────────────────────────────
 # JSON export
-# ─────────────────────────────────────────────────────────────────────────────
 
 def save_json(results: dict, bounds: dict, cfg: dict, save_dir: Path) -> Path:
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -600,9 +565,7 @@ def save_json(results: dict, bounds: dict, cfg: dict, save_dir: Path) -> Path:
     print(f"  JSON saved → {out_path}")
     return out_path
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Main
-# ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     args = parse_args()
@@ -639,7 +602,7 @@ def main() -> None:
     save_dir = _ROOT / cfg.get("results_dir", "eval/results")
     save_json(results, bounds, cfg, save_dir)
 
-    if cfg.get("save_graphs", False):
+    if cfg.get("save_plots", False):
         save_plots(results, bounds, rcfg, cfg, save_dir)
     else:
         print("  (pass --save-graphs to generate figures)")
