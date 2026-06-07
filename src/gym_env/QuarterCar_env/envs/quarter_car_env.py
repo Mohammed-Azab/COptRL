@@ -267,8 +267,9 @@ class QuarterCarEnv(gym.Env):
 
         if self._step_count >= self._max_episode_steps and not truncated:
             terminated = True
-            rms = np.sqrt(self._accel_sq / self._step_count)
-            reward += compute_terminal_bonus(rms, cfg)
+            rms        = np.sqrt(self._accel_sq / self._step_count)
+            mean_speed = self._s_pos / max(self._t, 1e-9)
+            reward    += compute_terminal_bonus(rms, mean_speed, cfg)
 
         if self.render_mode == 'human':
             self.render()

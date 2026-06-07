@@ -35,8 +35,9 @@ def r_wheel(z_W_ddot: float, a_W_comfort: float, wheel_clip: float) -> float:
     return -(z_c / a_W_comfort) ** 2
 
 
-def compute_terminal_bonus(rms_accel: float, cfg: RewardConfig) -> float:
-    if rms_accel < cfg.a_limit:
+def compute_terminal_bonus(rms_accel: float, mean_speed: float, cfg: RewardConfig) -> float:
+    # require BOTH low body accel AND a minimum mean speed — prevents stop-and-wait exploit
+    if rms_accel < cfg.a_limit and mean_speed >= cfg.v_min:
         return cfg.terminal_bonus
     return cfg.terminal_penalty
 
@@ -70,10 +71,13 @@ def compute_reward(
     else:
         bd["r_wheel"] = 0.0
 
+    # r_tracking is intentionally excluded from velocity scaling:
+    # at v≈0 a scaled tracking penalty vanishes, letting the agent learn stop-and-wait.
+    tracking_penalty = 0.0
     if cfg.enable_tracking:
         rt = r_speed_band(v, cfg.v_min, v_upper)
         bd["r_tracking"] = rt
-        core += cfg.w_tracking * rt
+        tracking_penalty = cfg.w_tracking * rt
     else:
         bd["r_tracking"] = 0.0
 
@@ -99,7 +103,7 @@ def compute_reward(
         bd["r_action_smooth"] = 0.0
 
     scale = float(np.clip(v / cfg.v_max, 0.0, 1.0)) if cfg.enable_vel_scaling else 1.0
-    total = scale * core
+    total = scale * core + tracking_penalty
 
     total = float(np.nan_to_num(total, nan=0.0, posinf=0.0, neginf=0.0))
     for key in bd:
