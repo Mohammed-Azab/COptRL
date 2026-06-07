@@ -21,15 +21,6 @@ def test_obs_shape_speed_bump():
     env.close()
 
 
-def test_obs_shape_iso():
-    env = _make("iso_8608_class_c")
-    obs, _ = env.reset(seed=0)
-    from QuarterCar_env.config.reward_params import load_reward_config
-    cfg = load_reward_config()
-    expected = 6 + 3 * cfg.n_peaks
-    assert obs.shape == (expected,), f"got {obs.shape}"
-    env.close()
-
 
 def test_obs_finite_after_step():
     env = _make("speed_bump")
@@ -96,9 +87,10 @@ def test_speed_is_clamped_to_geometry():
     env.close()
 
 
-def test_iso_profile_unaffected_by_random_flag():
-    env = _make("iso_8608_class_c", random_road_on_reset=True)
+def test_flat_profile_unaffected_by_random_flag():
+    env = _make("flat", random_road_on_reset=True)
     obs0, _ = env.reset(seed=0)
     obs1, _ = env.reset(seed=0)
+    # flat road + same seed → identical obs
     assert np.allclose(obs0, obs1)
     env.close()

@@ -42,12 +42,6 @@ bump_types:
     bump_height: 0.25
     bump_length: 7.0
 
-# ISO 8608 / sine-sweep params
-iso_gd0: 0.000256
-iso_n0: 0.1
-sweep_amplitude: 0.02
-episode_duration: 5.0
-
 # Default longitudinal speed
 vehicle_speed: 6.0       # m/s
 

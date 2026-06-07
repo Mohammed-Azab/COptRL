@@ -21,7 +21,7 @@ from QuarterCar_env.config.reward_params import load_reward_config
 
 
 _CONFIG_PATH = _ROOT / "config" / "algo" / "algo_configs.yaml"
-_VALID_ROADS = ["iso_8608_class_c", "speed_bump", "sine_sweep", "flat"]
+_VALID_ROADS = ["speed_bump", "flat", "recorded"]
 
 
 def parse_args() -> argparse.Namespace:

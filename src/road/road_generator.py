@@ -1,40 +1,19 @@
-""" 
+"""
 Road profile generator.
-Profiles:
-        speed_bump,
-        iso_8608_class_c,
-        sine_sweep,
-        flat,
-        recorded.
+Profiles: speed_bump, flat, recorded.
 """
 from __future__ import annotations
 from typing import Optional
 import numpy as np
 
-from QuarterCar_env.config.road_params import ROAD_DEFAULTS, MULTI_BUMP_CONFIG
+from QuarterCar_env.config.road_params import MULTI_BUMP_CONFIG
 
 
 class RoadGenerator:
     def __init__(self, profile: str = 'speed_bump', vehicle_speed: float = 10.0,
                  params: Optional[dict] = None):
         self.profile = profile
-        self.speed = vehicle_speed
-        p = {**ROAD_DEFAULTS, **(params or {})}
-
-        # ISO 8608 buffer is pre-generated at init and regenerated on reset()
-        self._iso_Gd0      = p['iso_gd0']
-        self._iso_n0       = p['iso_n0']
-        self._iso_dt       = 0.002   # s - internal integration step
-        self._iso_duration = 60.0    # s - pre-generated buffer length
-
-        self._sweep_A     = p['sweep_amplitude']
-        self._sweep_f_min = 0.5    # Hz
-        self._sweep_f_max = 20.0   # Hz
-        self._ep_duration = p['episode_duration']
-
-        self._iso_h:     np.ndarray = np.empty(0)
-        self._iso_h_dot: np.ndarray = np.empty(0)
-        self._build_iso_buffer(seed=None)
+        self.speed   = vehicle_speed
 
         # Multi-bump layout for speed_bump profile.
         if params and all(k in params for k in ('bump_height', 'bump_length', 'bump_x_start')):
@@ -52,16 +31,15 @@ class RoadGenerator:
         self._rec_z:    Optional[np.ndarray] = None
         self._rec_dzdx: Optional[np.ndarray] = None
 
-    # Multi-bump builder
     @staticmethod
     def _build_bumps(config: dict) -> list:
         """Return list of (x_start, height, length) tuples from multi-bump config."""
         bumps = []
         x = float(config["bump_x_start"])
-        dis_mode   = config["dis_mode"]
-        seq        = config["bump_sequence"]
-        types      = config["bump_types"]
-        n          = min(int(config["num_bumps"]), len(seq))
+        dis_mode    = config["dis_mode"]
+        seq         = config["bump_sequence"]
+        types       = config["bump_types"]
+        n           = min(int(config["num_bumps"]), len(seq))
         custom_gaps = config.get("custom_dis", [])
         constant_gap = float(config.get("constant_dis", 5.0))
 
@@ -80,24 +58,6 @@ class RoadGenerator:
 
         return bumps
 
-    def _build_iso_buffer(self, seed=None):
-        rng = np.random.default_rng(seed)
-        n    = int(self._iso_duration / self._iso_dt)
-        dx   = self.speed * self._iso_dt
-        x_total = n * dx
-
-        n_freq      = np.fft.rfftfreq(n, d=dx)
-        n_freq[0]   = 1e-9  # avoid divide-by-zero at DC
-        Gd          = self._iso_Gd0 * (n_freq / self._iso_n0) ** (-2)
-        amp         = (n / 2.0) * np.sqrt(2.0 * Gd / x_total)
-        phases      = rng.uniform(0, 2 * np.pi, size=len(n_freq))
-        spectrum    = amp * np.exp(1j * phases)
-        spectrum[0] = 0.0   # zero mean
-
-        h = np.fft.irfft(spectrum, n=n)
-        self._iso_h     = h
-        self._iso_h_dot = np.gradient(h, self._iso_dt)
-
     def get_height(self, t: float) -> float:
         if self.profile == 'flat':
             return 0.0
@@ -108,13 +68,6 @@ class RoadGenerator:
                 if 0.0 <= dx <= L:
                     return (A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx / L))
             return 0.0
-        if self.profile == 'iso_8608_class_c':
-            idx = int(t / self._iso_dt) % len(self._iso_h)
-            return float(self._iso_h[idx])
-        if self.profile == 'sine_sweep':
-            ratio = min(t / self._ep_duration, 1.0)
-            f = self._sweep_f_min + (self._sweep_f_max - self._sweep_f_min) * ratio
-            return self._sweep_A * np.sin(2.0 * np.pi * f * t)
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_z is not None
             x = np.clip(self.speed * t, self._rec_arc[0], self._rec_arc[-1])
@@ -132,12 +85,6 @@ class RoadGenerator:
                     dzdx = (A / 2.0) * (2.0 * np.pi / L) * np.sin(2.0 * np.pi * dx / L)
                     return dzdx * self.speed
             return 0.0
-        if self.profile == 'iso_8608_class_c':
-            idx = int(t / self._iso_dt) % len(self._iso_h_dot)
-            return float(self._iso_h_dot[idx])
-        if self.profile == 'sine_sweep':
-            eps = 1e-5
-            return (self.get_height(t + eps) - self.get_height(t - eps)) / (2.0 * eps)
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_dzdx is not None
             x = np.clip(self.speed * t, self._rec_arc[0], self._rec_arc[-1])
@@ -162,13 +109,6 @@ class RoadGenerator:
                     result,
                 )
             return result
-        if self.profile == 'iso_8608_class_c':
-            idxs = np.mod((t / self._iso_dt).astype(int), len(self._iso_h))
-            return self._iso_h[idxs]
-        if self.profile == 'sine_sweep':
-            ratio = np.clip(t / self._ep_duration, 0.0, 1.0)
-            f = self._sweep_f_min + (self._sweep_f_max - self._sweep_f_min) * ratio
-            return self._sweep_A * np.sin(2.0 * np.pi * f * t)
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_z is not None
             x = np.clip(self.speed * t, self._rec_arc[0], self._rec_arc[-1])
@@ -184,7 +124,6 @@ class RoadGenerator:
         n_points: int,
     ) -> np.ndarray:
         # Return road heights at n_points positions ahead of s_pos.
-        v = max(float(v_current), 0.5)  # guard against near-zero speed in division
         s_offsets = np.linspace(lookahead_m / n_points, lookahead_m, n_points)
 
         if self.profile == 'flat':
@@ -203,17 +142,6 @@ class RoadGenerator:
                 )
             return heights.astype(np.float32)
 
-        if self.profile == 'iso_8608_class_c':
-            t_query = t_current + s_offsets / v
-            idxs = np.mod((t_query / self._iso_dt).astype(int), len(self._iso_h))
-            return self._iso_h[idxs].astype(np.float32)
-
-        if self.profile == 'sine_sweep':
-            t_query = t_current + s_offsets / v
-            ratio = np.clip(t_query / self._ep_duration, 0.0, 1.0)
-            f = self._sweep_f_min + (self._sweep_f_max - self._sweep_f_min) * ratio
-            return (self._sweep_A * np.sin(2.0 * np.pi * f * t_query)).astype(np.float32)
-
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_z is not None
             x_ahead = np.clip(s_pos + s_offsets, self._rec_arc[0], self._rec_arc[-1])
@@ -221,12 +149,31 @@ class RoadGenerator:
 
         return np.zeros(n_points, dtype=np.float32)
 
+    def _clamp_speed_to_geometry(self) -> None:
+        """Clip self.speed to a physics-safe limit derived from bump geometry.
+
+        Linear boundary calibrated from two empirical test runs (ba_azab, runs 11 & 13):
+          run 13: h=0.06 m, L=0.6 m  at v=21.6  km/h  → ratio=0.100
+          run 11: h=0.07 m, L=1.2 m  at v=22.27 km/h  → ratio=0.058
+        Fit: ratio = m·v_kmh + c  →  v_lim = (ratio_max − c) / m
+        """
+        if self.profile != 'speed_bump' or not self._bumps:
+            return
+        h1, L1, v1 = 0.06, 0.6,  6.000 * 3.6
+        h2, L2, v2 = 0.07, 1.2,  6.185 * 3.6
+        r1, r2 = h1 / L1, h2 / L2
+        m = (r1 - r2) / (v1 - v2)
+        c = r2 - m * v2
+        max_ratio = max(A / L for _, A, L in self._bumps)
+        v_lim_ms  = ((max_ratio - c) / m) / 3.6
+        self.speed = float(np.clip(self.speed, 0.0, v_lim_ms))
+
     def set_speed(self, v: float) -> None:
         self.speed = float(v)
+        self._clamp_speed_to_geometry()
 
     def reset(self, seed=None):
-        if self.profile == 'iso_8608_class_c':
-            self._build_iso_buffer(seed=seed)
+        pass   # nothing to regenerate for speed_bump / flat / recorded
 
     def load_recorded(self, arc_m: np.ndarray, z_m: np.ndarray) -> None:
         # Switch to 'recorded' profile using the supplied arc-length arrays.
@@ -234,6 +181,43 @@ class RoadGenerator:
         self._rec_z    = np.asarray(z_m,   dtype=np.float64)
         self._rec_dzdx = np.gradient(self._rec_z, self._rec_arc)
         self.profile   = 'recorded'
+
+    @classmethod
+    def from_random(
+        cls,
+        rng: np.random.Generator,
+        vehicle_speed: float,
+        params: Optional[dict] = None,
+        *,
+        num_bumps_range: tuple = (1, 5),
+        bump_height_range: tuple = (0.05, 0.25),
+        bump_length_range: tuple = (1.0, 7.0),
+        min_gap: float = 2.0,
+        flat_start: float = 8.0,
+    ) -> 'RoadGenerator':
+        """Return a speed-bump RoadGenerator with randomly sampled geometry.
+
+        All randomness uses the caller-supplied *rng* — no global np.random state is touched.
+        Bumps are placed sequentially: first at *flat_start*, each subsequent one after the
+        previous bump ends plus a uniformly sampled gap in [min_gap, 3·min_gap].
+        Speed is automatically clamped to the geometry-safe limit after placement.
+        """
+        n       = int(rng.integers(num_bumps_range[0], num_bumps_range[1] + 1))
+        heights = rng.uniform(*bump_height_range, size=n)
+        lengths = rng.uniform(*bump_length_range, size=n)
+        gaps    = rng.uniform(min_gap, min_gap * 3.0, size=max(n - 1, 0))
+
+        bumps: list = []
+        x = float(flat_start)
+        for i in range(n):
+            bumps.append((x, float(heights[i]), float(lengths[i])))
+            if i < n - 1:
+                x += float(lengths[i]) + float(gaps[i])
+
+        gen = cls(profile='speed_bump', vehicle_speed=vehicle_speed, params=params)
+        gen._bumps = bumps
+        gen._clamp_speed_to_geometry()
+        return gen
 
     @classmethod
     def from_scenario_file(cls, path: str, speed: Optional[float] = None) -> 'RoadGenerator':

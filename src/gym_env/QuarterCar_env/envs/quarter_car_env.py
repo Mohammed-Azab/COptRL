@@ -453,7 +453,7 @@ class QuarterCarEnv(gym.Env):
         if self.road_profile == 'recorded' and self._road._rec_arc is not None:
             return min(float(self._road._rec_arc[-1]), episode_budget_m)
 
-        return None  # iso / sine_sweep / flat: no distance limit
+        return None  # flat: no distance limit
 
     def _compute_v_ref(self, t: float) -> float:
         if self._ref_speed_profile == "custom" and self._v_ref_fn is not None:
