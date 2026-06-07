@@ -1,12 +1,11 @@
 # PPO search space for Optuna.
-# type: float_log | float | int | categorical
-# n_units → resolved to policy_kwargs.net_arch by search_spaces.py
+# Available types: float_log | float | int | categorical
 
 PPO:
   learning_rate:
     type: float_log
     low: 1.0e-5
-    high: 1.0e-3       # default 3e-4 sits inside range, not at the boundary
+    high: 1.0e-3      
 
   n_steps:
     type: categorical
@@ -50,6 +49,7 @@ PPO:
     low: 0.3
     high: 1.0
 
+# policy_kwargs.net_arch
   n_units:
     type: categorical
     choices: [128, 256, 512]
@@ -57,7 +57,7 @@ PPO:
 # defaults for tune.py — overridden by CLI flags
 defaults:
   timesteps_per_trial: 100_000
-  n_eval_episodes:     3        # keep trials fast; 3 episodes is enough for ranking
+  n_eval_episodes:     5       
   eval_road:           speed_bump
   train_road:          speed_bump
   seed:                0

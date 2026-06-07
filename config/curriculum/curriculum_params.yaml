@@ -1,11 +1,8 @@
 # Step thresholds (per-env steps) at which the next level unlocks.
-# With n_envs=4: level 1 at ~50k total steps, level 2 at ~125k.
 thresholds:
   - 200_000
   - 500_000
 
-# Each level tightens the random road bounds passed to from_random.
-# Level 0 is the easiest; the last level is the hardest.
 levels:
   0:
     num_bumps_range:   [1, 2]
