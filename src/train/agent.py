@@ -7,16 +7,15 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from stable_baselines3 import PPO, TD3
+from stable_baselines3 import PPO
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.vec_env import VecEnv
 
 _REGISTRY: dict[str, type[BaseAlgorithm]] = {
     "PPO": PPO,
-    "TD3": TD3,
 }
 
-_OFF_POLICY = {"TD3"}
+_OFF_POLICY: set[str] = set()
 
 
 def supported_algos() -> list[str]:

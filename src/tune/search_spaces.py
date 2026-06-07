@@ -3,39 +3,36 @@ from __future__ import annotations
 import optuna
 
 
-def sample_ppo(trial: optuna.Trial) -> dict:
-    n_units = trial.suggest_categorical("n_units", [128, 256, 512])
-    return {
-        "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
-        "n_steps":       trial.suggest_categorical("n_steps", [1024, 2048, 4096]),
-        "batch_size":    trial.suggest_categorical("batch_size", [64, 128, 256]),
-        "n_epochs":      trial.suggest_int("n_epochs", 5, 20),
-        "gamma":         trial.suggest_float("gamma", 0.95, 0.999),
-        "gae_lambda":    trial.suggest_float("gae_lambda", 0.90, 0.99),
-        "policy_kwargs": {"net_arch": {"pi": [n_units, n_units], "vf": [n_units, n_units]}},
-    }
+def sample_from_config(trial: optuna.Trial, space: dict) -> dict:
+    """Build SB3 kwargs from a YAML search-space dict.
 
+    Supported types: float_log, float, int, categorical.
+    n_units is a special key: resolved to policy_kwargs.net_arch.
+    """
+    params: dict = {}
+    n_units = None
 
-def sample_td3(trial: optuna.Trial) -> dict:
-    n_units = trial.suggest_categorical("n_units", [256, 400])
-    return {
-        "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-3, log=True),
-        "buffer_size":   trial.suggest_categorical("buffer_size", [100_000, 200_000]),
-        "batch_size":    trial.suggest_categorical("batch_size", [128, 256]),
-        "tau":           trial.suggest_float("tau", 0.001, 0.05),
-        "gamma":         trial.suggest_float("gamma", 0.95, 0.999),
-        "policy_kwargs": {"net_arch": [n_units, n_units]},
-    }
+    for name, spec in space.items():
+        kind = spec["type"]
 
+        if name == "n_units":
+            n_units = trial.suggest_categorical("n_units", spec["choices"])
+            continue
 
-_SAMPLERS: dict[str, callable] = {
-    "PPO": sample_ppo,
-    "TD3": sample_td3,
-}
+        if kind == "float_log":
+            params[name] = trial.suggest_float(name, spec["low"], spec["high"], log=True)
+        elif kind == "float":
+            params[name] = trial.suggest_float(name, spec["low"], spec["high"])
+        elif kind == "int":
+            params[name] = trial.suggest_int(name, spec["low"], spec["high"])
+        elif kind == "categorical":
+            params[name] = trial.suggest_categorical(name, spec["choices"])
+        else:
+            raise ValueError(f"Unknown search-space type '{kind}' for param '{name}'")
 
+    if n_units is not None:
+        params["policy_kwargs"] = {
+            "net_arch": {"pi": [n_units, n_units], "vf": [n_units, n_units]}
+        }
 
-def sample(algo: str, trial: optuna.Trial) -> dict:
-    key = algo.upper()
-    if key not in _SAMPLERS:
-        raise ValueError(f"No sampler for algo '{algo}'. Available: {list(_SAMPLERS)}")
-    return _SAMPLERS[key](trial)
+    return params

@@ -13,7 +13,7 @@ sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
 sys.path.insert(0, str(_ROOT / "src")) 
 sys.path.insert(0, str(_ROOT / "src" / "train"))
 
-from agent import build_model, is_off_policy, load_algo_config, supported_algos
+from agent import build_model, load_algo_config, supported_algos
 from monitoring import build_callbacks
 from environment import make_eval_vec_env, make_vec_env
 from seed import seed_everything
@@ -173,8 +173,7 @@ def main() -> None:
 
     #  environments
     gamma = algo_kwargs.get("gamma", 0.99)
-    # off-policy (SAC/TD3): normalising rewards distorts Q-value targets
-    norm_reward = normalize and train_meta.get("norm_reward_ppo", True) and not is_off_policy(args.algo)
+    norm_reward = normalize and train_meta.get("norm_reward", True)
 
     render_mode = "human" if args.render else "none"
     train_venv = make_vec_env(

@@ -1,87 +1,60 @@
-# Optuna search-space definitions.
-# Each leaf has: type (float_log | float | int | categorical), low/high or choices.
-# Consumed by tune/samplers.py.
+# PPO search space for Optuna.
+# Each parameter entry has:
+#   type: float_log | float | int | categorical
+#   low / high  (for float / int / float_log)
+#   choices     (for categorical)
+#
+# n_units is a convenience alias: resolved to policy_kwargs.net_arch inside the sampler.
 
 PPO:
   learning_rate:
     type: float_log
     low: 1.0e-5
-    high: 1.0e-3
+    high: 3.0e-4
+
   n_steps:
     type: categorical
     choices: [1024, 2048, 4096]
+
   batch_size:
     type: categorical
     choices: [64, 128, 256]
+
   n_epochs:
     type: int
     low: 5
     high: 20
+
   gamma:
     type: float
-    low: 0.95
+    low: 0.97
     high: 0.999
+
   gae_lambda:
     type: float
-    low: 0.9
+    low: 0.90
     high: 0.99
-  n_units:                  # resolved to policy_kwargs.net_arch inside sampler
-    type: categorical
-    choices: [128, 256, 512]
 
-SAC:
-  learning_rate:
+  clip_range:
+    type: categorical
+    choices: [0.1, 0.2, 0.3]
+
+  ent_coef:
     type: float_log
-    low: 1.0e-5
-    high: 1.0e-3
-  buffer_size:
-    type: categorical
-    choices: [100_000, 200_000, 500_000]
-  batch_size:
-    type: categorical
-    choices: [128, 256, 512]
-  tau:
-    type: float
-    low: 0.001
-    high: 0.05
-  gamma:
-    type: float
-    low: 0.95
-    high: 0.999
+    low: 1.0e-8
+    high: 1.0e-2
+
   n_units:
     type: categorical
     choices: [128, 256, 512]
 
-TD3:
-  learning_rate:
-    type: float_log
-    low: 1.0e-5
-    high: 1.0e-3
-  buffer_size:
-    type: categorical
-    choices: [100_000, 200_000]
-  batch_size:
-    type: categorical
-    choices: [128, 256]
-  tau:
-    type: float
-    low: 0.001
-    high: 0.05
-  gamma:
-    type: float
-    low: 0.95
-    high: 0.999
-  n_units:
-    type: categorical
-    choices: [256, 400]
-
-# ── tuning run defaults ──────────────────────────────────────────────────────
+# defaults for tune.py (overridden by CLI flags)
 defaults:
-  n_trials: 50
-  timesteps_per_trial: 50_000
-  n_eval_episodes: 3
-  eval_road: speed_bump
-  train_road: iso_8608_class_c
-  seed: 0
-  n_jobs: 1
-  direction: maximize
+  timesteps_per_trial: 100_000
+  n_eval_episodes:     5
+  eval_road:           speed_bump
+  train_road:          speed_bump
+  seed:                0
+  n_jobs:              1
+  direction:           maximize
+  use_curriculum:      true
