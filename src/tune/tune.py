@@ -95,8 +95,7 @@ def main() -> None:
     n_eval_ep       = defaults.get("n_eval_episodes", 5)
     use_curriculum  = not args.no_curriculum and defaults.get("use_curriculum", True)
 
-    ts           = datetime.now().strftime("%Y%m%d_%H%M%S")
-    study_name   = args.study_name or f"PPO_{ts}"
+    study_name   = args.study_name or "myPPO_study"
     results_path = _RESULTS_DIR / f"{study_name}.json"
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)

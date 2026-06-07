@@ -12,7 +12,7 @@ install:
     {{pip}} install -r requirements.txt
     {{pip}} install -e src/gym_env
 
-torch-cpu:
+install-torch-cpu:
     {{pip}} install torch --index-url https://download.pytorch.org/whl/cpu
 
 build-gym-env:
@@ -43,13 +43,13 @@ tune *args="":
     PYTHONPATH=src:src/tune:src/train {{venv}} src/tune/tune.py {{args}}
 
 # tuning with SQLite storage for live dashboard
-tune-db study="ppo_study" *args="":
+tune-db study="myPPO_study" *args="":
     PYTHONPATH=src:src/tune:src/train {{venv}} src/tune/tune.py \
         --storage sqlite:///tune.db --study-name {{study}} {{args}}
 
 # open Optuna dashboard (requires: just install-dashboard)
 dashboard db="tune.db":
-    {{venv}} -m optuna_dashboard sqlite:///{{db}}
+    .venv/bin/optuna-dashboard sqlite:///{{db}}
 
 # TensorBoard for all runs
 tb:
