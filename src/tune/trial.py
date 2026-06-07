@@ -85,13 +85,19 @@ class Objective:
 
         returns = []
         for _ in range(self.n_eval_episodes):
-            obs, _ = eval_venv.reset()
+            reset_out = eval_venv.reset()
+            obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
             ep_return, done = 0.0, False
             while not done:
                 action, _ = model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, _ = eval_venv.step(action)
+                step_out = eval_venv.step(action)
+                obs    = step_out[0]
+                reward = step_out[1]
+                if len(step_out) == 5:
+                    done = bool(step_out[2][0] or step_out[3][0])
+                else:
+                    done = bool(step_out[2][0])
                 ep_return += float(reward[0])
-                done = bool(terminated[0] or truncated[0])
             returns.append(ep_return)
         eval_venv.close()
 
