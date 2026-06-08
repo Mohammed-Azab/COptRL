@@ -367,3 +367,36 @@ See `TRIAL_ERROR.md` Issue 5.
 Moving jerk/smooth back inside the velocity-scaled block re-enables the oscillation exploit.
 The agent drives slowly, oscillates freely, and collects terminal bonuses without ever crossing
 bumps smoothly.
+
+---
+
+## r_progress: positive reward for forward movement
+
+**What we do:**
+```python
+r_progress = v / v_max   # in [0, 1], unscaled, always on
+total = scale * core + tracking_penalty + jerk_smooth_penalty + w_progress * r_progress
+```
+
+**Why:**
+Before this, every reward term was non-positive. The agent had:
+- Penalties for going slow (r_tracking)
+- Penalties for bad comfort (r_heave, r_accel, ...)
+- A terminal bonus/penalty at the end
+
+But **no positive signal that directly rewards forward progress**. The only incentive to move was avoiding the tracking penalty. With enough other penalties active (heave, jerk), the agent could balance near a low-but-non-zero speed and the gradient toward faster movement was weak.
+
+`r_progress = v/v_max` is a direct, always-positive encouragement: the faster you move, the more you earn each step. At v=0 it contributes 0; at v=v_max it contributes w_progress × 1 = +0.2/step = +60 per episode on top of everything else.
+
+Combined with r_tracking (negative for being below v_max), the speed signal has both:
+- A pull (positive progress reward → go faster)
+- A push (tracking penalty → get away from zero)
+
+This widens the gap between the creep-and-wait exploit (+39) and genuine good crossing (+64) from 3 points to 25 points, making learning more reliable.
+
+The new episode maximum is +160 (full speed, flat road, zero heave), up from +100.
+
+**What breaks if you change it:**
+Removing r_progress narrows the reward gap between creeping and crossing.
+Setting w_progress too high (> 0.5) risks the agent going full speed regardless of bumps
+because the progress reward outweighs heave penalties.
