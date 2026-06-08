@@ -233,3 +233,105 @@ This is the statistically correct approach — reduce variance through aggregati
 Adding seed to the Optuna search space means the study will converge on the luckiest seed, not
 the best hyperparameters. Results will not reproduce: retraining with the "winning" seed gives
 average performance, not the performance the study measured.
+
+---
+
+## Geometry clamp uses physics formula, not empirical fit
+
+**What we do:**
+```python
+ZETA_DOT_LIMIT = 7.0   # m/s — matches OBS_HIGH[1] in env_params.yaml
+steepest = max(π * H / L for each bump)
+v_lim = ZETA_DOT_LIMIT / steepest
+self.speed = clip(self.speed, 0, v_lim)
+```
+
+**Why:**
+The original clamp used a linear fit from two empirical data points (ba_azab runs 11 and 13).
+Both points had nearly identical speeds (~22 km/h), so the fitted line was near-horizontal
+and clamped every bump — including a gentle 4 cm × 7 m bump — to about 23 km/h.
+Result: 56–91% of curriculum episodes were clamped to the same speed regardless of level,
+making the curriculum ineffective (all levels produced the same ~20 km/h speed distribution).
+
+The physics-based formula sets the limit so the peak road velocity ζ̇ = v · πH/L stays
+within the observation window (7 m/s). For gentle bumps (low H/L ratio) the limit is high
+and no clamping occurs. For steep bumps the limit is appropriately low.
+
+**What breaks if you change it:**
+Reverting to the empirical fit clamps all bumps to ~20 km/h regardless of geometry.
+The agent never sees speeds above ~23 km/h during training and cannot learn meaningful
+speed planning — the task reduces to "always drive at 20 km/h".
+
+---
+
+## Curriculum heights are capped at 15 cm (not 30 cm)
+
+**What we do:**
+```
+Level 0: 4–7 cm   (Nardo reference: 6.4 cm)
+Level 1: 4–10 cm
+Level 2: 5–12 cm
+Level 3: 5–15 cm  (upper end of real sleeping-policeman bumps)
+```
+
+**Why:**
+Real-world speed bumps are 7–12 cm tall (EU standard) and the Nardo proving ground data
+used to calibrate this model has a maximum height of 7.8 cm. 30 cm bumps (the previous
+level 3 maximum) do not exist as speed bumps — they are curbs or steps. At 30 cm height
+the geometry clamp forces the speed to 13.6 km/h regardless of bump length, removing any
+speed planning challenge and making the training distribution unrealistic.
+
+15 cm is the upper end of aggressive real sleeping-policeman bumps and gives the agent
+a physically meaningful challenge: slow down from 50–72 km/h to ~30–40 km/h, cross
+smoothly, resume speed.
+
+**What breaks if you change it:**
+Raising heights above 15–20 cm → geometry clamp forces extreme speed reduction → agent
+learns to creep at 14 km/h on all roads → no meaningful speed planning learned.
+
+---
+
+## Road completion is termination, not truncation
+
+**What we do:**
+When the agent reaches `max_distance` (end of road past the last bump), the episode ends
+as `terminated=True` and the terminal bonus fires based on RMS body accel and mean speed.
+
+**Why:**
+Previously `max_distance` caused `truncated=True`, which skips the terminal bonus entirely.
+An agent that crossed all bumps quickly and comfortably at step 170 got zero terminal signal.
+The agent that crept to step 300 got ±100. This gave a perverse incentive to waste time
+rather than cross efficiently.
+
+With `terminated=True` on road completion, both paths (fast crossing and slow crossing)
+receive the same terminal evaluation. The agent is rewarded for quality of crossing, not
+for how long it took.
+
+**What breaks if you change it:**
+Reverting to `truncated=True` on road completion removes the terminal signal for all episodes
+where the agent crosses the road efficiently. PPO's advantage estimation is cut off and the
+agent never learns that fast+comfortable crossing is the goal.
+
+---
+
+## TRUNC_TRAVEL = 0.20 m, not 0.15 m
+
+**What we do:**
+Safety truncation for suspension travel fires at 0.20 m dynamic travel (z_W − z_B from
+static equilibrium).
+
+**Why:**
+Calibrated from 100 worst-case episodes (6 × 15 cm × 1 m bumps, full throttle):
+maximum observed travel was 0.149 m. Setting the limit to 0.15 m would fire spuriously
+on unlucky integration steps (0.001 m margin is insufficient). 0.20 m gives 34% margin
+while still catching genuine numerical blow-ups (ODE divergence), which would produce
+values far above 0.20 m.
+
+The original 0.60 m limit never fired — it was unreachable without numerical divergence
+and provided no meaningful safety net. 0.20 m is tight enough to catch real problems and
+loose enough to never interfere with normal training.
+
+**What breaks if you change it:**
+Setting below 0.15 m → spurious safety truncations during fast aggressive crossings →
+episodes cut short, no terminal bonus, noisy training signal.
+Setting to 0.60 m → reverts to dead code that never fires.
