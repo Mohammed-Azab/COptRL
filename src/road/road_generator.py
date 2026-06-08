@@ -146,23 +146,25 @@ class RoadGenerator:
         return np.zeros(n_points, dtype=np.float32)
 
     def _clamp_speed_to_geometry(self) -> None:
-        """Clip self.speed to a physics-safe limit derived from bump geometry.
+        """Clip speed so the peak road velocity ζ̇ stays within the observation window.
 
-        Linear boundary calibrated from two empirical test runs (ba_azab, runs 11 & 13):
-          run 13: h=0.06 m, L=0.6 m  at v=21.6  km/h  → ratio=0.100
-          run 11: h=0.07 m, L=1.2 m  at v=22.27 km/h  → ratio=0.058
-        Fit: ratio = m·v_kmh + c  →  v_lim = (ratio_max − c) / m
+        For a cosine bump ζ(x) = H/2·(1−cos(2πx/L)), the peak spatial gradient is
+        dζ/dx|_max = πH/L, giving ζ̇_max = v · πH/L.
+
+        We limit ζ̇_max ≤ ZETA_DOT_LIMIT (the ODE/observation safe range) so that
+        the most aggressive bump in the road stays within the model's valid regime.
+
+        This replaces an earlier two-point empirical fit that erroneously clamped
+        ALL bumps to ~20 km/h regardless of geometry (calibration points had nearly
+        identical speeds, making the linear extrapolation meaningless).
         """
         if self.profile != 'speed_bump' or not self._bumps:
             return
-        h1, L1, v1 = 0.06, 0.6,  6.000 * 3.6
-        h2, L2, v2 = 0.07, 1.2,  6.185 * 3.6
-        r1, r2 = h1 / L1, h2 / L2
-        m = (r1 - r2) / (v1 - v2)
-        c = r2 - m * v2
-        max_ratio = max(A / L for _, A, L in self._bumps)
-        v_lim_ms  = ((max_ratio - c) / m) / 3.6
-        self.speed = float(np.clip(self.speed, 0.0, v_lim_ms))
+        ZETA_DOT_LIMIT = 7.0   # m/s — matches OBS_HIGH[1] in env_params.yaml
+        steepest = max(np.pi * A / L for _, A, L in self._bumps)  # πH/L
+        if steepest > 0:
+            v_lim = ZETA_DOT_LIMIT / steepest
+            self.speed = float(np.clip(self.speed, 0.0, v_lim))
 
     def set_speed(self, v: float) -> None:
         self.speed = float(v)

@@ -1,43 +1,46 @@
 # Step thresholds (per-env steps) at which the next level unlocks.
 # Speed values are in km/h — loaders convert to m/s internally.
+#
+# Heights calibrated to real-world speed bumps (Nardo data: z_max = 5-8 cm).
+# Level 3 reaches 15 cm which is the upper end of real sleeping-policeman bumps.
 thresholds:
   - 350_000
   - 500_000
   - 700_000
 
 levels:
-  0:                              # 0 – 350k steps
+  0:                              # 0 – 350k steps  — gentle, real speed bumps
     num_bumps_range:   [1, 2]
-    bump_height_range: [0.05, 0.10]
+    bump_height_range: [0.04, 0.07]   # 4–7 cm  (Nardo sb1: 6.4 cm)
     bump_length_range: [3.0, 7.0]
+    min_gap:           5.0
+    flat_start:        8.0
+    v_random_low:      25.0   # km/h
+    v_random_high:     54.0   # km/h
+
+  1:                              # 350k – 500k steps — standard bumps, more variety
+    num_bumps_range:   [1, 3]
+    bump_height_range: [0.04, 0.10]   # 4–10 cm
+    bump_length_range: [2.0, 7.0]
     min_gap:           4.0
     flat_start:        8.0
-    v_random_low:      14.4   # km/h  (= 4 m/s)
-    v_random_high:     36.0   # km/h  (= 10 m/s)
+    v_random_low:      25.0   # km/h
+    v_random_high:     72.0   # km/h
 
-  1:                              # 350k – 500k steps
-    num_bumps_range:   [1, 3]
-    bump_height_range: [0.05, 0.15]
-    bump_length_range: [2.0, 7.0]
+  2:                              # 500k – 700k steps — aggressive bumps
+    num_bumps_range:   [1, 4]
+    bump_height_range: [0.05, 0.12]   # 5–12 cm
+    bump_length_range: [1.5, 6.0]
     min_gap:           3.0
     flat_start:        8.0
-    v_random_low:      14.4   # km/h
-    v_random_high:     54.0   # km/h  (= 15 m/s)
+    v_random_low:      18.0   # km/h
+    v_random_high:     72.0   # km/h
 
-  2:                              # 500k – 700k steps
-    num_bumps_range:   [1, 5]
-    bump_height_range: [0.05, 0.25]
-    bump_length_range: [1.0, 7.0]
+  3:                              # 700k+ steps — tough: tall or short bumps, clusters
+    num_bumps_range:   [2, 6]
+    bump_height_range: [0.05, 0.15]   # 5–15 cm  (upper end of real sleeping policeman)
+    bump_length_range: [1.0, 5.0]
     min_gap:           2.0
-    flat_start:        8.0
-    v_random_low:      14.4   # km/h
-    v_random_high:     72.0   # km/h  (= 20 m/s)
-
-  3:                              # 700k+ steps — full difficulty
-    num_bumps_range:   [2, 7]
-    bump_height_range: [0.05, 0.30]
-    bump_length_range: [0.5, 5.0]
-    min_gap:           1.5
     flat_start:        6.0
-    v_random_low:      14.4   # km/h
+    v_random_low:      18.0   # km/h
     v_random_high:     72.0   # km/h
