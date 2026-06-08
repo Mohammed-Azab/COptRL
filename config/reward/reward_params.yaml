@@ -9,9 +9,9 @@ weights:
 vertical:
   w_heave:          0.8
   w_wheel:          0.3
-  a_B_comfort:      0.5
+  a_B_comfort:      3.0   # normalisation for heave reward; calibrated for Mandl bump range (2-5 m/s²)
   a_W_comfort:     30.0
-  reward_heave_clip:  1.0   # m/s²
+  reward_heave_clip:  8.0   # was 1.0 — preserve gradient across realistic body-accel range
   reward_wheel_clip: 60.0   # m/s²
 
   enable_heave:     true
@@ -47,10 +47,10 @@ jerk:
 terminal:
   terminal_bonus:    100.0
   terminal_penalty: -100.0
-  a_limit:            1.0
+  a_limit:            5.0   # was 1.0 — achievable with good speed management on Mandl bumps
 
 observations:
-  preview_distance:    20.0
+  preview_distance:    40.0   # was 20.0 — enough look-ahead to brake at 50 km/h (d_brake≈34m)
   h_clip:              0.15
   n_peaks:             3
   peak_height_min:     0.01
