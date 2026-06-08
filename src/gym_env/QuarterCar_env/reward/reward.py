@@ -3,6 +3,10 @@ import numpy as np
 from QuarterCar_env.config.reward_params import RewardConfig
 
 
+def r_progress(v: float, v_max: float) -> float:
+    return float(np.clip(v / v_max, 0.0, 1.0))
+
+
 def r_speed_band(v: float, v_min: float, v_upper: float) -> float:
     # Always penalise distance from v_upper — no dead band (follows Mandl 2021 Eq. 4.21b).
     # A dead band [v_min, v_upper] = 0 lets the agent creep just above v_min for free.
@@ -108,8 +112,17 @@ def compute_reward(
     else:
         bd["r_action_smooth"] = 0.0
 
+    # progress: positive reward for forward movement — unscaled, always on
+    progress_reward = 0.0
+    if cfg.enable_progress:
+        rp = r_progress(v, cfg.v_max)
+        bd["r_progress"] = rp
+        progress_reward = cfg.w_progress * rp
+    else:
+        bd["r_progress"] = 0.0
+
     scale = float(np.clip(v / cfg.v_max, 0.0, 1.0)) if cfg.enable_vel_scaling else 1.0
-    total = scale * core + tracking_penalty + jerk_smooth_penalty
+    total = scale * core + tracking_penalty + jerk_smooth_penalty + progress_reward
 
     total = float(np.nan_to_num(total, nan=0.0, posinf=0.0, neginf=0.0))
     for key in bd:

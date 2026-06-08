@@ -23,7 +23,8 @@ def reward_bounds(cfg: RewardConfig, n_steps: int) -> dict:
     if cfg.enable_action_smooth:
         per_step_min += cfg.w_action_smooth * (-4.0)
 
-    per_step_max = 0.0
+    # progress reward: max is w_progress × 1.0 (at v=v_max), unscaled
+    per_step_max = cfg.w_progress if cfg.enable_progress else 0.0
 
     return {
         "per_step_max": round(per_step_max, 4),

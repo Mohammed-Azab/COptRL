@@ -26,6 +26,10 @@ class RewardConfig:
     enable_accel:         bool = True
     enable_jerk:          bool = True
     enable_action_smooth: bool = True
+    enable_progress:      bool = True
+
+    # progress reward weight (positive: encourages forward movement)
+    w_progress: float = 0.2
 
     # velocity (stored internally in m/s; config files use km/h)
     v_max: float = 20.0   # m/s
@@ -97,6 +101,8 @@ def load_reward_config() -> RewardConfig:
         enable_accel         = bool(e.get("accel",         True)),
         enable_jerk          = bool(e.get("jerk",          True)),
         enable_action_smooth = bool(e.get("action_smooth", True)),
+        enable_progress      = bool(e.get("progress",      True)),
+        w_progress           = float(e.get("w_progress",   0.2)),
 
         v_max = float(v.get("v_max", 72.0)) / 3.6,   # config in km/h → m/s
         a_max = float(v.get("a_max",  5.0)),
