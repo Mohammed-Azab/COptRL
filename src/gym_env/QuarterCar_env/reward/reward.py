@@ -129,5 +129,6 @@ def compute_reward(
         bd[key] = float(np.nan_to_num(bd[key], nan=0.0, posinf=0.0, neginf=0.0))
 
     bd["r_curve"]      = 0.0
+    bd["r_bumps"]      = 0.0   # filled by env when a bump end is cleared
     bd["reward_total"] = total
     return total, bd

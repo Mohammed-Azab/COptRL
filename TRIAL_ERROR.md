@@ -547,3 +547,396 @@ Compare to r_tracking: also unscaled for the same reason — stopping to avoid i
 the purpose.
 
 ---
+
+## Issue 6 — Weak Forward Movement Incentive (No Positive Progress Signal)
+
+**Date:** 2026-06-08
+**Context:** Post-mortem of exp_10 analysis; added alongside Issue 5 fix.
+
+### Observation
+
+After fixing Issue 5 (jerk/smooth unscaled), the reward landscape showed:
+
+```
+Stopped (v=0):                -280
+Creep 9 km/h, rms=0:           +31
+Good crossing 36 km/h, rms=0.3: +34
+```
+
+The gap between the creep exploit and a genuinely good policy was only **3 points**.
+Every reward term was non-positive — the only incentive to move faster came from
+avoiding the tracking penalty. With enough other penalties active, the agent could
+settle at low speed where the gradient toward faster movement was too weak for PPO
+to reliably escape.
+
+### Root Cause
+
+No positive signal existed for forward progress. All terms were penalties:
+- r_tracking penalises being below v_max (negative)
+- r_heave, r_accel, r_jerk penalise discomfort (negative)
+- Terminal bonus fires at end (sparse, once per episode)
+
+The agent could find marginal local optima where the comfort penalties exactly
+balanced the tracking penalty at some low speed, with no positive gradient pulling
+it toward higher speeds.
+
+### Fix
+
+Added `r_progress = v / v_max ∈ [0, 1]` — an unscaled, always-positive reward
+for forward movement. Applied outside the velocity-scaled block, same as tracking.
+
+```python
+r_progress = v / v_max
+total = scale * core + tracking_penalty + jerk_smooth_penalty + w_progress * r_progress
+```
+
+`w_progress = 0.2`. At full speed this contributes +0.2/step = +60 per episode.
+
+### Verification
+
+```
+Stopped:                         -280   (unchanged)
+Creep 9 km/h, rms=0:              +39   (+8 from progress)
+Good crossing 36 km/h, rms=0.3:   +64   (+30 from progress)
+Flat road 72 km/h, rms=0:        +160   (new theoretical max, was +100)
+```
+
+Gap between creep and good crossing: **3 → 25 points**. The gradient now
+clearly favours faster, smoother crossings over low-speed hovering.
+
+### Lesson
+
+**Every reward function needs at least one always-positive term proportional to
+the desired behaviour.** Pure penalty-based rewards can have flat regions where
+many suboptimal strategies produce similar returns, giving PPO insufficient gradient
+to escape local optima. A small positive reward directly proportional to the goal
+(move forward) provides a consistent pull in the right direction and widens the gap
+between good and bad strategies.
+
+---
+
+## Issue 7 — Road Position Drift: ODE and Observation See the Wrong Bump Location
+
+**Date:** 2026-06-08
+**Exp:** exp_12, speed_bump, 1M steps, curriculum, seed=69 — flat eval curve despite curriculum progression
+
+### Symptom
+
+Eval return curve oscillates without clear upward trend (−268 → −224 → −297 → −177 → −297 over 1M steps).
+The preview wrapper correctly predicted upcoming bumps in the observation, but the agent was unable to
+learn a consistent relationship between the preview signal and the bump disturbance it actually experienced.
+
+### Root Cause
+
+`RoadGenerator.get_height(t)` and `get_height_dot(t)` computed the road position as:
+
+```python
+x = self.speed * t   # current speed × elapsed time
+```
+
+The actual vehicle arc-length position is `s_pos = Σ vᵢ × DT`. Once the agent changes speed, these
+two diverge permanently. Concrete example:
+
+```
+Agent starts at 20 m/s, brakes to 5 m/s over 3 seconds.
+  actual s_pos  ≈ 52 m   (integrated over the deceleration)
+  road.get_height(t=3) = 5 × 3 = 15 m   ← 37 m behind actual position
+```
+
+The `PreviewWrapper` used `env._s_pos` (the correct integrated position) to show upcoming bumps.
+But `_obs()` called `road.get_height(self._t)` and `road.get_height_dot(self._t)` — wrong position.
+The ODE sub-steps were also computed at `z_q_fn(t0 + i*DT_SIM)` which resolved to
+`speed_current × (t0 + i*DT_SIM)` — again wrong.
+
+**Net effect:** the preview showed a bump at the correct location, but the ODE forces arrived at a
+completely different time. The correlation between observation and disturbance was broken, making
+the preview signal effectively useless for learning.
+
+### Fix
+
+Added position-based query methods to `RoadGenerator`:
+
+```python
+def get_height_at(self, s: float) -> float:
+    # bumps parameterised by arc-length s, not speed×time
+    for x0, A, L in self._bumps:
+        dx = s - x0
+        if 0.0 <= dx <= L:
+            return (A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx / L))
+    return 0.0
+
+def get_height_dot_at(self, s: float, v: float) -> float:
+    # ζ̇ = dζ/dx · v;  v passed explicitly, no implicit self.speed
+    for x0, A, L in self._bumps:
+        dx = s - x0
+        if 0.0 < dx < L:
+            dzdx = (A / 2.0) * (2.0 * np.pi / L) * np.sin(2.0 * np.pi * dx / L)
+            return dzdx * v
+    return 0.0
+```
+
+`QuarterCarODE.step()` signature changed from `(x, z_q_fn, t0)` to `(x, road, s_pos, v)`.
+Sub-steps now sample the road at the correct arc-length position:
+
+```python
+for i in range(N_SUB):
+    s0 = s_pos + i       * dt * v
+    sh = s_pos + (i+0.5) * dt * v
+    se = s_pos + (i+1.0) * dt * v
+    zq_pre[i, 0] = road.get_height_dot_at(s0, v)
+    ...
+```
+
+`_obs()` updated to use `road.get_height_at(self._s_pos)` and `road.get_height_dot_at(self._s_pos, self._v)`.
+
+In `step()`, `s_pos_start` is captured before `self._s_pos` is incremented, so the ODE
+sees the position at the start of the control step (not the end):
+
+```python
+s_pos_start   = self._s_pos
+self._s_pos  += v_new * DT
+new_state, z_B_ddot, z_W_ddot = self._ode.step(
+    self._state, self._road, s_pos_start, v_road
+)
+```
+
+### Lesson
+
+**Never infer position from `speed × time` when speed is variable.**
+The road is a spatial function `ζ(x)`. The correct query is always `ζ(s_pos)` where `s_pos` is the
+integrated arc-length, not a time-domain approximation. The two are identical only at exactly
+constant speed — the moment the agent does anything useful (braking before a bump), they diverge.
+
+**All road queries must use the same position reference.**
+Here, preview used `s_pos` (correct) while ODE used `speed × t` (wrong). Any inconsistency between
+what the observation predicts and what the ODE delivers destroys the learning signal for those features.
+
+---
+
+## Issue 8 — `_max_distance` Frozen to Initial Road, Never Updated After Reset
+
+**Date:** 2026-06-08
+**Exp:** exp_12 post-mortem
+
+### Symptom
+
+Some training episodes appeared to terminate far too early (s_pos << last bump position).
+Other episodes ran the full 300 steps on roads where all bumps were cleared at step 200.
+Inconsistent episode structure made the terminal bonus fire at different road completion states.
+
+### Root Cause
+
+`_max_distance` was computed once in `__init__` from the static `MULTI_BUMP_CONFIG` road
+(4 bumps, last ending at ~44 m → `_max_distance = 49 m`):
+
+```python
+# __init__: only called once
+self._max_distance = self._compute_max_distance()   # = 49 m, frozen forever
+```
+
+`reset()` replaced `self._road` with a randomly generated road but never recomputed `_max_distance`.
+
+**Two failure modes depending on random road length vs. 49 m:**
+
+| Random road | `_max_distance` = 49 m | Effect |
+|---|---|---|
+| Level-0: 1–2 bumps, last at ~27 m | 49 m > 27 m → `road_complete` never fires | Full 300 steps always, even after road is done |
+| Level-3: 5–6 bumps, last at ~60 m | 49 m < 60 m → `road_complete` fires early | Episode ends before last 2 bumps are reached |
+
+The agent was rewarded/penalised for partial road traversal at inconsistent points, making it
+impossible to learn a stable strategy across road lengths.
+
+### Fix
+
+One line added at the bottom of `reset()`, after the road is regenerated:
+
+```python
+self._max_distance = self._compute_max_distance()
+```
+
+`_compute_max_distance()` reads `self._road._bumps` (the freshly randomised bumps) so
+it always returns the correct distance for the current episode's road layout.
+
+### Lesson
+
+**Any quantity derived from the road must be recomputed after the road changes.**
+`_max_distance` was derived from the initial road but the road changes every episode.
+The fix is trivially small — the cost of missing it was major inconsistency in episode structure.
+
+---
+
+## Issue 9 — Eval Always Ran at Full Difficulty While Training Used Curriculum
+
+**Date:** 2026-06-08
+**Exp:** exp_12 post-mortem
+
+### Symptom
+
+The eval return curve showed no clear trend despite training clearly progressing through
+curriculum levels. The "best model" at step 160k (−111) was actually trained on level-0 roads
+(4–7 cm bumps, 25–54 km/h) but evaluated on full-random roads (5–25 cm bumps, full speed range).
+The eval curve was measuring a skill gap, not policy quality.
+
+### Root Cause
+
+`make_eval_vec_env()` was called without curriculum:
+
+```python
+# environment.py — before fix
+eval_venv = make_eval_vec_env(road=eval_road, ..., curriculum_cfg=None)
+```
+
+The eval env used `road_params.yaml random` section: bump heights up to 0.25 m, 1–5 bumps,
+up to v_max. Curriculum level 3 maxes out at 0.15 m, 2–6 bumps. So eval was always harder
+than the hardest training level, for the entire 1M step run.
+
+Variance in eval scores (same policy, different random roads) masked any real improvement signal.
+The "best model" at 160k was the best because it happened to be evaluated on easier random roads
+in that eval window — not because it was actually a better policy.
+
+### Fix
+
+**Two-part fix:**
+
+**1. Curriculum level synchronisation** — eval env now wraps with `CurriculumWrapper` using
+`set_forced_level()`. `VecNormalizeSyncCallback._on_step()` reads the training env's current
+level via VecEnv attribute delegation and pushes it to the eval env:
+
+```python
+# monitoring.py
+levels = self._train.venv.get_attr("current_level")
+level  = int(levels[0]) if levels else 0
+self._eval.venv.env_method("set_forced_level", level)
+```
+
+**2. `CurriculumWrapper.set_forced_level()`** — new method pins the wrapper to a specific
+difficulty level, bypassing its internal step counter:
+
+```python
+def set_forced_level(self, level: Optional[int]) -> None:
+    self._forced_level = level
+
+def _current_level(self) -> int:
+    if self._forced_level is not None:
+        return min(self._forced_level, len(self._thresholds))
+    ...  # normal step-count logic
+```
+
+`train.py` now passes `curriculum_cfg` to `make_eval_vec_env()`. Eval starts at level 0 and
+advances in lockstep with training via the sync callback.
+
+### Lesson
+
+**Eval difficulty must match training difficulty to produce meaningful learning curves.**
+An eval env that is always harder than the training curriculum measures the gap between current
+skill and maximum difficulty — not whether the agent is improving. The noise from road randomisation
+at a fixed hard difficulty can easily swamp the improvement signal from 200k training steps.
+
+Match eval to training or use fixed evaluation scenarios (fixed-seed roads) to isolate
+policy quality from road-difficulty variance.
+
+---
+
+## Issue 10 — Conflicting Reward: v_ref = v_max Creates Anti-Braking Gradient
+
+**Date:** 2026-06-08
+**Exp:** exp_12 post-mortem
+
+### Symptom
+
+Even after fixing the road-position bug (Issue 7), training with a constant `v_ref = v_max`
+creates a conflict: `r_tracking + r_progress` both push the agent to stay near v_max, while
+`r_heave + r_wheel` punish the body acceleration caused by hitting bumps at high speed.
+
+The agent must discover by itself that slowing before bumps is worth it — but the tracking gradient
+pushes back at every step below v_max, and `r_progress = v / v_max` also rewards going faster.
+This makes anticipatory braking hard to learn.
+
+### Root Cause
+
+```python
+def _compute_v_ref(self, t: float) -> float:
+    return self._rcfg.v_max   # always 72 km/h, regardless of upcoming road
+```
+
+The reference profile was constant. Any speed below 72 km/h produced a tracking penalty,
+even when the correct behaviour was to slow to 30 km/h before a 15 cm bump.
+
+### Fix
+
+`_compute_v_ref()` now looks ahead using `get_spatial_preview()` and reduces `v_ref` in
+proportion to the height and proximity of the nearest upcoming significant bump:
+
+```python
+heights   = self._road.get_spatial_preview(s_pos=self._s_pos, ..., n_points=20)
+max_h     = max(heights)
+d         = distance to nearest peak ≥ peak_height_min
+h_ratio   = clip(max_h / h_clip, 0, 1)      # 0 = tiny, 1 = tall
+proximity = max(0, 1 − d / preview_distance)  # 0 = far, 1 = right here
+v_ref     = v_max × (1 − 0.5 × h_ratio × proximity)
+```
+
+A 0.15 m bump (h_ratio = 1.0) at 5 m ahead (proximity = 0.75, preview = 20 m):
+`v_ref = 20 × (1 − 0.5 × 0.75) = 12.5 m/s = 45 km/h`
+
+The agent is now explicitly given a lower speed target near tall bumps, eliminating the
+conflicting gradient between tracking and comfort near obstacles.
+
+At 20 m distance (bump just entering preview horizon): `proximity = 0` → `v_ref = v_max` (no change).
+The reduction only activates as the bump gets close, leaving the normal v_max target on flat road.
+
+### Lesson
+
+**A constant v_ref = v_max conflicts with any task that requires slowing down.**
+The purpose of the tracking term is to keep the agent moving, not to force maximum speed at
+all times. A speed reference that adapts to the road — lower near obstacles, high on flat — removes
+the conflicting gradient and explicitly encodes the desired human-like trapezoidal speed profile
+described in Mandl (2021): approach at v_max, reduce before bump, resume after.
+
+---
+
+## Issue 11 — No Reward for Actually Crossing Bumps
+
+**Date:** 2026-06-08
+**Exp:** exp_12 post-mortem
+
+### Observation
+
+All existing rewards were continuous per-step signals. There was no positive reward that fired
+specifically when the agent crossed a bump. The agent could achieve good per-step returns by
+staying on flat road (high `r_progress`, zero `r_heave`) without ever touching a bump.
+
+The stop-and-wait exploit (Issue 1) and creep exploit (Issue 3) were symptoms of the same
+underlying gap: no direct reward for the core task — navigating over the obstacles.
+
+### Fix
+
+Added `r_bumps`: a one-shot positive reward fired each time `s_pos` clears a bump end.
+The reward accumulates if multiple bumps are passed in one step (rare but possible at high speed).
+
+```python
+# quarter_car_env.py step()
+while (self._bumps_passed < len(self._bump_ends)
+       and self._s_pos >= self._bump_ends[self._bumps_passed]):
+    self._bumps_passed += 1
+    r_bumps += cfg.w_bump_cross        # default: +5 per bump
+
+reward += r_bumps
+breakdown["r_bumps"] = r_bumps
+```
+
+`_bump_ends` (sorted list of `x0 + L` for each bump) is recomputed in `reset()` after the
+random road is regenerated.
+
+Weight `w_bump_cross = 5.0` — roughly a 25-step equivalent of `r_progress` at full speed.
+Large enough to incentivise crossing but not so large it overrides the comfort signal.
+
+### Lesson
+
+**The core task should be directly rewarded.** For a bump-crossing agent, the task is
+"cross bumps." Every existing reward was either a speed incentive or a comfort penalty —
+none of them directly fired for crossing an obstacle. Adding a direct crossing reward closes
+the loop: the agent now gets an explicit signal that it has achieved the primary objective,
+not just secondary consequences of achieving it.
+
+---

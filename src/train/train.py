@@ -309,6 +309,7 @@ def main() -> None:
         base_seed=seed + 10_000,   # disjoint seed range keeps eval trajectories fresh
         train_venv=train_venv,
         monitor_dir=str(mon_dir / "eval"),
+        curriculum_cfg=curriculum_cfg,   # match eval difficulty to training level
     )
 
     model = build_model(

@@ -55,8 +55,16 @@ class VecNormalizeSyncCallback(BaseCallback):
         self._eval  = eval_venv
 
     def _on_step(self) -> bool:
+        # keep obs normalisation stats in sync
         self._eval.obs_rms = self._train.obs_rms
         self._eval.ret_rms = self._train.ret_rms
+        # keep curriculum level in sync: eval env mirrors training difficulty
+        try:
+            levels = self._train.venv.get_attr("current_level")
+            level  = int(levels[0]) if levels else 0
+            self._eval.venv.env_method("set_forced_level", level)
+        except (AttributeError, TypeError, IndexError):
+            pass   # one or both envs have no curriculum
         return True
 
 

@@ -102,6 +102,10 @@ class QuarterCarEnv(gym.Env):
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
+        # bump-crossing state
+        self._bumps_passed   = 0
+        self._bump_ends: list = []
+
         # random road config — read once, forwarded to from_random each reset
         from QuarterCar_env.config.config_manager import _load_yaml
         _rd_cfg = _load_yaml("road_params.yaml").get("random", {})
@@ -184,6 +188,15 @@ class QuarterCarEnv(gym.Env):
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
+        # recompute after road regeneration — random roads may have different length
+        self._max_distance = self._compute_max_distance()
+
+        # bump-crossing state — reset each episode
+        self._bumps_passed   = 0
+        self._bump_ends      = sorted(
+            x0 + L for (x0, _, L) in self._road._bumps
+        ) if self.road_profile == 'speed_bump' else []
+
         # reset filter state
         self._prev_a         = 0.0
         self._filtered_a     = 0.0
@@ -206,7 +219,8 @@ class QuarterCarEnv(gym.Env):
         a_actual = (v_new - v_old) / DT
         self._v        = v_new
         self._state[4] = v_new
-        self._road.set_speed(v_new)
+        self._road.set_speed(v_new)          # also geometry-clamps road.speed
+        s_pos_start    = self._s_pos         # position at START of this step
         self._s_pos   += v_new * DT
 
         # 2. Update IIR filters
@@ -219,9 +233,10 @@ class QuarterCarEnv(gym.Env):
         j_clipped = float(np.clip(jerk, -cfg.jerk_clip, cfg.jerk_clip))
         self._filtered_jerk = alpha_j * self._filtered_jerk + (1.0 - alpha_j) * j_clipped
 
-        # 3. Integrate ODE one control step
+        # 3. Integrate ODE one control step (position-based — no drift)
+        v_road = self._road.speed   # post-geometry-clamp value
         new_state, z_B_ddot, z_W_ddot = self._ode.step(
-            self._state, self._road.get_height_dot, self._t
+            self._state, self._road, s_pos_start, v_road
         )
         self._state         = new_state
         self._t            += DT
@@ -236,13 +251,10 @@ class QuarterCarEnv(gym.Env):
 
         # 4. Speed band upper limit and reward
         v_ref    = self._compute_v_ref(self._t)
-
-        v_upper = v_ref
-            
-        self._v_ref_last = v_upper
+        self._v_ref_last = v_ref
 
         reward, breakdown = compute_reward(
-            v_new, v_upper,
+            v_new, v_ref,
             self._last_z_B_ddot,
             self._last_z_W_ddot,
             self._filtered_a,
@@ -250,7 +262,17 @@ class QuarterCarEnv(gym.Env):
             self._prev_action, u,
             cfg,
         )
-        self._speed_err_sq   += (v_upper - v_new) ** 2
+        self._speed_err_sq   += (v_ref - v_new) ** 2
+
+        # 4b. Bump-crossing reward — fire once per bump when s_pos clears its end
+        r_bumps = 0.0
+        while (self._bumps_passed < len(self._bump_ends)
+               and self._s_pos >= self._bump_ends[self._bumps_passed]):
+            self._bumps_passed += 1
+            r_bumps += cfg.w_bump_cross
+        reward               += r_bumps
+        breakdown["r_bumps"]  = r_bumps
+
         self._episode_reward += reward
 
         # 5. Update history
@@ -318,8 +340,9 @@ class QuarterCarEnv(gym.Env):
     def _obs(self) -> np.ndarray:
         cfg = self._rcfg
 
-        zeta     = self._road.get_height(self._t)
-        zeta_dot = self._road.get_height_dot(self._t)
+        # use actual arc-length position, not speed × time (Bug-fix: position drift)
+        zeta     = self._road.get_height_at(self._s_pos)
+        zeta_dot = self._road.get_height_dot_at(self._s_pos, self._v)
         base_obs = np.clip(
             np.array([zeta, zeta_dot], dtype=np.float32), OBS_LOW, OBS_HIGH
         )
@@ -391,7 +414,28 @@ class QuarterCarEnv(gym.Env):
     def _compute_v_ref(self, t: float) -> float:
         if self._ref_speed_profile == "custom" and self._v_ref_fn is not None:
             return float(self._v_ref_fn(t))
-        return self._rcfg.v_max
+        cfg = self._rcfg
+        if self.road_profile != 'speed_bump' or not self._road._bumps:
+            return cfg.v_max
+        # reduce v_ref near tall bumps: closer + taller → slower target
+        heights = self._road.get_spatial_preview(
+            s_pos=self._s_pos, t_current=t, v_current=max(self._v, 0.5),
+            lookahead_m=cfg.preview_distance, n_points=20,
+        )
+        max_h = float(np.max(heights))
+        if max_h < cfg.peak_height_min:
+            return cfg.v_max
+        for i in range(len(heights)):
+            if heights[i] >= cfg.peak_height_min:
+                d = (i + 1) * cfg.preview_distance / len(heights)
+                break
+        else:
+            return cfg.v_max
+        h_ratio   = float(min(1.0, max_h / cfg.h_clip))
+        proximity = float(max(0.0, 1.0 - d / cfg.preview_distance))
+        # up to 50% reduction at the bump face; tapers with distance
+        v_ref = cfg.v_max * (1.0 - 0.5 * h_ratio * proximity)
+        return float(max(cfg.v_min, v_ref))
     
 
 

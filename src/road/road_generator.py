@@ -55,37 +55,45 @@ class RoadGenerator:
         return bumps
 
     def get_height(self, t: float) -> float:
+        # legacy time-based query — kept for render/tests; env uses get_height_at(s)
+        return self.get_height_at(self.speed * t)
+
+    def get_height_dot(self, t: float) -> float:
+        # legacy time-based query — env uses get_height_dot_at(s, v)
+        return self.get_height_dot_at(self.speed * t, self.speed)
+
+    def get_height_at(self, s: float) -> float:
+        """Road height ζ at arc-length position s [m]."""
         if self.profile == 'flat':
             return 0.0
         if self.profile == 'speed_bump':
-            x = self.speed * t
             for x0, A, L in self._bumps:
-                dx = x - x0
+                dx = s - x0
                 if 0.0 <= dx <= L:
                     return (A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx / L))
             return 0.0
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_z is not None
-            x = np.clip(self.speed * t, self._rec_arc[0], self._rec_arc[-1])
-            return float(np.interp(x, self._rec_arc, self._rec_z))
+            s_c = float(np.clip(s, self._rec_arc[0], self._rec_arc[-1]))
+            return float(np.interp(s_c, self._rec_arc, self._rec_z))
         return 0.0
 
-    def get_height_dot(self, t: float) -> float:
+    def get_height_dot_at(self, s: float, v: float) -> float:
+        """Road velocity ζ̇ = dζ/dx · v at position s, vehicle speed v."""
         if self.profile == 'flat':
             return 0.0
         if self.profile == 'speed_bump':
-            x = self.speed * t
             for x0, A, L in self._bumps:
-                dx = x - x0
+                dx = s - x0
                 if 0.0 < dx < L:
                     dzdx = (A / 2.0) * (2.0 * np.pi / L) * np.sin(2.0 * np.pi * dx / L)
-                    return dzdx * self.speed
+                    return dzdx * v
             return 0.0
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_dzdx is not None
-            x = np.clip(self.speed * t, self._rec_arc[0], self._rec_arc[-1])
-            dzdx = float(np.interp(x, self._rec_arc, self._rec_dzdx))
-            return dzdx * self.speed
+            s_c  = float(np.clip(s, self._rec_arc[0], self._rec_arc[-1]))
+            dzdx = float(np.interp(s_c, self._rec_arc, self._rec_dzdx))
+            return dzdx * v
         return 0.0
 
     def get_height_array(self, t_array: np.ndarray) -> np.ndarray:

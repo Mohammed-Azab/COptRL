@@ -1,6 +1,7 @@
 import gymnasium as gym
 import yaml
 from pathlib import Path
+from typing import Optional
 
 
 class CurriculumWrapper(gym.Wrapper):
@@ -8,10 +9,15 @@ class CurriculumWrapper(gym.Wrapper):
 
     def __init__(self, env: gym.Env, config: dict, n_envs: int = 1):
         super().__init__(env)
-        self._levels     = config["levels"]
-        self._thresholds = config["thresholds"]
-        self._n_envs     = n_envs   # each step() advances counter by n_envs
-        self._step_count = 0
+        self._levels       = config["levels"]
+        self._thresholds   = config["thresholds"]
+        self._n_envs       = n_envs   # each step() advances counter by n_envs
+        self._step_count   = 0
+        self._forced_level: Optional[int] = None   # when set, overrides step-count logic
+
+    def set_forced_level(self, level: Optional[int]) -> None:
+        """Pin the curriculum to a specific level (used to sync eval with training)."""
+        self._forced_level = level
 
     def step(self, action):
         self._step_count += self._n_envs
@@ -37,6 +43,8 @@ class CurriculumWrapper(gym.Wrapper):
         return super().reset(**kwargs)
 
     def _current_level(self) -> int:
+        if self._forced_level is not None:
+            return min(self._forced_level, len(self._thresholds))
         for i, threshold in enumerate(self._thresholds):
             if self._step_count < threshold:
                 return i

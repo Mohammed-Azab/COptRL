@@ -77,15 +77,21 @@ def make_eval_vec_env(
     train_venv: VecNormalize,
     monitor_dir: str | None = None,
     env_kwargs: dict | None = None,
+    curriculum_cfg: dict | None = None,
 ) -> VecNormalize:
-    # eval env never uses curriculum — always runs at full difficulty
     """
     Build an evaluation VecNormalize that shares normalisation stats with the
     training env (obs running mean/var, no reward normalisation).
+
+    When *curriculum_cfg* is supplied the eval env is wrapped with the same
+    CurriculumWrapper as training, but starts pinned to level 0. The
+    VecNormalizeSyncCallback keeps the level in sync with the training env so
+    eval difficulty always matches the current training difficulty rather than
+    always running at full random difficulty.
     """
     env_kwargs = env_kwargs or {}
     fns = [
-        _make_env(road, base_seed + i, monitor_dir, env_kwargs)
+        _make_env(road, base_seed + i, monitor_dir, env_kwargs, curriculum_cfg, n_envs)
         for i in range(n_envs)
     ]
     venv = DummyVecEnv(fns)
@@ -99,4 +105,12 @@ def make_eval_vec_env(
     eval_venv.obs_rms  = train_venv.obs_rms
     eval_venv.ret_rms  = train_venv.ret_rms
     eval_venv.training = False
+
+    # pin eval to level 0 immediately; VecNormalizeSyncCallback advances it
+    if curriculum_cfg is not None and road == 'speed_bump':
+        try:
+            eval_venv.venv.env_method("set_forced_level", 0)
+        except Exception:
+            pass
+
     return eval_venv

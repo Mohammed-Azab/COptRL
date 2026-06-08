@@ -1,6 +1,5 @@
 import numpy as np
 from numba import njit
-from typing import Callable
 
 from QuarterCar_env.config.env_params import PHYSICS, DT_SIM, N_SUB
 from QuarterCar_env.config.road_params import VEHICLE_SPEED
@@ -160,24 +159,32 @@ class QuarterCarODE:
     def step(
         self,
         x: np.ndarray,
-        z_q_fn: Callable[[float], float],
-        t0: float,
+        road,        # RoadGenerator — duck typed; accepts any object with get_height_dot_at
+        s_pos: float,
+        v: float,
     ) -> tuple[np.ndarray, float, float]:
+        """Integrate one control step (DT = N_SUB × DT_SIM).
 
+        Road is sampled by arc-length position, not by time, so the correct
+        bump location is used even when vehicle speed changes mid-episode.
+        """
         dt = DT_SIM
         p  = self._pvec
 
-        # sample road velocity at all RK4 evaluation points before entering numba
+        # pre-sample ζ̇ at all RK4 quadrature points using actual position
         zq_pre = np.empty((N_SUB, 3), dtype=np.float64)
         for i in range(N_SUB):
-            t = t0 + i * dt
-            zq_pre[i, 0] = float(z_q_fn(t))
-            zq_pre[i, 1] = float(z_q_fn(t + 0.5 * dt))
-            zq_pre[i, 2] = float(z_q_fn(t + dt))
+            s0 = s_pos + i       * dt * v
+            sh = s_pos + (i + 0.5) * dt * v
+            se = s_pos + (i + 1.0) * dt * v
+            zq_pre[i, 0] = road.get_height_dot_at(s0, v)
+            zq_pre[i, 1] = road.get_height_dot_at(sh, v)
+            zq_pre[i, 2] = road.get_height_dot_at(se, v)
 
         xi = _rk4_loop(x, zq_pre, dt, p)
 
-        zq_end   = float(z_q_fn(t0 + N_SUB * dt))
+        s_end    = s_pos + N_SUB * dt * v
+        zq_end   = road.get_height_dot_at(s_end, v)
         dx_end   = _ode(xi, zq_end, p)
         z_B_ddot = float(dx_end[3])
         z_W_ddot = float(dx_end[1])
