@@ -159,15 +159,10 @@ class QuarterCarODE:
     def step(
         self,
         x: np.ndarray,
-        road,        # RoadGenerator — duck typed; accepts any object with get_height_dot_at
+        road,        # RoadGenerator — duck typed; needs get_height_dot_at(s, v)
         s_pos: float,
         v: float,
     ) -> tuple[np.ndarray, float, float]:
-        """Integrate one control step (DT = N_SUB × DT_SIM).
-
-        Road is sampled by arc-length position, not by time, so the correct
-        bump location is used even when vehicle speed changes mid-episode.
-        """
         dt = DT_SIM
         p  = self._pvec
 

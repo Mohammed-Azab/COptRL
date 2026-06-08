@@ -47,12 +47,6 @@ def make_vec_env(
     env_kwargs: dict | None = None,
     curriculum_cfg: dict | None = None,
 ) -> VecNormalize:
-    """
-    Build a DummyVecEnv wrapped in VecNormalize.
-
-    Each worker gets seed = base_seed + worker_index so trajectories are
-    diverse but fully reproducible from base_seed.
-    """
     env_kwargs = env_kwargs or {}
     fns = [
         _make_env(road, base_seed + i, monitor_dir, env_kwargs, curriculum_cfg, n_envs)
@@ -79,16 +73,7 @@ def make_eval_vec_env(
     env_kwargs: dict | None = None,
     curriculum_cfg: dict | None = None,
 ) -> VecNormalize:
-    """
-    Build an evaluation VecNormalize that shares normalisation stats with the
-    training env (obs running mean/var, no reward normalisation).
-
-    When *curriculum_cfg* is supplied the eval env is wrapped with the same
-    CurriculumWrapper as training, but starts pinned to level 0. The
-    VecNormalizeSyncCallback keeps the level in sync with the training env so
-    eval difficulty always matches the current training difficulty rather than
-    always running at full random difficulty.
-    """
+    # shares obs_rms with train_venv; no reward normalisation; starts at level 0
     env_kwargs = env_kwargs or {}
     fns = [
         _make_env(road, base_seed + i, monitor_dir, env_kwargs, curriculum_cfg, n_envs)

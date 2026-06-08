@@ -3,7 +3,7 @@
 
 PPO:
   policy: MlpPolicy
-  learning_rate: 3.0e-4
+  learning_rate: 3.0e-04       # reverted — tuned 8.49e-05 degraded after curriculum advances
   n_steps: 2048
   batch_size: 64
   n_epochs: 10
@@ -15,18 +15,19 @@ PPO:
   max_grad_norm: 0.5
   policy_kwargs:
     net_arch:
-      pi: [256, 256]
+      pi: [256, 256]           # reverted — [512,512] showed no benefit over simpler arch
       vf: [256, 256]
+
 
 # training meta-settings (not passed to SB3, consumed by train.py)
 training:
   seed: 42
-  total_timesteps: 1_000_000
-  n_envs: 1
+  total_timesteps: 3_000_000   # 3M — performance-gated curriculum needs more budget
+  n_envs: 4                    # 4 parallel envs for 4× faster experience collection
   n_eval_envs: 1
   eval_freq: 20_000
   n_eval_episodes: 5
-  checkpoint_freq: 50_000
+  checkpoint_freq: 100_000
   norm_obs: true
   norm_reward: true
   eval_road: speed_bump

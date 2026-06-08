@@ -15,7 +15,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 
 class QuarterCarMetricsCallback(BaseCallback):
-    """Write ride-comfort and speed-tracking metrics to TensorBoard every step."""
+    # writes ride-comfort and speed-tracking metrics to TensorBoard
 
     def _on_step(self) -> bool:
         infos: list[dict] = self.locals.get("infos", [])
@@ -37,7 +37,7 @@ class QuarterCarMetricsCallback(BaseCallback):
 
 
 class VecNormalizeSyncCallback(BaseCallback):
-    """Copy obs/ret normalisation stats from training env to eval env each step."""
+    # syncs obs/ret normalisation stats from train env to eval env each step
 
     def __init__(self, train_venv: VecNormalize, eval_venv: VecNormalize, verbose: int = 0):
         super().__init__(verbose)
@@ -59,17 +59,7 @@ class VecNormalizeSyncCallback(BaseCallback):
 
 
 class PerformanceCurriculumCallback(EvalCallback):
-    """
-    EvalCallback that gates curriculum advancement on measured performance.
-
-    The agent stays at its current level until the mean eval return over the
-    last `advance_window` evaluations meets the level's `advance_return_threshold`.
-    Only then does the training env advance to the next level.
-
-    This replaces the old time-based (step-count threshold) approach, which
-    pushed the agent into harder terrain regardless of whether it had learned
-    the current difficulty.
-    """
+    # advances curriculum level only when mean eval return >= threshold for N evals
 
     def __init__(
         self,
@@ -146,7 +136,6 @@ class PerformanceCurriculumCallback(EvalCallback):
     # ------------------------------------------------------------------
 
     def level_report(self) -> dict:
-        """Structured per-level stats — included in summary.json."""
         report: dict = {}
         for level in sorted(self._level_returns):
             returns  = self._level_returns[level]
@@ -164,7 +153,6 @@ class PerformanceCurriculumCallback(EvalCallback):
         return report
 
     def print_report(self) -> None:
-        """Human-readable level summary printed at the end of training."""
         report = self.level_report()
         if not report:
             return
@@ -199,13 +187,7 @@ def build_callbacks(
     checkpoint_freq:  int,
     curriculum_cfg:   dict | None = None,
 ) -> tuple[CallbackList, Optional[PerformanceCurriculumCallback]]:
-    """
-    Assemble all callbacks.
-
-    Returns (CallbackList, curriculum_callback).
-    curriculum_callback is None when curriculum is disabled; otherwise it holds
-    per-level performance data for summary output after training.
-    """
+    # returns (CallbackList, curriculum_cb) — curriculum_cb is None when disabled
     best_model_path = model_dir / "best"
     ckpt_path       = model_dir / "checkpoints"
     best_model_path.mkdir(parents=True, exist_ok=True)
