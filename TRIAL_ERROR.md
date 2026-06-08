@@ -940,3 +940,99 @@ the loop: the agent now gets an explicit signal that it has achieved the primary
 not just secondary consequences of achieving it.
 
 ---
+
+## Issue 12 — Step-Count Curriculum Promotes the Agent Before It Has Learned
+
+**Date:** 2026-06-08
+**Context:** Design review after exp_12 analysis
+
+### Symptom
+
+The original curriculum advanced levels based purely on elapsed training steps:
+
+```yaml
+thresholds:
+  - 350_000   # → level 1 at 350k steps no matter what
+  - 500_000   # → level 2 at 500k steps no matter what
+  - 700_000   # → level 3 at 700k steps no matter what
+```
+
+In exp_12 the best model appeared at step 160k (curriculum level 0) and then performance
+degraded for the remaining 840k steps. The agent was pushed into level-1 difficulty at
+step 350k whether its eval return was −270 or +60. An agent still stuck at −270 on level-0
+roads was suddenly facing taller, faster, more numerous bumps — a harder task it had
+no foundation to handle.
+
+### Root Cause
+
+Step-count thresholds are a proxy for mastery. They hold when:
+1. Training progresses monotonically (agents always improve over time), AND
+2. All agents improve at the same rate.
+
+Neither holds for PPO on this problem. The policy can plateau, collapse, or oscillate.
+Pushing it into harder terrain during a plateau compounds the problem — the new difficulty
+produces a chaotic signal that interferes with whatever partial skill the agent had built.
+
+### Fix
+
+Replaced step-count thresholds with **performance-gated advancement**:
+
+```yaml
+advance_return_threshold:
+  0: -120.0   # leave level 0 once window mean ≥ -120
+  1: -100.0   # leave level 1 once window mean ≥ -100
+  2:  -80.0   # leave level 2 once window mean ≥  -80
+
+advance_window: 3  # consecutive eval runs that must all meet threshold
+```
+
+`PerformanceCurriculumCallback` subclasses `EvalCallback` and intercepts each eval result.
+It maintains a per-level list of eval returns and checks the rolling window:
+
+```python
+window = self._level_returns[level][-self._window:]
+if len(window) >= self._window and np.mean(window) >= threshold:
+    self._advance()   # set_level() on training env via env_method
+```
+
+`set_level()` is one-way — the agent cannot regress to an easier level once it has
+earned a harder one. This prevents oscillation if performance drops temporarily.
+
+`CurriculumWrapper` separates two concerns:
+- `set_level(n)`        — permanent one-way advance (training env, called by callback)
+- `set_forced_level(n)` — mirror level (eval env, called by VecNormalizeSyncCallback)
+
+### Verification
+
+Simulated advancement sequence:
+```
+Evals at level 0:  -150, -130, -115  → window mean = -131.7  < -120  → stay
+Evals at level 0:  -118, -115, -110  → window mean = -114.3  ≥ -120  → advance to 1
+Evals at level 1:  -102,  -99,  -97  → window mean =  -99.3  ≥ -100  → advance to 2
+```
+
+Level report printed at end of training:
+```
+Curriculum Level Performance
+  Level   Evals      Mean      Best  Threshold  Status
+  ------  -----  --------  --------  ---------  --------
+  0           5    -125.6    -115.0     -120.0  advanced at step 60,000
+  1           4    -102.0     -97.0     -100.0  advanced at step 140,000
+  2           3     -75.0     -70.0      -80.0  advanced at step 200,000
+  3           3     -40.0     -30.0      final  active  (unlocked 200,000)
+```
+
+Per-level stats are also written to `summary.json` under `curriculum.per_level`.
+
+### Lesson
+
+**Curriculum is a scaffolding tool — remove the scaffold only when the foundation is solid.**
+Time-based advancement assumes the agent improves monotonically, which it doesn't.
+Performance-gated advancement is self-pacing: a fast-learning agent advances quickly,
+a struggling agent stays at the current difficulty until it actually masters it.
+
+The cost is that an agent that never solves level 0 never advances — but that is exactly
+the right behaviour. A policy that hasn't learned level-0 roads has nothing to gain from
+level-1 roads and everything to lose.
+
+---
