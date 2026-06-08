@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 import sys
 import traceback
@@ -146,54 +147,8 @@ def _write_summary(
     interrupted: bool,
     error: str | None,
 ) -> None:
-    lines: list[str] = []
-
-    def s(text: str = "") -> None:
-        lines.append(text)
-
-    s("# Training Run Summary")
-    s(f"date        : {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
-    s(f"status      : {'INTERRUPTED' if interrupted else ('ERROR — ' + error) if error else 'COMPLETED'}")
-    s()
-
-    s("## Run Configuration")
-    s(f"algo        : {args.algo}")
-    s(f"road        : {args.road}")
-    s(f"curriculum  : {'yes' if curriculum else 'no'}")
-    s(f"timesteps   : {timesteps:,}")
-    s(f"n_envs      : {n_envs}")
-    s(f"seed        : {seed}")
-    s(f"normalize   : obs=True, reward={not args.no_normalize}")
-    s(f"resume      : {args.resume or 'no'}")
-    s()
-
-    s("## Hyperparameters (PPO)")
-    for k, v in algo_kwargs.items():
-        if k == "policy_kwargs":
-            arch = v.get("net_arch", {})
-            s(f"  net_arch    : pi={arch.get('pi', '?')}  vf={arch.get('vf', '?')}")
-        else:
-            s(f"  {k:<20}: {v}")
-    s()
-
-    s("## Output Paths")
-    s(f"final model : {final_path}.zip")
-    s(f"best model  : {best_path}.zip")
-    s(f"best step   : {f'{best_step:,}' if best_step is not None else 'unknown'}")
-    s(f"vecnorm     : {final_path.parent / 'vecnormalize.pkl'}")
-    s()
-
-    s("## Training Statistics")
+    flags: list[str] = []
     if monitor_summary:
-        s(f"episodes    : {int(monitor_summary['episodes'])}")
-        s(f"mean_reward : {monitor_summary['mean_reward']:.3f}")
-        s(f"max_reward  : {monitor_summary['max_reward']:.3f}")
-        s(f"min_reward  : {monitor_summary['min_reward']:.3f}")
-        s(f"last_reward : {monitor_summary['last_reward']:.3f}")
-        s(f"mean_ep_len : {monitor_summary['mean_length']:.1f}")
-        s()
-        # flags for Claude to catch obvious failure modes
-        flags: list[str] = []
         mr = monitor_summary["mean_reward"]
         mn = monitor_summary["min_reward"]
         mx = monitor_summary["max_reward"]
@@ -206,36 +161,47 @@ def _write_summary(
             flags.append(f"extreme negative episode (min={mn:.1f}) — possible truncation or reward bug")
         if ep < 100:
             flags.append(f"only {ep} episodes completed — likely insufficient timesteps or early truncation")
-        if flags:
-            s("## Warnings / Diagnostics")
-            for f in flags:
-                s(f"  ! {f}")
-            s()
-        else:
-            s("## Warnings / Diagnostics")
-            s("  none — training stats look normal")
-            s()
-    else:
-        s("  no monitor data found — training may not have completed any episodes")
-        s()
 
     if error:
-        s("## Error Traceback")
-        s(error)
-        s()
-
-    s("## What To Check Next")
-    if error:
-        s("  - Read the traceback above and fix the crash before retraining")
+        next_steps = ["Read the error_traceback field and fix the crash before retraining"]
     elif interrupted:
-        s("  - Resume from checkpoint: just train --resume <final_path>.zip")
+        next_steps = [f"Resume: just train --resume {final_path}.zip"]
     else:
-        s("  - Evaluate: just eval <final_path>.zip --save-plots")
-        s("  - Compare vs baselines: just compare <final_path>.zip")
-        s("  - If mean_reward is low, check TRIAL_ERROR.md for known failure patterns")
-        s("  - View training curves: just tb")
+        next_steps = [
+            f"Evaluate: just eval {final_path}.zip --save-plots",
+            f"Compare:  just compare {final_path}.zip",
+            "Check TRIAL_ERROR.md if mean_reward looks wrong",
+            "View curves: just tb",
+        ]
 
-    path.write_text("\n".join(lines) + "\n")
+    payload = {
+        "date":       datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "status":     "INTERRUPTED" if interrupted else "ERROR" if error else "COMPLETED",
+        "config": {
+            "algo":       args.algo,
+            "road":       args.road,
+            "curriculum": curriculum,
+            "timesteps":  timesteps,
+            "n_envs":     n_envs,
+            "seed":       seed,
+            "norm_obs":   True,
+            "norm_reward": not args.no_normalize,
+            "resume":     args.resume,
+        },
+        "hyperparameters": algo_kwargs,
+        "paths": {
+            "final_model": str(final_path) + ".zip",
+            "best_model":  str(best_path)  + ".zip",
+            "best_step":   best_step,
+            "vecnorm":     str(final_path.parent / "vecnormalize.pkl"),
+        },
+        "training_stats": monitor_summary,
+        "diagnostics": flags if flags else ["none — training stats look normal"],
+        "next_steps":  next_steps,
+        "error_traceback": error,
+    }
+
+    path.write_text(json.dumps(payload, indent=2, default=str) + "\n")
 
 
 def _best_model_step(best_dir: Path) -> int | None:
@@ -405,7 +371,7 @@ def main() -> None:
     else:
         print("\nTraining summary: no monitor data found.")
 
-    summary_path = model_dir / "summary.md"
+    summary_path = model_dir / "summary.json"
     _write_summary(
         path=summary_path,
         args=args,
