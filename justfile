@@ -65,6 +65,22 @@ tb:
 tb-run run:
     {{venv}} -m tensorboard.main --logdir logs/tensorboard/{{run}}
 
+# Human driver baseline
+# usage: just human-driver
+#        just human-driver --scenario single_severe
+#        just human-driver --render                   live window
+#        just human-driver --save-gif --save-plots    headless: GIF + PNG
+human-driver *args="":
+    PYTHONPATH=src {{venv}} src/baseline/human_driver/driver_eval.py {{args}}
+
+# MPC baseline (requires acados — see docs)
+# usage: just mpc
+#        just mpc --scenario single_severe
+#        just mpc --render                            live window
+#        just mpc --save-gif --save-plots             headless: GIF + PNG
+mpc *args="":
+    PYTHONPATH=src:src/baseline/mpc {{venv}} src/baseline/mpc/mpc.py {{args}}
+
 # tests
 test *args="":
     PYTHONPATH=src .venv/bin/pytest tests/ -v {{args}}

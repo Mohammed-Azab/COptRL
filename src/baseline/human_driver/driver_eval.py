@@ -1,6 +1,8 @@
 """Evaluation harness for the rule-based human driver baseline."""
 from __future__ import annotations
 
+import os
+
 import argparse
 import copy
 import json
@@ -30,7 +32,8 @@ def _load_driver_cfg() -> dict:
 
 
 def run_episode(env, ctrl: HumanDriverController, seed: int,
-                scenario_road=None, collect_frames: bool = False) -> dict:
+                scenario_road=None, collect_frames: bool = False,
+                render_live: bool = False) -> dict:
     # deep-copy so the env's set_speed() calls don't corrupt the shared template
     road_for_ep = copy.deepcopy(scenario_road) if scenario_road is not None else None
     opts   = {"road": road_for_ep} if road_for_ep is not None else {}
@@ -54,6 +57,8 @@ def run_episode(env, ctrl: HumanDriverController, seed: int,
     done       = False
 
     while not done:
+        if render_live:
+            env.render()
         if collect_frames:
             frame = env.render()
             if frame is not None:
@@ -163,13 +168,18 @@ def main() -> None:
                     default=dcfg.get('preview_m', 40.0))
     ap.add_argument('--zeta-dot-limit',  type=float,
                     default=dcfg.get('zeta_dot_limit', 1.5))
+    ap.add_argument('--render',           action='store_true',
+                    help='show live window (render_mode=human, like eval.py)')
+    ap.add_argument('--save-gif',        action='store_true',
+                    help='save per-episode GIF (headless-safe offscreen rendering)')
     ap.add_argument('--save-plots',      action='store_true',
                     help='save per-episode time-series PNG')
-    ap.add_argument('--save-gif',        action='store_true',
-                    help='save per-episode GIF animation')
     ap.add_argument('--results-dir',     default=None)
     ap.add_argument('--out',             default=None)
     args = ap.parse_args()
+
+    if args.save_gif and not args.render:
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
     cfg  = load_reward_config()
     ctrl = HumanDriverController(
@@ -183,7 +193,12 @@ def main() -> None:
         ctrl_horizon   = float(dcfg.get('ctrl_horizon', 1.2)),
     )
 
-    render_mode = 'rgb_array' if args.save_gif else 'none'
+    if args.render:
+        render_mode = 'human'
+    elif args.save_gif:
+        render_mode = 'rgb_array'
+    else:
+        render_mode = 'none'
     env = gym.make('QuarterCar_env/QuarterCar', road_profile=args.road,
                    render_mode=render_mode)
 
@@ -198,7 +213,7 @@ def main() -> None:
 
     save_dir = (
         Path(args.results_dir) if args.results_dir
-        else _ROOT / 'eval' / 'results' / f'human_driver_{scenario_label}'
+        else _ROOT / 'eval' / 'results' / 'human_driver' / f'{scenario_label}'
     )
 
     print(f'\n  Human Driver Baseline  (rule-based)')
@@ -214,7 +229,8 @@ def main() -> None:
     for ep in range(args.n_episodes):
         r = run_episode(env, ctrl, seed=args.seed + ep,
                         scenario_road=scenario_road,
-                        collect_frames=args.save_gif)
+                        collect_frames=args.save_gif,
+                        render_live=args.render)
         results.append(r)
         print(
             f'  {ep+1:>3}  {r["episode_return"]:>+9.1f}  '
