@@ -372,16 +372,18 @@ def main() -> None:
         mean_r = mon_summary['mean_reward']
         max_r  = mon_summary['max_reward']
         min_r  = mon_summary['min_reward']
-        erange = emax - emin if emax != emin else 1.0
+
+        # gap from max: 0 = perfect (+100), larger = worse
+        def gap(v): return f"{emax - v:+.0f} from max"
 
         print("\nTraining summary")
         print(f"  episodes     : {int(mon_summary['episodes'])}")
-        print(f"  mean_reward  : {mean_r:.1f}   ({100*(mean_r-emin)/erange:.0f}% of range)")
-        print(f"  max_reward   : {max_r:.1f}   ({100*(max_r-emin)/erange:.0f}% of range)")
-        print(f"  min_reward   : {min_r:.1f}   ({100*(min_r-emin)/erange:.0f}% of range)")
-        print(f"  last_reward  : {mon_summary['last_reward']:.1f}")
+        print(f"  mean_reward  : {mean_r:+.1f}   ({gap(mean_r)})")
+        print(f"  max_reward   : {max_r:+.1f}   ({gap(max_r)})")
+        print(f"  min_reward   : {min_r:+.1f}   ({gap(min_r)})")
+        print(f"  last_reward  : {mon_summary['last_reward']:+.1f}")
         print(f"  mean_ep_len  : {mon_summary['mean_length']:.1f}")
-        print(f"\n  reward range  episode  [{emin:+.0f}, {emax:+.0f}]")
+        print(f"\n  reward range  episode  [{emin:+.0f}, {emax:+.0f}]  (theoretical worst case)")
         print(f"                per-step [{bounds['per_step_min']:+.2f}, {bounds['per_step_max']:+.2f}]")
     else:
         print("\nTraining summary: no monitor data found.")
