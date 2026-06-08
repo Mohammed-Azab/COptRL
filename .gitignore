@@ -238,3 +238,4 @@ docs/
 !config/reward/params_dict.txt
 *.txt
 tune.db
+tune/*
