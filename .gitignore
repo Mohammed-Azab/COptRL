@@ -232,6 +232,7 @@ acados/
 docs/
 *.md
 !README.md
+!CHANGELOG.md
 !config/README.md
 !config/reward/params_dict.txt
 *.txt
