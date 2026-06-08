@@ -258,14 +258,24 @@ class QuarterCarEnv(gym.Env):
         self._prev_action = u
 
         # 6. Termination / truncation
+        #
+        # Physical safety truncation: numerical blow-up or extreme state.
+        # Thresholds set above the worst observed values (0.094 m travel, 0.28 m z_B)
+        # with margin — fire only if something has gone badly wrong.
         truncated = bool(
-            abs(travel) > self._trunc_travel
-            or abs(float(new_state[5])) > self._trunc_zs
-            or (self._max_distance is not None and self._s_pos >= self._max_distance)
+            abs(travel) > self._trunc_travel          # suspension blow-up
+            or abs(float(new_state[5])) > self._trunc_zs  # body blow-up
         )
         terminated = False
 
-        if self._step_count >= self._max_episode_steps and not truncated:
+        # Normal termination: step budget exhausted OR road fully cleared.
+        # Both cases give a terminal bonus so the agent is rewarded for quality,
+        # not just for lasting the full 300 steps.
+        road_complete = (
+            self._max_distance is not None
+            and self._s_pos >= self._max_distance
+        )
+        if (self._step_count >= self._max_episode_steps or road_complete) and not truncated:
             terminated = True
             rms        = np.sqrt(self._accel_sq / self._step_count)
             mean_speed = self._s_pos / max(self._t, 1e-9)

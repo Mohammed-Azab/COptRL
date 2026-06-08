@@ -25,9 +25,12 @@ DT: 0.02
 DT_SIM: 0.001  
 EPISODE_STEPS: 300
 
-# truncation rules
-TRUNC_TRAVEL: 0.6
-TRUNC_ZS: 0.6
+# Safety truncation — fires only on numerical blow-up, not normal operation.
+# Calibrated from 50 worst-case (full-throttle) episodes:
+#   max |z_W - z_B| observed = 0.094 m  → limit set to 0.15 m (1.6× margin)
+#   max |z_B|       observed = 0.284 m  → limit set to 0.40 m (1.4× margin)
+TRUNC_TRAVEL: 0.15
+TRUNC_ZS: 0.40
 
 # observation clip bounds
 OBS_HIGH:
