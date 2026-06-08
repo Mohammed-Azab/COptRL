@@ -95,8 +95,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
-    # SB3 Monitor
+def _summarize_monitor(monitor_dir: Path) -> dict | None:
     files = sorted(monitor_dir.glob("*.monitor.csv"))
     if not files:
         sibling = monitor_dir.parent / f"{monitor_dir.name}.monitor.csv"
@@ -107,30 +106,81 @@ def _summarize_monitor(monitor_dir: Path) -> dict[str, float] | None:
 
     rewards: list[float] = []
     lengths: list[int] = []
-
     for file_path in files:
         with file_path.open(newline="") as handle:
-            reader = csv.DictReader(
-                row for row in handle if not row.startswith("#")
-            )
+            reader = csv.DictReader(row for row in handle if not row.startswith("#"))
             for row in reader:
                 if "r" in row and "l" in row:
                     rewards.append(float(row["r"]))
                     lengths.append(int(row["l"]))
-
     if not rewards:
         return None
 
-    total = float(len(rewards))
-    mean_reward = sum(rewards) / total
-    mean_length = sum(lengths) / total
     return {
-        "episodes": float(len(rewards)),
-        "mean_reward": mean_reward,
-        "mean_length": mean_length,
-        "max_reward": max(rewards),
-        "min_reward": min(rewards),
-        "last_reward": rewards[-1],
+        "episodes":    len(rewards),
+        "mean_reward": round(sum(rewards) / len(rewards), 3),
+        "max_reward":  round(max(rewards), 3),
+        "min_reward":  round(min(rewards), 3),
+        "last_reward": round(rewards[-1], 3),
+        "mean_ep_len": round(sum(lengths) / len(lengths), 1),
+    }
+
+
+def _eval_curve(best_dir: Path, snap_every: int = 100_000) -> dict | None:
+    """Read evaluations.npz and return mean eval return at regular step snapshots."""
+    eval_file = best_dir / "evaluations.npz"
+    if not eval_file.exists():
+        return None
+    with np.load(eval_file) as data:
+        if "timesteps" not in data or "results" not in data:
+            return None
+        steps   = np.asarray(data["timesteps"]).reshape(-1)
+        results = np.asarray(data["results"])
+
+    if steps.size == 0:
+        return None
+
+    mean_r    = results.mean(axis=1)
+    best_idx  = int(np.argmax(mean_r))
+
+    # snapshots at multiples of snap_every
+    max_step  = int(steps[-1])
+    snaps = {}
+    for target in range(snap_every, max_step + snap_every, snap_every):
+        idx = np.searchsorted(steps, target, side="right") - 1
+        if 0 <= idx < len(steps):
+            snaps[str(int(target))] = round(float(mean_r[idx]), 2)
+
+    return {
+        "best_step":         int(steps[best_idx]),
+        "best_mean_return":  round(float(mean_r[best_idx]), 2),
+        "final_mean_return": round(float(mean_r[-1]), 2),
+        "snapshots":         snaps,
+    }
+
+
+def _curriculum_progress(curriculum_cfg: dict | None, total_steps: int) -> dict | None:
+    """Report which curriculum levels were reached and when."""
+    if not curriculum_cfg:
+        return None
+    thresholds = curriculum_cfg.get("thresholds", [])
+    levels     = curriculum_cfg.get("levels", {})
+    reached = []
+    for i, t in enumerate(thresholds):
+        if total_steps >= t:
+            lv = levels.get(i + 1, {})
+            reached.append({
+                "level":     i + 1,
+                "unlocked_at": t,
+                "bump_height_range": lv.get("bump_height_range"),
+                "v_random_high_kmh": lv.get("v_random_high"),
+                "num_bumps_range":   lv.get("num_bumps_range"),
+            })
+    final_level = len([t for t in thresholds if total_steps >= t])
+    return {
+        "final_level":   final_level,
+        "n_levels":      len(thresholds) + 1,
+        "levels_reached": reached,
     }
 
 
@@ -142,93 +192,56 @@ def _write_summary(
     n_envs: int,
     seed: int,
     curriculum: bool,
+    curriculum_cfg: dict | None,
     final_path: Path,
     best_path: Path,
-    best_step: int | None,
+    model_dir: Path,
     monitor_summary: dict | None,
     interrupted: bool,
     error: str | None,
 ) -> None:
-    flags: list[str] = []
-    if monitor_summary:
-        mr = monitor_summary["mean_reward"]
-        mn = monitor_summary["min_reward"]
-        mx = monitor_summary["max_reward"]
-        ep = int(monitor_summary["episodes"])
-        if mr < 0:
-            flags.append(f"mean_reward={mr:.1f} is negative — reward shaping may need review")
-        if mx - mr > abs(mr) * 3:
-            flags.append(f"high reward variance (max={mx:.1f}, mean={mr:.1f}) — unstable training")
-        if mn < -500:
-            flags.append(f"extreme negative episode (min={mn:.1f}) — possible truncation or reward bug")
-        if ep < 100:
-            flags.append(f"only {ep} episodes completed — likely insufficient timesteps or early truncation")
-
-    if error:
-        next_steps = ["Read the error_traceback field and fix the crash before retraining"]
-    elif interrupted:
-        next_steps = [f"Resume: just train --resume {final_path}.zip"]
-    else:
-        next_steps = [
-            f"Evaluate: just eval {final_path}.zip --save-plots",
-            f"Compare:  just compare {final_path}.zip",
-            "Check TRIAL_ERROR.md if mean_reward looks wrong",
-            "View curves: just tb",
-        ]
+    eval_curve = _eval_curve(model_dir / "best")
+    curriculum_info = _curriculum_progress(curriculum_cfg if curriculum else None, timesteps)
 
     payload = {
-        "date":       datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "status":     "INTERRUPTED" if interrupted else "ERROR" if error else "COMPLETED",
+        "date":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "status":  "INTERRUPTED" if interrupted else "ERROR" if error else "COMPLETED",
+
         "config": {
-            "algo":       args.algo,
-            "road":       args.road,
-            "curriculum": curriculum,
-            "timesteps":  timesteps,
-            "n_envs":     n_envs,
-            "seed":       seed,
-            "norm_obs":   True,
+            "algo":        args.algo,
+            "road":        args.road,
+            "curriculum":  curriculum,
+            "timesteps":   timesteps,
+            "n_envs":      n_envs,
+            "seed":        seed,
+            "norm_obs":    True,
             "norm_reward": not args.no_normalize,
-            "resume":     args.resume,
+            "resume":      args.resume,
         },
+
         "hyperparameters": algo_kwargs,
+
         "paths": {
             "final_model": str(final_path) + ".zip",
             "best_model":  str(best_path)  + ".zip",
-            "best_step":   best_step,
             "vecnorm":     str(final_path.parent / "vecnormalize.pkl"),
         },
+
+        # evaluation return sampled every 100k steps (from evaluations.npz)
+        "eval_curve": eval_curve,
+
+        # overall training episode stats (from monitor CSV)
         "training_stats": monitor_summary,
-        "diagnostics": flags if flags else ["none — training stats look normal"],
-        "next_steps":  next_steps,
+
+        # curriculum level progression
+        "curriculum": curriculum_info,
+
         "error_traceback": error,
     }
 
     path.write_text(json.dumps(payload, indent=2, default=str) + "\n")
 
 
-def _best_model_step(best_dir: Path) -> int | None:
-    eval_file = best_dir / "evaluations.npz"
-    if not eval_file.exists():
-        return None
-
-    with np.load(eval_file) as data:
-        if "timesteps" not in data or "results" not in data:
-            return None
-
-        timesteps = np.asarray(data["timesteps"]).reshape(-1)
-        results = np.asarray(data["results"])
-
-    if timesteps.size == 0 or results.size == 0:
-        return None
-
-    mean_rewards = results.mean(axis=1)
-    if mean_rewards.size == 0:
-        return None
-
-    best_so_far = np.maximum.accumulate(mean_rewards)
-    improved = np.r_[True, best_so_far[1:] > best_so_far[:-1]]
-    last_best_idx = int(np.where(improved)[0][-1])
-    return int(timesteps[last_best_idx])
 
 
 def main() -> None:
@@ -361,11 +374,18 @@ def main() -> None:
     print(f"VecNorm  → {model_dir / 'vecnormalize.pkl'}")
     print(f"TB logs  → tensorboard --logdir {tb_dir}")
 
-    best_step    = _best_model_step(model_dir / "best")
     mon_summary  = _summarize_monitor(mon_dir / "train")
+    eval_curve   = _eval_curve(model_dir / "best")
+    best_step    = eval_curve["best_step"] if eval_curve else None
 
     print(f"\nBest Model     → {best_path}.zip")
     print(f"Best Step      → {f'{best_step:,}' if best_step is not None else 'unknown'}")
+
+    if eval_curve:
+        print("\nEval return curve (mean over eval episodes):")
+        for step_str, val in eval_curve["snapshots"].items():
+            marker = " ← best" if int(step_str) == best_step else ""
+            print(f"  {int(step_str):>10,} steps : {val:+.1f}{marker}")
 
     if mon_summary:
         emin, emax = bounds['episode_min'], bounds['episode_max']
@@ -373,16 +393,15 @@ def main() -> None:
         max_r  = mon_summary['max_reward']
         min_r  = mon_summary['min_reward']
 
-        # gap from max: 0 = perfect (+100), larger = worse
         def gap(v): return f"{emax - v:+.0f} from max"
 
         print("\nTraining summary")
-        print(f"  episodes     : {int(mon_summary['episodes'])}")
+        print(f"  episodes     : {mon_summary['episodes']}")
         print(f"  mean_reward  : {mean_r:+.1f}   ({gap(mean_r)})")
         print(f"  max_reward   : {max_r:+.1f}   ({gap(max_r)})")
         print(f"  min_reward   : {min_r:+.1f}   ({gap(min_r)})")
         print(f"  last_reward  : {mon_summary['last_reward']:+.1f}")
-        print(f"  mean_ep_len  : {mon_summary['mean_length']:.1f}")
+        print(f"  mean_ep_len  : {mon_summary['mean_ep_len']:.1f}")
         print(f"\n  reward range  episode  [{emin:+.0f}, {emax:+.0f}]  (theoretical worst case)")
         print(f"                per-step [{bounds['per_step_min']:+.2f}, {bounds['per_step_max']:+.2f}]")
     else:
@@ -397,9 +416,10 @@ def main() -> None:
         n_envs=n_envs,
         seed=seed,
         curriculum=args.curriculum,
+        curriculum_cfg=curriculum_cfg,
         final_path=final_path,
         best_path=best_path,
-        best_step=best_step,
+        model_dir=model_dir,
         monitor_summary=mon_summary,
         interrupted=_interrupted,
         error=_error,
