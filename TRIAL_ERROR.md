@@ -439,3 +439,111 @@ the episode return is positive. If the best achievable behaviour gives negative 
 the weights are wrong.
 
 ---
+
+## Issue 5 — Low-Speed Oscillation Exploit (Jerk/Smooth Velocity-Scaled)
+
+**Date:** 2026-06-08
+**Exp:** exp_10, speed_bump, 1M steps, curriculum, seed=69, tuned hyperparameters
+
+### Symptom
+
+Eval of best model (step 160k):
+
+```
+Mean speed           13.584 km/h      ← very slow (target 54–72 km/h)
+Speed tracking RMSE  58.48 km/h       ← massive deviation from v_ref
+RMS body accel       0.821 m/s²       ← borderline (just under a_limit=1.0)
+Comfort score        0.179            ← very low despite borderline RMS
+r_jerk               -542.06 total    ← ENORMOUS — biggest single penalty
+r_accel              -255.09 total
+r_tracking           -197.92 total
+Action smoothness RMS  0.553          ← high (confirms wild oscillation)
+```
+
+The agent drives at 13.6 km/h with constant rapid acceleration changes (high jerk, high
+action_smooth penalties), hovering just under the RMS comfort threshold to sometimes collect
+the terminal bonus.
+
+Training: best model found at step 160k (curriculum level 0) then policy degraded for the
+remaining 840k steps. mean_reward = -217 with the final model.
+
+### Root Cause
+
+**Jerk and action_smooth were inside the velocity-scaled block:**
+
+```python
+# Before: ALL these are multiplied by v/v_max
+core = w_heave*r_heave + w_wheel*r_wheel + w_accel*r_accel + w_jerk*r_jerk + w_smooth*r_smooth
+total = (v/v_max) * core + tracking_penalty
+```
+
+At v = 13.6 km/h, velocity scale = 13.6/72 = 0.189.
+The jerk penalty was discounted to 18.9% of its full value.
+
+Per-step weighted contributions at 13.6 km/h:
+```
+r_tracking  : -0.208/step  (unscaled — full strength)
+r_jerk      : -0.072/step  (scaled × 0.189 — cheap!)
+r_smooth    : -0.006/step  (scaled × 0.189 — essentially free!)
+```
+
+The agent discovered: at low speed, generate enormous jerk freely, hover near rms=1.0,
+occasionally collect terminal +100.
+
+Per episode: jerk contributed only -20 (scaled), vs -108 it would cost at full speed.
+The agent was paying 5× less for the same oscillation by going slowly.
+
+**Why did the policy peak at 160k?**
+Best model found in curriculum level 0 (0–350k steps). The easy level-0 roads allowed the
+agent to find the oscillation strategy. After curriculum transitions, the harder roads caused
+reward collapse because the agent had learned a strategy that only worked on easy roads.
+
+### What We Tried
+
+Reducing the default learning rate was considered. But the config already had Optuna-tuned
+hyperparameters (`lr=8.5e-5`, `[512,512]` nets) which are already conservative. The
+real fix was structural.
+
+### Fix
+
+Move `r_jerk` and `r_action_smooth` OUTSIDE the velocity-scaled block:
+
+```python
+# After: jerk/smooth unscaled — same cost at any speed
+jerk_smooth = w_jerk*r_jerk + w_smooth*r_smooth          # unscaled
+core = w_heave*r_heave + w_wheel*r_wheel + w_accel*r_accel  # scaled
+total = (v/v_max) * core + tracking_penalty + jerk_smooth
+```
+
+Rationale: jerk and action_smooth measure self-induced longitudinal oscillation.
+The agent fully controls these regardless of speed — oscillating at 13.6 km/h is just as
+uncomfortable for passengers as oscillating at 72 km/h. There is no physical reason to
+discount them at low speed (unlike heave, which physically depends on road excitation × speed).
+
+### Verification
+
+Simulated episode returns after fix:
+
+```
+exp_10's strategy (13.6 km/h, oscillating, rms=0.82):  -182   ← exploit destroyed
+good: 36 km/h, smooth, rms=0.3:                        +30    ← clearly best
+slow+smooth: 13.6 km/h, smooth, rms=0.3:               +23    ← still viable if careful
+```
+
+The oscillating-slow strategy loses 200 points vs the good crossing strategy.
+
+### Lesson
+
+**Velocity scaling applies to road-excitation discomfort, not to self-induced oscillation.**
+
+Heave and wheel acceleration physically depend on road excitation × vehicle speed — slower
+speed genuinely reduces them. Jerk and action_smooth are determined entirely by the agent's
+command pattern and should cost the same at any speed. Scaling them with velocity gives the
+agent a free pass to oscillate whenever it drives slowly.
+
+Rule of thumb: any reward term that the agent can trivially set to zero by its own choice
+(stop accelerating smoothly, stop jerking) should NOT be velocity-scaled.
+Compare to r_tracking: also unscaled for the same reason — stopping to avoid it defeats
+the purpose.
+
+---

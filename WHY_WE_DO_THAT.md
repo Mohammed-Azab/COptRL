@@ -335,3 +335,35 @@ loose enough to never interfere with normal training.
 Setting below 0.15 m → spurious safety truncations during fast aggressive crossings →
 episodes cut short, no terminal bonus, noisy training signal.
 Setting to 0.60 m → reverts to dead code that never fires.
+
+---
+
+## r_jerk and r_action_smooth are not velocity-scaled
+
+**What we do:**
+```python
+jerk_smooth = w_jerk * r_jerk + w_smooth * r_smooth   # unscaled
+core = w_heave*r_heave + w_wheel*r_wheel + w_accel*r_accel  # scaled by v/v_max
+total = (v/v_max) * core + tracking_penalty + jerk_smooth
+```
+
+**Why:**
+Jerk and action_smooth measure self-induced longitudinal oscillation — how rapidly the agent
+changes its acceleration command. The agent fully controls this at any speed.
+
+At 13.6 km/h (scale=0.189) the velocity-scaled version discounted jerk to 18.9% of its cost
+at full speed. The agent in exp_10 learned to drive slowly and oscillate wildly: −20 jerk
+penalty per episode instead of −108. It hovered near the comfort threshold and collected
+terminal bonuses while producing useless motion.
+
+Heave and wheel acceleration physically depend on road excitation × speed — there is a genuine
+physical reason to scale them down at low speed (smaller road disturbances at lower velocity).
+Jerk does not. An agent oscillating between braking and accelerating at 13.6 km/h is exactly
+as uncomfortable as at 72 km/h.
+
+See `TRIAL_ERROR.md` Issue 5.
+
+**What breaks if you change it:**
+Moving jerk/smooth back inside the velocity-scaled block re-enables the oscillation exploit.
+The agent drives slowly, oscillates freely, and collects terminal bonuses without ever crossing
+bumps smoothly.
