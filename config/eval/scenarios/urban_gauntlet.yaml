@@ -1,0 +1,20 @@
+# Urban gauntlet — all 5 Mandl bump types in one run
+# Represents a challenging urban stretch with mixed obstacle types at 50 km/h.
+# Order: gentle crosswalk (warm-up) → severe bump (stress) → crosswalk →
+#        short bump → medium bump.
+# Gaps are set to 15-20 m to allow partial recovery between bumps.
+name: urban_gauntlet
+description: "All 5 Mandl bump types in sequence at 50 km/h"
+source: "Mandl (2021) — combined scenario"
+vehicle_speed_kmh: 50.0
+bumps:
+  - catalog_id: 4    # raised_crosswalk: H=10cm, W=5m   @ x=10
+    x_start_m: 10.0
+  - catalog_id: 2    # severe_bump:      H=10cm, W=1m   @ x=30  (gap=15)
+    x_start_m: 30.0
+  - catalog_id: 4    # raised_crosswalk: H=10cm, W=5m   @ x=46  (gap=15)
+    x_start_m: 46.0
+  - catalog_id: 0    # short_bump:       H=2.5cm, W=0.92m @ x=67 (gap=16)
+    x_start_m: 67.0
+  - catalog_id: 1    # medium_bump:      H=6.25cm, W=2.22m @ x=84 (gap=16.08)
+    x_start_m: 84.0

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 _ROOT = Path(__file__).resolve().parents[2]
-for _p in ("src/gym_env", "src", "src/train"):
+for _p in ("src/gym_env", "src", "src/train", "src/baseline"):
     sys.path.insert(0, str(_ROOT / _p))
 
 import gymnasium as gym
@@ -22,6 +22,7 @@ from QuarterCar_env.wrappers import PreviewWrapper
 from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.config.reward_params import load_reward_config
 from QuarterCar_env.config.env_params import EPISODE_STEPS, DT
+from scenario_loader import load_scenario, list_scenarios, make_road_generator
 
 
 _ALGO_MAP: dict[str, type] = {"PPO": PPO, "TD3": TD3}
@@ -52,6 +53,8 @@ def parse_args() -> argparse.Namespace:
                    help="Path to vecnormalize.pkl. Auto-inferred from model directory when omitted.")
     p.add_argument("--road",
                    choices=_VALID_ROADS, default="speed_bump")
+    p.add_argument("--scenario", default=None,
+                   help=f"fixed eval scenario (available: {list_scenarios()})")
     p.add_argument("--n-episodes", type=int, default=5)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--render", action="store_true")
@@ -109,6 +112,7 @@ def run_episode(
     seed: int,
     render: bool,
     deterministic: bool,
+    scenario_road=None,
 ) -> dict:
     render_mode = "human" if render else "none"
 
@@ -122,7 +126,8 @@ def run_episode(
     venv.training    = False
     venv.norm_reward = False
 
-    reset_out = venv.reset()
+    reset_opts = {"road": scenario_road} if scenario_road is not None else None
+    reset_out  = venv.reset(options=reset_opts)
     obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out
 
     done = np.array([False])
@@ -456,15 +461,24 @@ def main() -> None:
     rcfg   = load_reward_config()
     bounds = reward_bounds(rcfg, EPISODE_STEPS)
 
+    scenario_road  = None
+    scenario_label = args.road
+    if args.scenario:
+        _, _, sc_name, sc_desc = load_scenario(args.scenario)
+        scenario_road  = make_road_generator(args.scenario)
+        scenario_label = args.scenario
+
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_dir = (
         Path(args.results_dir) if args.results_dir
-        else _ROOT / "eval" / "results" / f"eval_{args.algo}_{args.road}_{ts}"
+        else _ROOT / "eval" / "results" / f"eval_{args.algo}_{scenario_label}_{ts}"
     )
 
     print(f"\n{'═'*60}")
     print(f"  COptRL EVAL")
-    print(f"  algo={args.algo}  road={args.road}  episodes={args.n_episodes}")
+    print(f"  algo={args.algo}  road={scenario_label}  episodes={args.n_episodes}")
+    if args.scenario:
+        print(f"  scenario: {sc_name} — {sc_desc}")
     print(f"  model: {args.model_path}")
     print(f"  deterministic={deterministic}  render={args.render}  save_plots={args.save_plots}")
     print(f"{'═'*60}\n")
@@ -481,6 +495,7 @@ def main() -> None:
             seed=args.seed + ep_i,
             render=args.render,
             deterministic=deterministic,
+            scenario_road=scenario_road,
         )
         m = episode_metrics(ep)
         all_eps.append(ep)

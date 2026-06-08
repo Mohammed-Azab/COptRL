@@ -1,0 +1,11 @@
+# Mandl (2021) §5.1.2 — raised pedestrian crosswalk
+# H=10 cm, W=5 m.  Peak road velocity: ζ̇_max = π·H/W·v ≈ 0.87 m/s at 50 km/h.
+# Much gentler excitation than the severe bump due to the wide profile;
+# tests whether the controller maintains comfort while crossing at urban speed.
+name: single_crosswalk
+description: "Raised pedestrian crosswalk (Mandl §5.1.2) at 50 km/h"
+source: "Mandl (2021) §5.1.2"
+vehicle_speed_kmh: 50.0
+bumps:
+  - catalog_id: 4    # raised_crosswalk: H=10cm, W=5m
+    x_start_m: 12.0

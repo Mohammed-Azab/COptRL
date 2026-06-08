@@ -1,0 +1,19 @@
+# Mandl (2021) Table 3.1 — resonance excitation sequence
+# The three cosine bumps are dimensioned to excite distinct suspension modes
+# at the design speed v = 40 km/h = 11.1 m/s:
+#   short_bump  (W=0.92m): f_b = v/W = 12.1 Hz → wheel-hop resonance
+#   medium_bump (W=2.22m): f_b = v/W =  5.0 Hz → human body sensitivity band
+#   long_bump   (W=9.50m): f_b = v/W =  1.17 Hz → sprung mass heave resonance
+# Running all three back-to-back exposes whether the controller can
+# handle each resonance condition without overshooting between bumps.
+name: table31_resonance
+description: "Table 3.1 resonance sequence (short → medium → long) at 40 km/h design speed"
+source: "Mandl (2021) Table 3.1"
+vehicle_speed_kmh: 40.0
+bumps:
+  - catalog_id: 0    # short_bump:  H=2.5cm, W=0.92m
+    x_start_m: 10.0
+  - catalog_id: 1    # medium_bump: H=6.25cm, W=2.22m
+    x_start_m: 16.0  # 10 + 0.92 + 5.08 gap
+  - catalog_id: 3    # long_bump:   H=12.5cm, W=9.5m
+    x_start_m: 25.0  # 16 + 2.22 + 6.78 gap

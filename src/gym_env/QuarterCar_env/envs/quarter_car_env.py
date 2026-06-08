@@ -149,7 +149,11 @@ class QuarterCarEnv(gym.Env):
         randomize       = opts.get("randomize_road",  self._random_road_on_reset)
         randomize_speed = opts.get("randomize_speed", True)
 
-        if self.road_profile == 'speed_bump' and randomize:
+        if self.road_profile == 'speed_bump' and "road" in opts:
+            # caller supplies a pre-built RoadGenerator (e.g. eval scenarios)
+            self._road = opts["road"]
+            self._v    = self._road.speed
+        elif self.road_profile == 'speed_bump' and randomize:
             road_kwargs = opts.get("road_kwargs", self._random_road_kwargs)
             v_low  = float(opts.get("v_random_low",  self._v_random_low))
             v_high = float(opts.get("v_random_high", cfg.v_max))

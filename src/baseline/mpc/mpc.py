@@ -29,11 +29,16 @@ import QuarterCar_env.envs  # noqa: F401
 from QuarterCar_env.config.env_params import PHYSICS
 from QuarterCar_env.config.reward_params import load_reward_config
 from controller import MPCController
+from scenario_loader import load_scenario, list_scenarios, make_road_generator
 
 
-def run_episode(env, ctrl: MPCController, seed: int) -> dict:
-    obs, _   = env.reset(seed=seed)
+def run_episode(env, ctrl: MPCController, seed: int,
+                scenario_road=None) -> dict:
+    opts     = {"road": scenario_road} if scenario_road is not None else {}
+    obs, _   = env.reset(seed=seed, options=opts or None)
     raw      = env.unwrapped
+    if scenario_road is not None:
+        raw._road = scenario_road   # ensure MPC solver sees the same road
     ctrl.reset(raw._road)
 
     ep_return  = 0.0
@@ -96,6 +101,8 @@ def main() -> None:
     ap.add_argument('--horizon',    type=int,   default=50,   help='prediction horizon (steps)')
     ap.add_argument('--seed',       type=int,   default=42)
     ap.add_argument('--road',       default='speed_bump')
+    ap.add_argument('--scenario',   default=None,
+                    help=f'fixed eval scenario name (available: {list_scenarios()})')
     ap.add_argument('--out',        default=None)
     args = ap.parse_args()
 
@@ -103,17 +110,27 @@ def main() -> None:
     ctrl = MPCController(cfg=cfg, physics=dict(PHYSICS), N=args.horizon)
     env  = gym.make('QuarterCar_env/QuarterCar', road_profile=args.road)
 
+    scenario_road = None
+    scenario_label = args.road
+    if args.scenario:
+        _, speed, sc_name, sc_desc = load_scenario(args.scenario)
+        scenario_road  = make_road_generator(args.scenario)
+        scenario_label = args.scenario
+        print(f'\n  Scenario : {sc_name}')
+        print(f'           : {sc_desc}')
+        print(f'           : v={speed*3.6:.1f} km/h, {len(scenario_road._bumps)} bump(s)')
+
     print(f'\n  MPC Baseline')
     print(f'  horizon  : {args.horizon} steps  ({args.horizon * 0.02:.2f}s lookahead)')
     print(f'  episodes : {args.n_episodes}')
-    print(f'  road     : {args.road}')
+    print(f'  road     : {scenario_label}')
     print(f'  solver   : acados SQP-RTI + HPIPM\n')
     print(f'  {"Ep":>3}  {"Return":>9}  {"RMS-a m/s²":>10}  {"Comfort":>8}  {"Bumps":>5}  {"Solve ms":>9}')
     print(f'  {"-"*3}  {"-"*9}  {"-"*10}  {"-"*8}  {"-"*5}  {"-"*9}')
 
     results: list[dict] = []
     for ep in range(args.n_episodes):
-        r = run_episode(env, ctrl, seed=args.seed + ep)
+        r = run_episode(env, ctrl, seed=args.seed + ep, scenario_road=scenario_road)
         results.append(r)
         print(
             f'  {ep+1:>3}  {r["episode_return"]:>+9.1f}  '
