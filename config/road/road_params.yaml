@@ -43,7 +43,7 @@ bump_types:
     bump_length: 7.0
 
 # Default longitudinal speed
-vehicle_speed: 6.0       # m/s
+vehicle_speed: 21.6      # km/h  (= 6 m/s)
 
 # Per-episode random road parameters (used when random_road_on_reset=True)
 random:

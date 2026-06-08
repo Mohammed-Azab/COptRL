@@ -1,15 +1,16 @@
 # Reward configuration for COptRL
+# Speed values are in km/h — loaders convert to m/s internally.
 weights:
-  w_tracking:       0.8   
-  w_accel:          0.4  
-  w_jerk:           0.2   
-  w_action_smooth:  0.1 
+  w_tracking:       0.8
+  w_accel:          0.4
+  w_jerk:           0.2
+  w_action_smooth:  0.1
 
 vertical:
-  w_heave:          0.8   
-  w_wheel:          0.3   
-  a_B_comfort:      0.5   
-  a_W_comfort:     30.0   
+  w_heave:          0.8
+  w_wheel:          0.3
+  a_B_comfort:      0.5
+  a_W_comfort:     30.0
   reward_heave_clip:  1.0   # m/s²
   reward_wheel_clip: 60.0   # m/s²
 
@@ -24,21 +25,21 @@ enable:
   action_smooth: true
 
 velocity:
-  v_max:  20.0
-  a_max:   5.0
-  v_min:   2.0
+  v_max:  72.0   # km/h  (= 20 m/s)
+  a_max:   5.0   # m/s²
+  v_min:   7.2   # km/h  (= 2 m/s)
 
 comfort:
   a_comfort:           2.0   # m/s²
-  accel_filter_alpha:  0.8   # IIR smoothing
+  accel_filter_alpha:  0.8
   accel_clip:          8.0   # m/s²
-  reward_accel_clip:   4.0   # m/s² 
+  reward_accel_clip:   4.0   # m/s²
 
 jerk:
   j_max:              2.0    # m/s³
   jerk_filter_alpha:   0.8
-  jerk_clip:          12.0   # m/s³  
-  reward_jerk_clip:    4.0   # m/s³ 
+  jerk_clip:          12.0   # m/s³
+  reward_jerk_clip:    4.0   # m/s³
 
 terminal:
   terminal_bonus:    100.0

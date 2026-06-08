@@ -31,8 +31,8 @@ class CurriculumWrapper(gym.Wrapper):
             "min_gap":           float(lvl_cfg["min_gap"]),
             "flat_start":        float(lvl_cfg["flat_start"]),
         }
-        opts["v_random_low"]  = float(lvl_cfg["v_random_low"])
-        opts["v_random_high"] = float(lvl_cfg["v_random_high"])
+        opts["v_random_low"]  = float(lvl_cfg["v_random_low"])  / 3.6   # km/h → m/s
+        opts["v_random_high"] = float(lvl_cfg["v_random_high"]) / 3.6   # km/h → m/s
         kwargs["options"] = opts
         return super().reset(**kwargs)
 

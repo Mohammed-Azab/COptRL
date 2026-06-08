@@ -2,7 +2,7 @@ from QuarterCar_env.config.config_manager import _load_yaml
 
 _cfg = _load_yaml("road_params.yaml")
 
-VEHICLE_SPEED = float(_cfg["vehicle_speed"])
+VEHICLE_SPEED = float(_cfg["vehicle_speed"]) / 3.6   # config in km/h → m/s
 
 MULTI_BUMP_CONFIG = {
     "dis_mode":      _cfg["dis_mode"],

@@ -338,8 +338,10 @@ class QuarterCarEnv(gym.Env):
             'episode_time':    self._t,
             'z_B_ddot':        float(z_B_ddot),
             'z_W_ddot':        float(self._last_z_W_ddot),
-            'speed':           float(self._v),
+            'speed':           float(self._v),              # m/s  (internal)
+            'speed_kmh':       float(self._v * 3.6),        # km/h (display)
             'v_ref':           float(self._v_ref_last),
+            'v_ref_kmh':       float(self._v_ref_last * 3.6),
             'speed_error':       float(self._v_ref_last - self._v),
             'speed_error_rms':   float(np.sqrt(self._speed_err_sq / n)),
         }

@@ -27,10 +27,10 @@ class RewardConfig:
     enable_jerk:          bool = True
     enable_action_smooth: bool = True
 
-    # velocity
-    v_max: float = 20.0
-    a_max: float = 5.0
-    v_min: float = 2.0
+    # velocity (stored internally in m/s; config files use km/h)
+    v_max: float = 20.0   # m/s
+    a_max: float = 5.0    # m/s²
+    v_min: float = 2.0    # m/s
 
     # longitudinal comfort / filter
     a_comfort:          float = 2.0
@@ -98,9 +98,9 @@ def load_reward_config() -> RewardConfig:
         enable_jerk          = bool(e.get("jerk",          True)),
         enable_action_smooth = bool(e.get("action_smooth", True)),
 
-        v_max = float(v.get("v_max", 20.0)),
+        v_max = float(v.get("v_max", 72.0)) / 3.6,   # config in km/h → m/s
         a_max = float(v.get("a_max",  5.0)),
-        v_min = float(v.get("v_min",  2.0)),
+        v_min = float(v.get("v_min",  7.2)) / 3.6,   # config in km/h → m/s
 
         a_comfort          = float(c.get("a_comfort",          2.0)),
         accel_filter_alpha = float(c.get("accel_filter_alpha", 0.8)),

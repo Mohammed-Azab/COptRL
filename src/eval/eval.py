@@ -158,8 +158,8 @@ def episode_metrics(ep: dict) -> dict:
         "n_steps":               int(len(rewards)),
         "rms_accel":             float(np.sqrt(np.mean(accels ** 2))),
         "peak_accel":            float(np.max(np.abs(accels))),
-        "speed_rmse":            float(np.sqrt(np.mean((speeds - v_refs) ** 2))),
-        "mean_speed":            float(speeds.mean()),
+        "speed_rmse":            float(np.sqrt(np.mean((speeds - v_refs) ** 2))) * 3.6,  # km/h
+        "mean_speed":            float(speeds.mean()) * 3.6,  # km/h
         "comfort_score":         float(ep["comfort_score_running"][-1]),
         "action_rms":            float(np.sqrt(np.mean(actions ** 2))),
         "action_smoothness_rms": float(np.sqrt(np.mean(np.diff(actions) ** 2))) if len(actions) > 1 else 0.0,
@@ -190,7 +190,7 @@ def print_episode_line(ep_i: int, n: int, m: dict) -> None:
         f"  return={m['total_return']:+9.1f}"
         f"  rms_accel={m['rms_accel']:.3f} m/s²"
         f"  comfort={m['comfort_score']:.3f}"
-        f"  speed_rmse={m['speed_rmse']:.2f} m/s"
+        f"  speed_rmse={m['speed_rmse']:.2f} km/h"
     )
 
 
@@ -210,8 +210,8 @@ def print_summary(agg: dict, bounds: dict, algo: str, road: str) -> None:
         ("Mean step reward",      "mean_step_reward",        ""),
         ("RMS body accel",        "rms_accel",               "m/s²"),
         ("Peak body accel",       "peak_accel",              "m/s²"),
-        ("Speed tracking RMSE",   "speed_rmse",              "m/s"),
-        ("Mean speed",            "mean_speed",              "m/s"),
+        ("Speed tracking RMSE",   "speed_rmse",              "km/h"),
+        ("Mean speed",            "mean_speed",              "km/h"),
         ("Comfort score",         "comfort_score",           "[0-1]"),
         ("Action smoothness RMS", "action_smoothness_rms",   ""),
     ]
