@@ -5,15 +5,7 @@ from typing import Optional
 
 
 class CurriculumWrapper(gym.Wrapper):
-    """
-    Curriculum wrapper — difficulty level is controlled externally by
-    PerformanceCurriculumCallback, which only advances the level when the
-    agent has demonstrated mastery (mean eval return ≥ threshold for N evals).
-
-    Two modes of level control:
-      set_level(n)        — training env: permanent one-way advance
-      set_forced_level(n) — eval env: mirror training level for fair comparison
-    """
+    # level controlled externally by PerformanceCurriculumCallback
 
     def __init__(self, env: gym.Env, config: dict, n_envs: int = 1):
         super().__init__(env)
@@ -27,16 +19,15 @@ class CurriculumWrapper(gym.Wrapper):
     # ------------------------------------------------------------------
 
     def set_level(self, level: int) -> None:
-        """Advance training level — one-way, called by PerformanceCurriculumCallback."""
+        # one-way advance — training env, called by PerformanceCurriculumCallback
         self._active_level = min(max(self._active_level, int(level)), self._max_level)
 
     def set_forced_level(self, level: Optional[int]) -> None:
-        """Pin to a specific level — used by VecNormalizeSyncCallback on eval env."""
+        # pin to level — eval env sync via VecNormalizeSyncCallback
         self._forced_level = level if level is None else min(int(level), self._max_level)
 
     @property
     def current_level(self) -> int:
-        """Return the level that the next reset() will use."""
         if self._forced_level is not None:
             return self._forced_level
         return self._active_level
@@ -52,11 +43,10 @@ class CurriculumWrapper(gym.Wrapper):
         opts["randomize_road"]  = True
         opts["randomize_speed"] = True
         opts["road_kwargs"] = {
-            "num_bumps_range":   tuple(lvl_cfg["num_bumps_range"]),
-            "bump_height_range": tuple(lvl_cfg["bump_height_range"]),
-            "bump_length_range": tuple(lvl_cfg["bump_length_range"]),
-            "min_gap":           float(lvl_cfg["min_gap"]),
-            "flat_start":        float(lvl_cfg["flat_start"]),
+            "num_bumps_range": tuple(lvl_cfg["num_bumps_range"]),
+            "catalog_ids":     list(lvl_cfg["catalog_ids"]),
+            "min_gap":         float(lvl_cfg["min_gap"]),
+            "flat_start":      float(lvl_cfg["flat_start"]),
         }
         opts["v_random_low"]  = float(lvl_cfg["v_random_low"])  / 3.6   # km/h → m/s
         opts["v_random_high"] = float(lvl_cfg["v_random_high"]) / 3.6   # km/h → m/s

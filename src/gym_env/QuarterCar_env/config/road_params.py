@@ -11,5 +11,4 @@ MULTI_BUMP_CONFIG = {
     "custom_dis":    [float(x) for x in _cfg["custom_dis"]],
     "constant_dis":  float(_cfg["constant_dis"]),
     "bump_x_start":  float(_cfg["bump_x_start"]),
-    "bump_types":    {int(k): dict(v) for k, v in _cfg["bump_types"].items()},
 }

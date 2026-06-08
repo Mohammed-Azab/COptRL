@@ -1,5 +1,5 @@
 # Reward configuration for COptRL
-# Speed values are in km/h — loaders convert to m/s internally.
+# Speed values are in km/h, but ODE uses m/s internally due to newtonian mechanics.
 weights:
   w_tracking:       0.3
   w_accel:          0.4
@@ -25,7 +25,7 @@ enable:
   action_smooth: true
   progress:      true
   w_progress:    0.2   # weight on forward-progress reward (v/v_max, always positive)
-  w_bump_cross:  5.0   # one-shot reward each time the agent clears a bump end
+  w_bump_cross:  50.0   # one-shot reward each time the agent reaches a bump end
 
 velocity:
   v_max:  72.0   # km/h  (= 20 m/s)

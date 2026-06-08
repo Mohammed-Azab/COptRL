@@ -1,15 +1,22 @@
 # Road profile configuration
+# Bump dimensions come from src/road/speed_bumps.json (Mandl 2021 catalog).
+# bump_sequence and catalog_ids reference 0-based catalog IDs:
+#   0 = short_bump    (H=2.5cm,  W=0.92m)
+#   1 = medium_bump   (H=6.25cm, W=2.22m)
+#   2 = severe_bump   (H=10cm,   W=1.00m)
+#   3 = long_bump     (H=12.5cm, W=9.50m)
+#   4 = raised_crosswalk (H=10cm, W=5.00m)
 
-# Multi-bump layout
+# Multi-bump static layout (used when random_road_on_reset=False)
 dis_mode: constant        # constant | custom
 
 num_bumps: 4
 
-bump_sequence:
-  - 1
-  - 2
-  - 3
-  - 1
+bump_sequence:            # 0-based catalog IDs
+  - 0   # short_bump
+  - 1   # medium_bump
+  - 2   # severe_bump
+  - 0   # short_bump
 
 # Gaps between consecutive bump-end and next bump-start.
 custom_dis:  # m
@@ -24,32 +31,13 @@ constant_dis: 5       # m
 # X-position where the first bump starts [m]
 bump_x_start: 8.0       # m
 
-# Bump type definitions 
-bump_types:
-  1:
-    bump_height: 0.15
-    bump_length: 5.5
-  2:
-    bump_height: 0.10
-    bump_length: 4.0
-  3:
-    bump_height: 0.20
-    bump_length: 6.0
-  4:
-    bump_height: 0.08
-    bump_length: 3.5
-  5:
-    bump_height: 0.25
-    bump_length: 7.0
-
 # Default longitudinal speed
 vehicle_speed: 21.6      # km/h  (= 6 m/s)
 
 # Per-episode random road parameters (used when random_road_on_reset=True)
 random:
-  num_bumps_range:        [1, 5]
-  bump_height_range:      [0.05, 0.25]
-  bump_length_range:      [1.0, 7.0]
-  min_gap:                2.0
-  flat_start:             8.0
-  v_random_low_factor:    2.0   # v_random_low = v_min * this factor
+  num_bumps_range:     [1, 5]
+  catalog_ids:         [0, 1, 2, 3, 4]   # all catalog entries eligible
+  min_gap:             2.0
+  flat_start:          8.0
+  v_random_low_factor: 2.0   # v_random_low = v_min * this factor

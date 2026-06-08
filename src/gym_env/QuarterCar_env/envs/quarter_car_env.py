@@ -110,11 +110,10 @@ class QuarterCarEnv(gym.Env):
         from QuarterCar_env.config.config_manager import _load_yaml
         _rd_cfg = _load_yaml("road_params.yaml").get("random", {})
         self._random_road_kwargs = {
-            "num_bumps_range":   tuple(_rd_cfg.get("num_bumps_range",   [1, 5])),
-            "bump_height_range": tuple(_rd_cfg.get("bump_height_range", [0.05, 0.25])),
-            "bump_length_range": tuple(_rd_cfg.get("bump_length_range", [1.0, 7.0])),
-            "min_gap":           float(_rd_cfg.get("min_gap",           2.0)),
-            "flat_start":        float(_rd_cfg.get("flat_start",        8.0)),
+            "num_bumps_range": tuple(_rd_cfg.get("num_bumps_range", [1, 5])),
+            "catalog_ids":     list(_rd_cfg.get("catalog_ids",      [0, 1, 2, 3, 4])),
+            "min_gap":         float(_rd_cfg.get("min_gap",         2.0)),
+            "flat_start":      float(_rd_cfg.get("flat_start",      8.0)),
         }
         self._v_random_low = self._rcfg.v_min * float(_rd_cfg.get("v_random_low_factor", 2.0))
 

@@ -1,8 +1,18 @@
 from __future__ import annotations
 from typing import Optional
+import json
+from pathlib import Path
 import numpy as np
 
 from QuarterCar_env.config.road_params import MULTI_BUMP_CONFIG
+
+def _get_catalog() -> list:
+    here = Path(__file__).resolve()
+    for parent in [here] + list(here.parents):
+        p = parent / 'config' / 'road' / 'speed_bumps.json'
+        if p.is_file():
+            return json.loads(p.read_text())['bumps']
+    raise FileNotFoundError('speed_bumps.json not found in config/road/')
 
 
 class RoadGenerator:
@@ -29,21 +39,19 @@ class RoadGenerator:
 
     @staticmethod
     def _build_bumps(config: dict) -> list:
-        """Return list of (x_start, height, length) tuples from multi-bump config."""
-        bumps = []
-        x = float(config["bump_x_start"])
+        catalog     = _get_catalog()
+        bumps       = []
+        x           = float(config["bump_x_start"])
         dis_mode    = config["dis_mode"]
-        seq         = config["bump_sequence"]
-        types       = config["bump_types"]
+        seq         = config["bump_sequence"]   # 0-based catalog IDs
         n           = min(int(config["num_bumps"]), len(seq))
         custom_gaps = config.get("custom_dis", [])
         constant_gap = float(config.get("constant_dis", 5.0))
 
         for i in range(n):
-            typ = int(seq[i])
-            tp  = types[typ]
-            A   = float(tp["bump_height"])
-            L   = float(tp["bump_length"])
+            ci = int(seq[i])
+            A  = float(catalog[ci]['height_m'])
+            L  = float(catalog[ci]['width_m'])
             bumps.append((x, A, L))
             if i < n - 1:
                 if dis_mode == "custom" and i < len(custom_gaps):
@@ -63,7 +71,7 @@ class RoadGenerator:
         return self.get_height_dot_at(self.speed * t, self.speed)
 
     def get_height_at(self, s: float) -> float:
-        """Road height ζ at arc-length position s [m]."""
+        # ζ(s) — road height at arc-length position s [m]
         if self.profile == 'flat':
             return 0.0
         if self.profile == 'speed_bump':
@@ -79,7 +87,7 @@ class RoadGenerator:
         return 0.0
 
     def get_height_dot_at(self, s: float, v: float) -> float:
-        """Road velocity ζ̇ = dζ/dx · v at position s, vehicle speed v."""
+        # ζ̇(s, v) = dζ/dx · v — road velocity at arc-length s, vehicle speed v
         if self.profile == 'flat':
             return 0.0
         if self.profile == 'speed_bump':
@@ -97,7 +105,7 @@ class RoadGenerator:
         return 0.0
 
     def get_height_array(self, t_array: np.ndarray) -> np.ndarray:
-        """Vectorised get_height for an array of query times (used by render)."""
+        # vectorised time-based query used by the renderer
         t = np.asarray(t_array, dtype=np.float64)
         if self.profile == 'flat':
             return np.zeros(len(t))
@@ -154,18 +162,7 @@ class RoadGenerator:
         return np.zeros(n_points, dtype=np.float32)
 
     def _clamp_speed_to_geometry(self) -> None:
-        """Clip speed so the peak road velocity ζ̇ stays within the observation window.
-
-        For a cosine bump ζ(x) = H/2·(1−cos(2πx/L)), the peak spatial gradient is
-        dζ/dx|_max = πH/L, giving ζ̇_max = v · πH/L.
-
-        We limit ζ̇_max ≤ ZETA_DOT_LIMIT (the ODE/observation safe range) so that
-        the most aggressive bump in the road stays within the model's valid regime.
-
-        This replaces an earlier two-point empirical fit that erroneously clamped
-        ALL bumps to ~20 km/h regardless of geometry (calibration points had nearly
-        identical speeds, making the linear extrapolation meaningless).
-        """
+        # limit v so peak ζ̇ = v·πH/L stays within ZETA_DOT_LIMIT (obs safe range)
         if self.profile != 'speed_bump' or not self._bumps:
             return
         ZETA_DOT_LIMIT = 7.0   # m/s — matches OBS_HIGH[1] in env_params.yaml
@@ -196,29 +193,24 @@ class RoadGenerator:
         params: Optional[dict] = None,
         *,
         num_bumps_range: tuple = (1, 5),
-        bump_height_range: tuple = (0.05, 0.25),
-        bump_length_range: tuple = (1.0, 7.0),
+        catalog_ids: Optional[list] = None,   # None = all catalog entries
         min_gap: float = 2.0,
         flat_start: float = 8.0,
     ) -> 'RoadGenerator':
-        """Return a speed-bump RoadGenerator with randomly sampled geometry.
-
-        All randomness uses the caller-supplied *rng* — no global np.random state is touched.
-        Bumps are placed sequentially: first at *flat_start*, each subsequent one after the
-        previous bump ends plus a uniformly sampled gap in [min_gap, 3·min_gap].
-        Speed is automatically clamped to the geometry-safe limit after placement.
-        """
-        n       = int(rng.integers(num_bumps_range[0], num_bumps_range[1] + 1))
-        heights = rng.uniform(*bump_height_range, size=n)
-        lengths = rng.uniform(*bump_length_range, size=n)
-        gaps    = rng.uniform(min_gap, min_gap * 3.0, size=max(n - 1, 0))
+        catalog  = _get_catalog()
+        eligible = [catalog[i] for i in catalog_ids] if catalog_ids else catalog
+        n    = int(rng.integers(num_bumps_range[0], num_bumps_range[1] + 1))
+        idxs = rng.integers(0, len(eligible), size=n)
+        gaps = rng.uniform(min_gap, min_gap * 3.0, size=max(n - 1, 0))
 
         bumps: list = []
         x = float(flat_start)
-        for i in range(n):
-            bumps.append((x, float(heights[i]), float(lengths[i])))
+        for i, ci in enumerate(idxs):
+            A = float(eligible[ci]['height_m'])
+            L = float(eligible[ci]['width_m'])
+            bumps.append((x, A, L))
             if i < n - 1:
-                x += float(lengths[i]) + float(gaps[i])
+                x += L + float(gaps[i])
 
         gen = cls(profile='speed_bump', vehicle_speed=vehicle_speed, params=params)
         gen._bumps = bumps
