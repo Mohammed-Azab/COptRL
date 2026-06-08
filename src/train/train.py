@@ -334,7 +334,7 @@ def main() -> None:
     print(f"  render     : {args.render}")
     print(f"  v_max      : {rcfg.v_max * 3.6:.0f} km/h  |  v_min : {rcfg.v_min * 3.6:.1f} km/h")
     print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
-    print(f"  curriculum : {'on (' + str(len(curriculum_cfg['thresholds'])) + ' levels)' if curriculum_cfg else 'off'}")
+    print(f"  curriculum : {'on (' + str(len(curriculum_cfg['levels'])) + ' levels, performance-gated)' if curriculum_cfg else 'off'}")
     print(f"  output     : {model_dir}")
     print(f"  reward range  episode  [{bounds['episode_min']:+.0f},  {bounds['episode_max']:+.0f}]")
     print(f"                per-step [{bounds['per_step_min']:+.2f}, {bounds['per_step_max']:+.2f}]")
