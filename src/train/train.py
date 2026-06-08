@@ -22,6 +22,8 @@ from monitoring import build_callbacks
 from environment import make_eval_vec_env, make_vec_env
 from seed import seed_everything
 from QuarterCar_env.config.reward_params import load_reward_config
+from QuarterCar_env.config.env_params import EPISODE_STEPS
+from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.wrappers.curriculum import load_curriculum_config
 
 
@@ -314,6 +316,8 @@ def main() -> None:
         checkpoint_freq=max(train_meta["checkpoint_freq"] // n_envs, 1),
     )
 
+    bounds = reward_bounds(rcfg, EPISODE_STEPS)
+
     print(f"\n{''*58}")
     print(f"  algo       : {args.algo}")
     print(f"  road       : {args.road}  |  eval : {eval_road}")
@@ -326,6 +330,8 @@ def main() -> None:
     print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
     print(f"  curriculum : {'on (' + str(len(curriculum_cfg['thresholds'])) + ' levels)' if curriculum_cfg else 'off'}")
     print(f"  output     : {model_dir}")
+    print(f"  reward range  episode  [{bounds['episode_min']:+.0f},  {bounds['episode_max']:+.0f}]")
+    print(f"                per-step [{bounds['per_step_min']:+.2f}, {bounds['per_step_max']:+.2f}]")
     print(f"{''*58}\n")
 
     _interrupted = False
@@ -362,13 +368,21 @@ def main() -> None:
     print(f"Best Step      → {f'{best_step:,}' if best_step is not None else 'unknown'}")
 
     if mon_summary:
+        emin, emax = bounds['episode_min'], bounds['episode_max']
+        mean_r = mon_summary['mean_reward']
+        max_r  = mon_summary['max_reward']
+        min_r  = mon_summary['min_reward']
+        erange = emax - emin if emax != emin else 1.0
+
         print("\nTraining summary")
         print(f"  episodes     : {int(mon_summary['episodes'])}")
-        print(f"  mean_reward  : {mon_summary['mean_reward']:.3f}")
+        print(f"  mean_reward  : {mean_r:.1f}   ({100*(mean_r-emin)/erange:.0f}% of range)")
+        print(f"  max_reward   : {max_r:.1f}   ({100*(max_r-emin)/erange:.0f}% of range)")
+        print(f"  min_reward   : {min_r:.1f}   ({100*(min_r-emin)/erange:.0f}% of range)")
+        print(f"  last_reward  : {mon_summary['last_reward']:.1f}")
         print(f"  mean_ep_len  : {mon_summary['mean_length']:.1f}")
-        print(f"  max_reward   : {mon_summary['max_reward']:.3f}")
-        print(f"  min_reward   : {mon_summary['min_reward']:.3f}")
-        print(f"  last_reward  : {mon_summary['last_reward']:.3f}")
+        print(f"\n  reward range  episode  [{emin:+.0f}, {emax:+.0f}]")
+        print(f"                per-step [{bounds['per_step_min']:+.2f}, {bounds['per_step_max']:+.2f}]")
     else:
         print("\nTraining summary: no monitor data found.")
 
