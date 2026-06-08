@@ -38,6 +38,9 @@ vehicle_speed: 21.6      # km/h  (= 6 m/s)
 random:
   num_bumps_range:     [1, 5]
   catalog_ids:         [0, 1, 2, 3, 4]   # all catalog entries eligible
-  min_gap:             2.0
-  flat_start:          8.0
+  # gap = distance between bump-end and next bump-start [m]
+  # Real urban roads: 15-100 m between bumps; tight private roads: 5-20 m
+  min_gap:             5.0
+  max_gap:             30.0
+  flat_start:          10.0
   v_random_low_factor: 2.0   # v_random_low = v_min * this factor

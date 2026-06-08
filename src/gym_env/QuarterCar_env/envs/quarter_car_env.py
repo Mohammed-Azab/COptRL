@@ -112,8 +112,9 @@ class QuarterCarEnv(gym.Env):
         self._random_road_kwargs = {
             "num_bumps_range": tuple(_rd_cfg.get("num_bumps_range", [1, 5])),
             "catalog_ids":     list(_rd_cfg.get("catalog_ids",      [0, 1, 2, 3, 4])),
-            "min_gap":         float(_rd_cfg.get("min_gap",         2.0)),
-            "flat_start":      float(_rd_cfg.get("flat_start",      8.0)),
+            "min_gap":         float(_rd_cfg.get("min_gap",          5.0)),
+            "max_gap":         float(_rd_cfg.get("max_gap",         30.0)),
+            "flat_start":      float(_rd_cfg.get("flat_start",      10.0)),
         }
         self._v_random_low = self._rcfg.v_min * float(_rd_cfg.get("v_random_low_factor", 2.0))
 

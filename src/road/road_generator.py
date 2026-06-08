@@ -194,14 +194,15 @@ class RoadGenerator:
         *,
         num_bumps_range: tuple = (1, 5),
         catalog_ids: Optional[list] = None,   # None = all catalog entries
-        min_gap: float = 2.0,
+        min_gap: float = 5.0,
+        max_gap: float = 30.0,
         flat_start: float = 8.0,
     ) -> 'RoadGenerator':
         catalog  = _get_catalog()
         eligible = [catalog[i] for i in catalog_ids] if catalog_ids else catalog
         n    = int(rng.integers(num_bumps_range[0], num_bumps_range[1] + 1))
         idxs = rng.integers(0, len(eligible), size=n)
-        gaps = rng.uniform(min_gap, min_gap * 3.0, size=max(n - 1, 0))
+        gaps = rng.uniform(min_gap, max(max_gap, min_gap), size=max(n - 1, 0))
 
         bumps: list = []
         x = float(flat_start)

@@ -46,6 +46,7 @@ class CurriculumWrapper(gym.Wrapper):
             "num_bumps_range": tuple(lvl_cfg["num_bumps_range"]),
             "catalog_ids":     list(lvl_cfg["catalog_ids"]),
             "min_gap":         float(lvl_cfg["min_gap"]),
+            "max_gap":         float(lvl_cfg["max_gap"]),
             "flat_start":      float(lvl_cfg["flat_start"]),
         }
         opts["v_random_low"]  = float(lvl_cfg["v_random_low"])  / 3.6   # km/h → m/s
