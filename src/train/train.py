@@ -159,28 +159,18 @@ def _eval_curve(best_dir: Path, snap_every: int = 100_000) -> dict | None:
     }
 
 
-def _curriculum_progress(curriculum_cfg: dict | None, total_steps: int) -> dict | None:
-    """Report which curriculum levels were reached and when."""
-    if not curriculum_cfg:
+def _curriculum_summary(level_report: dict | None, curriculum_cfg: dict | None) -> dict | None:
+    """Wrap the per-level performance report for summary.json."""
+    if not level_report or not curriculum_cfg:
         return None
-    thresholds = curriculum_cfg.get("thresholds", [])
-    levels     = curriculum_cfg.get("levels", {})
-    reached = []
-    for i, t in enumerate(thresholds):
-        if total_steps >= t:
-            lv = levels.get(i + 1, {})
-            reached.append({
-                "level":     i + 1,
-                "unlocked_at": t,
-                "bump_height_range": lv.get("bump_height_range"),
-                "v_random_high_kmh": lv.get("v_random_high"),
-                "num_bumps_range":   lv.get("num_bumps_range"),
-            })
-    final_level = len([t for t in thresholds if total_steps >= t])
+    n_levels    = len(curriculum_cfg.get("levels", {}))
+    final_level = max((int(k) for k in level_report), default=0)
+    mastered    = [k for k, v in level_report.items() if v["mastered"]]
     return {
-        "final_level":   final_level,
-        "n_levels":      len(thresholds) + 1,
-        "levels_reached": reached,
+        "n_levels":    n_levels,
+        "final_level": final_level,
+        "levels_mastered": len(mastered),
+        "per_level":   level_report,
     }
 
 
@@ -199,9 +189,10 @@ def _write_summary(
     monitor_summary: dict | None,
     interrupted: bool,
     error: str | None,
+    level_report: dict | None = None,
 ) -> None:
-    eval_curve = _eval_curve(model_dir / "best")
-    curriculum_info = _curriculum_progress(curriculum_cfg if curriculum else None, timesteps)
+    eval_curve       = _eval_curve(model_dir / "best")
+    curriculum_info  = _curriculum_summary(level_report, curriculum_cfg if curriculum else None)
 
     payload = {
         "date":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -227,13 +218,13 @@ def _write_summary(
             "vecnorm":     str(final_path.parent / "vecnormalize.pkl"),
         },
 
-        # evaluation return sampled every 100k steps (from evaluations.npz)
+        # evaluation return curve sampled every 100k steps
         "eval_curve": eval_curve,
 
-        # overall training episode stats (from monitor CSV)
+        # overall training episode stats from monitor CSV
         "training_stats": monitor_summary,
 
-        # curriculum level progression
+        # per-level performance summary (performance-gated curriculum)
         "curriculum": curriculum_info,
 
         "error_traceback": error,
@@ -321,13 +312,14 @@ def main() -> None:
         resume=args.resume,
     )
 
-    callbacks = build_callbacks(
+    callbacks, curriculum_cb = build_callbacks(
         model_dir=model_dir,
         eval_venv=eval_venv,
         train_venv=train_venv,
         eval_freq=max(train_meta["eval_freq"] // n_envs, 1),
         n_eval_episodes=train_meta["n_eval_episodes"],
         checkpoint_freq=max(train_meta["checkpoint_freq"] // n_envs, 1),
+        curriculum_cfg=curriculum_cfg,
     )
 
     bounds = reward_bounds(rcfg, EPISODE_STEPS)
@@ -378,6 +370,7 @@ def main() -> None:
     mon_summary  = _summarize_monitor(mon_dir / "train")
     eval_curve   = _eval_curve(model_dir / "best")
     best_step    = eval_curve["best_step"] if eval_curve else None
+    level_report = curriculum_cb.level_report() if curriculum_cb is not None else None
 
     print(f"\nBest Model     → {best_path}.zip")
     print(f"Best Step      → {f'{best_step:,}' if best_step is not None else 'unknown'}")
@@ -408,6 +401,10 @@ def main() -> None:
     else:
         print("\nTraining summary: no monitor data found.")
 
+    # curriculum level breakdown
+    if curriculum_cb is not None:
+        curriculum_cb.print_report()
+
     summary_path = model_dir / "summary.json"
     _write_summary(
         path=summary_path,
@@ -424,6 +421,7 @@ def main() -> None:
         monitor_summary=mon_summary,
         interrupted=_interrupted,
         error=_error,
+        level_report=level_report,
     )
     print(f"Summary  → {summary_path}")
 

@@ -1,15 +1,28 @@
-# Step thresholds (per-env steps) at which the next level unlocks.
+# Curriculum configuration for COptRL speed-bump training.
 # Speed values are in km/h — loaders convert to m/s internally.
 #
-# Heights calibrated to real-world speed bumps (Nardo data: z_max = 5-8 cm).
+# Performance-gated advancement: the agent stays at a level until its mean
+# eval return (averaged over the last `advance_window` evaluations) meets or
+# exceeds the threshold for that level. This ensures harder roads are only
+# introduced once the agent has genuinely learned the current difficulty.
+#
+# Heights calibrated to real-world speed bumps (Nardo data: z_max = 5–8 cm).
 # Level 3 reaches 15 cm which is the upper end of real sleeping-policeman bumps.
-thresholds:
-  - 350_000
-  - 500_000
-  - 700_000
+
+# Minimum mean eval return required to leave each level.
+# Set a level's threshold to a very high value to keep it as the final level.
+advance_return_threshold:
+  0: -120.0   # leave level 0 once mean eval return ≥ -120
+  1: -100.0   # leave level 1 once mean eval return ≥ -100
+  2:  -80.0   # leave level 2 once mean eval return ≥ -80
+  # level 3 has no threshold — it is the final level
+
+# Number of consecutive eval runs that must all meet the threshold.
+# Higher = more stable gating, slower advancement.
+advance_window: 3
 
 levels:
-  0:                              # 0 – 350k steps  — gentle, real speed bumps
+  0:                              # easy — gentle, real speed bumps
     num_bumps_range:   [1, 2]
     bump_height_range: [0.04, 0.07]   # 4–7 cm  (Nardo sb1: 6.4 cm)
     bump_length_range: [3.0, 7.0]
@@ -18,7 +31,7 @@ levels:
     v_random_low:      25.0   # km/h
     v_random_high:     54.0   # km/h
 
-  1:                              # 350k – 500k steps — standard bumps, more variety
+  1:                              # medium — standard bumps, more variety
     num_bumps_range:   [1, 3]
     bump_height_range: [0.04, 0.10]   # 4–10 cm
     bump_length_range: [2.0, 7.0]
@@ -27,7 +40,7 @@ levels:
     v_random_low:      25.0   # km/h
     v_random_high:     72.0   # km/h
 
-  2:                              # 500k – 700k steps — aggressive bumps
+  2:                              # hard — aggressive bumps
     num_bumps_range:   [1, 4]
     bump_height_range: [0.05, 0.12]   # 5–12 cm
     bump_length_range: [1.5, 6.0]
@@ -36,7 +49,7 @@ levels:
     v_random_low:      18.0   # km/h
     v_random_high:     72.0   # km/h
 
-  3:                              # 700k+ steps — tough: tall or short bumps, clusters
+  3:                              # expert — tall or short bumps, clusters
     num_bumps_range:   [2, 6]
     bump_height_range: [0.05, 0.15]   # 5–15 cm  (upper end of real sleeping policeman)
     bump_length_range: [1.0, 5.0]
