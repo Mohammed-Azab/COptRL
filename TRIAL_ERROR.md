@@ -349,3 +349,93 @@ At high speed: tracking penalty is small, comfort penalty is large. The agent fi
 speed where the two balance — which is the desired bump-crossing speed.
 
 ---
+
+## Issue 4 — All-Negative Rewards After Dead-Band Removal (w_tracking Miscalibration)
+
+**Date:** 2026-06-08
+**Exp:** exp_8, speed_bump, 1M steps, curriculum, seed=69
+
+### Symptom
+
+Training summary after exp_8 (first run after Issue 3 fix):
+
+```
+episodes     : 3587
+mean_reward  : -273.971    ← all negative
+max_reward   :  -53.942    ← even the best episode is negative
+min_reward   : -534.028
+mean_ep_len  :  279.1      ← truncations happening (should be 300)
+```
+
+Every single episode has negative return. The best model (step 620k) is used only because
+it is the least bad, not because it learned anything useful.
+
+Eval of exp_8's best model still showed creep behaviour at 8.9 km/h, suggesting the agent
+gave up trying to cross bumps and just sought the lowest-penalty path.
+
+### Root Cause
+
+Issue 3 removed the dead band from `r_tracking` so the formula always fires:
+```python
+return -((v_upper - v) / v_upper) ** 2   # zero only at v = v_upper = 72 km/h
+```
+
+But `w_tracking = 0.8` was calibrated for the old formulation where tracking = 0 for any
+speed inside [v_min, v_max]. With the dead band, w_tracking was essentially a stopping penalty
+— it only mattered below v_min = 7.2 km/h.
+
+Without the dead band, w_tracking is a constant per-step cost for any speed below v_max.
+At curriculum level 0 (max episode speed = 36 km/h), the agent incurs:
+
+```
+tracking penalty = 300 steps × w_tracking × r_tracking
+                 = 300 × 0.8 × −((72−36)/72)²
+                 = 300 × 0.8 × −0.25
+                 = −60 per episode — unavoidable at level 0
+```
+
+This creates a −60 baseline tracking cost every episode that the agent cannot reduce
+regardless of what it does (curriculum limits speed to 36 km/h max at level 0, so
+r_tracking cannot be zero).
+
+Combined effects:
+- Good episode (rms=0.3, terminal +100): −60 tracking − 43 heave + 100 = −3 (barely positive)
+- Bad episode (rms > 1, terminal −100):  −60 tracking − X heave − 100 = −200 to −300
+- Truncated episode (no terminal):       −60 tracking − X heave + 0   = −100 to −200
+
+The agent found that most realistic bump crossings give rms > 1 m/s² (especially at the
+higher speed end of level 0), so the terminal penalty fires frequently → mean around −274.
+
+### Fix
+
+Reduce `w_tracking` from 0.8 to 0.3. The weight must be recalibrated whenever the
+structural form of r_tracking changes — the dead-band removal made tracking always-on,
+so the weight needed to be reduced proportionally.
+
+With w_tracking = 0.3 at level 0 (36 km/h):
+```
+tracking penalty = 300 × 0.3 × −0.25 = −22.5 per episode
+```
+
+Level 0 episode returns (fixed):
+```
+36 km/h, rms=0.3 (good comfort):    +34.3   ← clearly positive, learnable
+36 km/h, rms=1.5 (bad comfort):    −602.5   ← strong signal to slow for bumps
+9  km/h, creep:                     +31.1   ← still positive but < good policy
+```
+
+The good policy (+34) is now strictly better than creeping (+31) and the gradient is clear.
+
+### Lesson
+
+**Reward weights are coupled to reward structure, not independent knobs.**
+When the structural form of a reward term changes (dead band → always-on), all weights
+touching that term must be recalibrated. Keeping w_tracking = 0.8 after removing the
+dead band was equivalent to multiplying the old stop-penalty by 11× for every in-band
+speed (previously zero, now 0.8 × 0.25 = 0.2/step).
+
+A simple sanity check after any reward change: simulate a "good" policy and verify
+the episode return is positive. If the best achievable behaviour gives negative return,
+the weights are wrong.
+
+---
