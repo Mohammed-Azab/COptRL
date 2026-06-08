@@ -4,11 +4,12 @@ from QuarterCar_env.config.reward_params import RewardConfig
 
 
 def r_speed_band(v: float, v_min: float, v_upper: float) -> float:
+    # Always penalise distance from v_upper — no dead band (follows Mandl 2021 Eq. 4.21b).
+    # A dead band [v_min, v_upper] = 0 lets the agent creep just above v_min for free.
     if v < v_min:
-        return -((v_min - v) / v_min) ** 2
-    if v > v_upper:
-        return -((v - v_upper) / v_upper) ** 2
-    return 0.0
+        # Extra penalty below minimum (near-stop adds -1 on top of the normal deviation)
+        return -1.0 - ((v_min - v) / v_min) ** 2
+    return -((v_upper - v) / v_upper) ** 2
 
 
 def r_accel(a: float, a_comfort: float, accel_clip: float) -> float:
