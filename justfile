@@ -46,12 +46,9 @@ eval model *args="":
 compare model *args="":
     PYTHONPATH=src {{venv}} src/eval/compare.py --algo PPO --model-path {{model}} {{args}}
 
-# Optuna PPO search — e.g. just tune --trials 50 --no-curriculum
-tune *args="":
-    PYTHONPATH=src:src/tune:src/train {{venv}} src/tune/tune.py {{args}}
-
-# tuning with SQLite storage for live dashboard
-tune-db study="myPPO_study" *args="":
+# Optuna PPO search —>just tune --trials 50 --no-curriculum
+# Tuning with SQLite storage for live dashboard
+tune study="myPPO_study" *args="":
     PYTHONPATH=src:src/tune:src/train {{venv}} src/tune/tune.py \
         --storage sqlite:///tune.db --study-name {{study}} {{args}}
 
