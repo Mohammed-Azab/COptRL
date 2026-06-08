@@ -30,7 +30,6 @@ train road="speed_bump" *args="":
     #!/usr/bin/env bash
     r="{{road}}"
     extra="{{args}}"
-    # if the "road" slot received a flag (user skipped road name), fall back to default
     if [[ "$r" == --* ]]; then extra="$r $extra"; r="speed_bump"; fi
     extra=$(echo "$extra" | sed 's/--c\b/--curriculum/g')
     PYTHONPATH=src {{venv}} src/train/train.py --algo PPO --road "$r" $extra
