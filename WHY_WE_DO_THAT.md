@@ -199,3 +199,37 @@ If PreviewWrapper were applied after VecNormalize, the preview features would by
 
 **What breaks if you change it:**
 Wrapping after VecNormalize → preview features not normalised → different input scale to the policy → training instability and poor use of preview information.
+
+---
+
+## Optuna does not tune seed
+
+**What we do:**
+Each Optuna trial receives a fixed seed (`base_seed + trial.number`) for reproducibility.
+Seed is not in the search space (`tune_config.yaml`) and Optuna never suggests different seeds
+as a hyperparameter.
+
+**Why:**
+Seed controls randomness, not learning capacity. Tuning it is selection bias, not optimisation.
+
+A real hyperparameter (learning rate, batch size, gamma) changes *how well the algorithm
+learns*. The same learning rate performs consistently better or worse regardless of random draw.
+
+Seed controls *which random outcomes occur* — road geometry on episode 1, weight initialisation,
+mini-batch ordering. If trial A with seed=42 happens to get easy roads during eval and trial B
+with seed=7 gets hard roads, trial A looks better even with identical hyperparameters.
+Optuna would select seed=42 as "best" — but the next training run with that seed will likely
+perform average because road randomisation reintroduces variance the seed cannot control.
+
+This is called **selection bias**: you are not finding a better algorithm, you are finding a
+lucky draw.
+
+**What we do instead:**
+Each trial evaluates over `n_eval_episodes=5` and the objective is the **mean** return across
+those episodes. Averaging over multiple episodes reduces seed sensitivity without exploiting it.
+This is the statistically correct approach — reduce variance through aggregation, not selection.
+
+**What breaks if you change it:**
+Adding seed to the Optuna search space means the study will converge on the luckiest seed, not
+the best hyperparameters. Results will not reproduce: retraining with the "winning" seed gives
+average performance, not the performance the study measured.
