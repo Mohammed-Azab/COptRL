@@ -35,6 +35,36 @@ The division by 3.6 at the loader is the single conversion point. Nothing else s
 
 ---
 
+## r_tracking has no dead band — it always penalises distance from v_max
+
+**What we do:**
+```python
+def r_speed_band(v, v_min, v_upper):
+    if v < v_min:
+        return -1.0 - ((v_min - v) / v_min) ** 2
+    return -((v_upper - v) / v_upper) ** 2   # zero only at v = v_upper
+```
+
+**Why:**
+A dead band `return 0.0 for v in [v_min, v_max]` means every speed in that range is equally
+free. The agent exploits the cheapest option — the lowest speed that avoids the stopping
+penalty, which was v_min + ε = ~9 km/h (exp_7). At 9 km/h, the agent never reaches the
+bump and collects the terminal bonus, giving +100 episode return.
+
+Following Mandl (2021) Eq. 4.21b: `J_speed = Qv × (v_ref − v)²` — the cost is zero only
+at exactly v_ref. The dead band was added with good intentions (allow slowing near bumps)
+but the comfort terms (r_heave, r_accel) already create that effect. The two terms together
+produce the optimal speed automatically: high tracking cost at low speed balances low heave
+cost, and the agent finds the cross-over — which is the desired bump-crossing speed.
+
+See `TRIAL_ERROR.md` Issue 3.
+
+**What breaks if you change it:**
+Re-introducing a dead band (any range where r_tracking = 0) re-enables the creep exploit.
+The agent will find the cheapest speed in the zero-cost zone and stay there.
+
+---
+
 ## r_tracking is not velocity-scaled
 
 **What we do:**

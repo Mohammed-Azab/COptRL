@@ -230,3 +230,122 @@ produces more stable early training. The agent learns the skill incrementally ra
 having to solve all difficulty levels simultaneously.
 
 ---
+
+## Issue 3 — Creep-and-Wait Exploit (Dead Band in r_tracking)
+
+**Date:** 2026-06-08
+**Exp:** exp_7, speed_bump, 1M steps, curriculum, seed=69
+
+### Symptom
+
+Eval output after 1M steps with curriculum:
+
+```
+Mean speed          8.963 km/h       ← creeping just above v_min
+Speed tracking RMSE 63.35 km/h       ← massive deviation from v_ref=72 km/h
+RMS body accel      0.000 m/s²       ← never hits the bump
+Comfort score       1.000
+Episode return      +45 to +65       ← positive returns (exploit still paying off)
+r_tracking          -52.68 total     ← small penalty
+r_heave             +0.00 total      ← never crossed an obstacle
+```
+
+The agent learned to creep at ~9 km/h — just above v_min (7.2 km/h) — for the entire episode
+without ever reaching the bump. This is a more subtle variant of the stop-and-wait exploit
+from Issue 1.
+
+### Root Cause
+
+`r_speed_band` returned zero for all speeds in the range `[v_min, v_max]`:
+
+```python
+def r_speed_band(v, v_min, v_upper):
+    if v < v_min:
+        return -((v_min - v) / v_min) ** 2
+    if v > v_upper:
+        return -((v - v_upper) / v_upper) ** 2
+    return 0.0   # ← any speed in [7.2, 72] km/h costs nothing
+```
+
+At v = 8.9 km/h (above v_min = 7.2 km/h), `r_tracking = 0`.
+The velocity scaling factor at that speed: `8.9/72 = 0.124` — comfort terms are 88% discounted.
+The terminal bonus mean-speed gate (`v >= v_min = 7.2 km/h`) is satisfied by v=8.9 km/h.
+
+So the agent could collect terminal +100 with zero tracking penalty and near-zero comfort
+penalties, giving an episode return of +100.0 — the theoretical maximum.
+
+```
+Pre-fix episode returns (simulated):
+  creep at 8.9 km/h, rms=0:    +100.0   ← free exploit
+  good  at 54  km/h, rms=0.5:   −80.0   ← penalised by heave
+  full  at 72  km/h, rms=2.5:  −1060.0
+```
+
+Issue 1 fixed stopping at v≈0 by unscaling r_tracking. But the dead band `[v_min, v_max]`
+remained, meaning any speed between 7.2 and 72 km/h was still free. The agent simply
+found the next available minimum: v_min + ε.
+
+### What We Tried
+
+- Raising v_min — reduces the dead band but doesn't eliminate it; the agent would just creep
+  at the new minimum
+- Raising the mean-speed gate in the terminal bonus — delays the exploit but doesn't remove it
+
+### Fix
+
+Remove the dead band entirely. Follow Mandl (2021) Eq. 4.21b exactly:
+`J_speed = Qv × (v_ref − v)²` — always nonzero unless v = v_ref.
+
+```python
+# Before
+def r_speed_band(v, v_min, v_upper):
+    if v < v_min:
+        return -((v_min - v) / v_min) ** 2
+    if v > v_upper:
+        return -((v - v_upper) / v_upper) ** 2
+    return 0.0   # dead band
+
+# After
+def r_speed_band(v, v_min, v_upper):
+    if v < v_min:
+        return -1.0 - ((v_min - v) / v_min) ** 2   # extra penalty below minimum
+    return -((v_upper - v) / v_upper) ** 2           # always penalise distance from v_max
+```
+
+At v=8.9 km/h: `r_tracking = -((72-8.9)/72)² = -0.768` (was 0).
+At v=54 km/h: `r_tracking = -((72-54)/72)² = -0.0625` (small, not zero).
+At v=72 km/h: `r_tracking = 0` (only at exactly v_max).
+
+This creates a continuous gradient toward v_max. The agent can still justify slowing
+for a bump because the heave reduction outweighs the tracking penalty increase — but
+it can no longer exploit a free zone.
+
+### Verification
+
+Post-fix simulated returns:
+
+```
+creep 8.9 km/h, rms=0 (old exploit): −84.3   ← now heavily penalised
+moderate 36 km/h, rms=0.3:            −3.2   ← best: balanced trade-off
+good 54 km/h, rms=0.5:               −95.0   ← (constant rms over 300 steps, pessimistic)
+```
+
+The optimal speed (~36 km/h in the constant-rms simulation) corresponds to where the
+tracking penalty and comfort penalty balance — exactly the trapezoidal velocity profile
+Mandl describes as the desired human-like behaviour.
+
+### Lesson
+
+**A dead band anywhere in the reward creates a free zone the agent will exploit.**
+Any `return 0.0` in a reward term that the agent can reliably reach is a potential local
+optimum that produces useless behaviour. Follow Mandl's formulation: tracking is a
+continuous squared deviation from v_ref, not a band. The dead band was added with good
+intentions (allow slowing for bumps) but the comfort terms already create that effect
+naturally — the dead band is redundant and harmful.
+
+**The tracking term and comfort terms together create the optimal speed automatically.**
+No dead band is needed. At low speed: tracking penalty is large, comfort penalty is small.
+At high speed: tracking penalty is small, comfort penalty is large. The agent finds the
+speed where the two balance — which is the desired bump-crossing speed.
+
+---
