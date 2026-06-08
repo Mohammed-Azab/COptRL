@@ -1,7 +1,7 @@
 # Reward configuration for COptRL
 # Speed values are in km/h — loaders convert to m/s internally.
 weights:
-  w_tracking:       0.8
+  w_tracking:       0.3
   w_accel:          0.4
   w_jerk:           0.2
   w_action_smooth:  0.1
