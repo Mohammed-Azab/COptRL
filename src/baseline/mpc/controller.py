@@ -70,10 +70,11 @@ def _bumps_hash(bumps: list) -> str:
 class MPCController:
     def __init__(
         self,
-        cfg:     Optional[RewardConfig] = None,
-        physics: Optional[dict] = None,
-        N:       int   = 50,
-        dt:      float = DT,
+        cfg:                  Optional[RewardConfig] = None,
+        physics:              Optional[dict] = None,
+        N:                    int   = 50,
+        dt:                   float = DT,
+        nlp_solver_max_iter:  int   = 10,
     ):
         self._cfg     = cfg or load_reward_config()
         self._physics = dict(physics or PHYSICS)
@@ -81,13 +82,14 @@ class MPCController:
         self._physics['v_max'] = float(self._cfg.v_max)
         self._physics['a_max'] = float(self._cfg.a_max)
 
-        self._N          = N
-        self._dt         = dt
-        self._solver     = None
-        self._bumps_hash = None
-        self._bumps: list = []
-        self._prev_u     = 0.0
-        self._gen_base   = Path(tempfile.gettempdir()) / 'acados_qc'
+        self._N                   = N
+        self._dt                  = dt
+        self._nlp_solver_max_iter = nlp_solver_max_iter
+        self._solver              = None
+        self._bumps_hash          = None
+        self._bumps: list         = []
+        self._prev_u              = 0.0
+        self._gen_base            = Path(tempfile.gettempdir()) / 'acados_qc'
 
     # ------------------------------------------------------------------
 
@@ -101,6 +103,7 @@ class MPCController:
             self._solver     = build_solver(
                 self._physics, bumps, self._cfg,
                 N=self._N, dt=self._dt, gen_dir=gen_dir,
+                nlp_solver_max_iter=self._nlp_solver_max_iter,
             )
             self._bumps_hash = bh
             self._bumps      = bumps

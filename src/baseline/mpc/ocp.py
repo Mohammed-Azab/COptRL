@@ -127,12 +127,13 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
 # -----------------------------------------------------------------------
 
 def build_solver(
-    physics:  dict,
-    bumps:    list,
-    cfg,                   # RewardConfig
-    N:        int   = 50,
-    dt:       float = 0.02,
-    gen_dir:  str   = '/tmp/acados_qc',
+    physics:              dict,
+    bumps:                list,
+    cfg,                          # RewardConfig
+    N:                    int   = 50,
+    dt:                   float = 0.02,
+    gen_dir:              str   = '/tmp/acados_qc',
+    nlp_solver_max_iter:  int   = 10,
 ) -> AcadosOcpSolver:
 
     model = build_acados_model(physics, bumps, dt)
@@ -242,7 +243,7 @@ def build_solver(
     ocp.solver_options.num_stages           = 4        # RK4
     ocp.solver_options.num_steps            = 4        # 4 sub-steps: k_T=262kN/m → ω≈72rad/s, need smaller h
     ocp.solver_options.nlp_solver_type      = 'SQP'
-    ocp.solver_options.nlp_solver_max_iter  = 10       # 10 SQP iters — better quality, ~5ms acceptable offline
+    ocp.solver_options.nlp_solver_max_iter  = nlp_solver_max_iter
     ocp.solver_options.qp_solver            = 'PARTIAL_CONDENSING_HPIPM'
     ocp.solver_options.qp_solver_cond_N     = min(N, 10)
     ocp.solver_options.hessian_approx       = 'GAUSS_NEWTON'

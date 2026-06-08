@@ -1,0 +1,10 @@
+# MPC solver parameters
+
+# Prediction horizon [steps]  (horizon_s = N * DT = 50 * 0.02 = 1.0 s)
+N: 50
+
+# Max SQP iterations per solve — 10 gives good quality at ~5 ms/solve
+nlp_solver_max_iter: 10
+
+# Number of default eval episodes
+n_episodes: 20

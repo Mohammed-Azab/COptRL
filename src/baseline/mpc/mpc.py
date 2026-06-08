@@ -12,6 +12,7 @@ if _lib not in os.environ.get('LD_LIBRARY_PATH', ''):
     os.environ['LD_LIBRARY_PATH'] = _lib + ':' + os.environ.get('LD_LIBRARY_PATH', '')
 
 import argparse
+import copy
 import json
 import sys
 import time
@@ -19,6 +20,7 @@ from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
+import yaml
 
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / 'src' / 'gym_env'))
@@ -32,13 +34,19 @@ from controller import MPCController
 from scenario_loader import load_scenario, list_scenarios, make_road_generator
 
 
+def _load_mpc_cfg() -> dict:
+    p = _ROOT / 'config' / 'baseline' / 'mpc_params.yaml'
+    with open(p) as fh:
+        return yaml.safe_load(fh)
+
+
 def run_episode(env, ctrl: MPCController, seed: int,
                 scenario_road=None) -> dict:
-    opts     = {"road": scenario_road} if scenario_road is not None else {}
+    # deep-copy so the env's set_speed() calls don't corrupt the shared template
+    road_for_ep = copy.deepcopy(scenario_road) if scenario_road is not None else None
+    opts     = {"road": road_for_ep} if road_for_ep is not None else {}
     obs, _   = env.reset(seed=seed, options=opts or None)
     raw      = env.unwrapped
-    if scenario_road is not None:
-        raw._road = scenario_road   # ensure MPC solver sees the same road
     ctrl.reset(raw._road)
 
     ep_return  = 0.0
@@ -96,9 +104,12 @@ def _best_rl(models_dir: Path) -> dict | None:
 
 
 def main() -> None:
+    mcfg = _load_mpc_cfg()
+
     ap = argparse.ArgumentParser('MPC baseline for QuarterCar Model')
-    ap.add_argument('--n-episodes', type=int,   default=20)
-    ap.add_argument('--horizon',    type=int,   default=50,   help='prediction horizon (steps)')
+    ap.add_argument('--n-episodes', type=int,   default=mcfg.get('n_episodes', 20))
+    ap.add_argument('--horizon',    type=int,   default=mcfg.get('N', 50),
+                    help='prediction horizon (steps)')
     ap.add_argument('--seed',       type=int,   default=42)
     ap.add_argument('--road',       default='speed_bump')
     ap.add_argument('--scenario',   default=None,
@@ -107,7 +118,10 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg  = load_reward_config()
-    ctrl = MPCController(cfg=cfg, physics=dict(PHYSICS), N=args.horizon)
+    ctrl = MPCController(
+        cfg=cfg, physics=dict(PHYSICS), N=args.horizon,
+        nlp_solver_max_iter=mcfg.get('nlp_solver_max_iter', 10),
+    )
     env  = gym.make('QuarterCar_env/QuarterCar', road_profile=args.road)
 
     scenario_road = None
@@ -121,7 +135,7 @@ def main() -> None:
         print(f'           : v={speed*3.6:.1f} km/h, {len(scenario_road._bumps)} bump(s)')
 
     print(f'\n  MPC Baseline')
-    print(f'  horizon  : {args.horizon} steps  ({args.horizon * 0.02:.2f}s lookahead)')
+    print(f'  horizon  : {args.horizon} steps  ({args.horizon * 0.02:.2f}s lookahead)  (config/baseline/mpc_params.yaml)')
     print(f'  episodes : {args.n_episodes}')
     print(f'  road     : {scenario_label}')
     print(f'  solver   : acados SQP-RTI + HPIPM\n')
