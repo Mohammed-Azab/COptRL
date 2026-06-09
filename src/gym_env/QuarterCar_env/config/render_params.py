@@ -11,6 +11,7 @@ RENDER_TS_Z_DDOT = bool(_cfg.get("RENDER_TS_Z_DDOT", True))
 RENDER_TS_SPEED = bool(_cfg.get("RENDER_TS_SPEED", True))
 
 RENDER_FREEZE_EPISODE = bool(_cfg.get("RENDER_FREEZE_EPISODE", False))
+RENDER_BUMP_MARKERS  = bool(_cfg.get("RENDER_BUMP_MARKERS",  True))
 
 RENDER_Y_W_NOM = float(_cfg["RENDER_Y_W_NOM"])
 RENDER_Y_B_NOM = float(_cfg["RENDER_Y_B_NOM"])

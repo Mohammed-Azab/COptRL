@@ -105,15 +105,19 @@ class RoadGenerator:
         return 0.0
 
     def get_height_array(self, t_array: np.ndarray) -> np.ndarray:
-        # vectorised time-based query used by the renderer
+        # vectorised time-based query — legacy, kept for tests
         t = np.asarray(t_array, dtype=np.float64)
+        return self.get_height_array_pos(self.speed * t)
+
+    def get_height_array_pos(self, s_array: np.ndarray) -> np.ndarray:
+        # vectorised position-based query used by the renderer
+        s = np.asarray(s_array, dtype=np.float64)
         if self.profile == 'flat':
-            return np.zeros(len(t))
+            return np.zeros(len(s))
         if self.profile == 'speed_bump':
-            result = np.zeros(len(t))
-            x = self.speed * t
+            result = np.zeros(len(s))
             for x0, A, L in self._bumps:
-                dx   = x - x0
+                dx   = s - x0
                 mask = (dx >= 0.0) & (dx <= L)
                 result = np.where(
                     mask,
@@ -123,9 +127,9 @@ class RoadGenerator:
             return result
         if self.profile == 'recorded':
             assert self._rec_arc is not None and self._rec_z is not None
-            x = np.clip(self.speed * t, self._rec_arc[0], self._rec_arc[-1])
-            return np.interp(x, self._rec_arc, self._rec_z)
-        return np.zeros(len(t))
+            s_c = np.clip(s, self._rec_arc[0], self._rec_arc[-1])
+            return np.interp(s_c, self._rec_arc, self._rec_z)
+        return np.zeros(len(s))
 
     def get_spatial_preview(
         self,

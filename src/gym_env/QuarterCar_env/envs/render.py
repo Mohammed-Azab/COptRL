@@ -6,7 +6,6 @@ import numpy as np
 
 from QuarterCar_env.config.env_params import DT
 from QuarterCar_env.config.render_params import (
-    RENDER_HIST_SECS,
     RENDER_Y_W_NOM, RENDER_Y_B_NOM,
     RENDER_H_MW, RENDER_W_MW,
     RENDER_H_MB, RENDER_W_MB,
@@ -19,17 +18,18 @@ from QuarterCar_env.config.render_params import (
     RENDER_DA_LOWER_STEM, RENDER_DA_CYL_H_SUSP, RENDER_DA_CYL_H_TIRE,
     RENDER_CONTACT_STEM, RENDER_GROUND_Y,
     Y_LINE_OFFSET,
+    RENDER_BUMP_MARKERS,
 )
 
 _ROAD_X = np.linspace(-RENDER_ROAD_HALF, RENDER_ROAD_HALF, RENDER_ROAD_N)
-_N_HIST = int(RENDER_HIST_SECS / DT)
+_MAX_EP_STEPS = 4000  # large enough for any episode; deques never truncate mid-episode
 
 
 #  Render geometry helpers
 
 def _spring_xy(x_c: float, y_top: float, y_bot: float,
                n: int = 8, w: float = 0.18) -> Tuple[np.ndarray, np.ndarray]:
-    """Zigzag coil spring; returns (xs, ys) for a single Line2D."""
+    # zigzag coil spring geometry; returns (xs, ys) for a Line2D
     n_pts = 2 * n + 2
     ys = np.linspace(y_top, y_bot, n_pts)
     xs = np.full(n_pts, x_c)
@@ -39,13 +39,11 @@ def _spring_xy(x_c: float, y_top: float, y_bot: float,
 
 
 def _damper_xy(x_c: float, y_top: float, y_bot: float, cyl_h: float):
-    """
-    Open-top piston-cylinder damper (\u22a4).
-    y_bot: lower mass attachment; y_top: upper mass attachment.
-    A short lower rod links y_bot \u2192 cylinder base (RENDER_DA_LOWER_STEM).
-    The upper rod links piston top \u2192 y_top.
-    Returns (upper_rod_xy, lower_rod_xy, cyl_xy, pist_rect).
-    """
+    # open-top piston-cylinder damper (⊤ shape)
+    # y_bot: lower mass attachment; y_top: upper mass attachment
+    # short lower rod links y_bot to cylinder base (RENDER_DA_LOWER_STEM)
+    # upper rod links piston top to y_top
+    # returns (upper_rod_xy, lower_rod_xy, cyl_xy, pist_rect)
     hw      = RENDER_DA_W / 2
     gap     = max(y_top - y_bot, 0.05)
     cyl_bot = y_bot + RENDER_DA_LOWER_STEM
@@ -67,7 +65,7 @@ def _damper_xy(x_c: float, y_top: float, y_bot: float, cyl_h: float):
 
 
 def _ground_symbol_xy(x_c: float, y: float, half_w: float = 0.55):
-    """Horizontal ground line only."""
+    # horizontal ground line only
     return np.array([x_c - half_w, x_c + half_w]), np.array([y, y])
 
 
@@ -119,7 +117,7 @@ def close_env(env):
 
 
 def init_render(env):
-    """Build the figure and all artists exactly once."""
+    # build the matplotlib figure and all artists once, first time render is called
     import matplotlib
     if not os.environ.get('DISPLAY'):
         matplotlib.use('Agg', force=True)
@@ -132,12 +130,13 @@ def init_render(env):
         env._show_ts = False
 
     env._ren_hist = {
-        't':        collections.deque(maxlen=_N_HIST),
-        'z_B':      collections.deque(maxlen=_N_HIST),
-        'z_W':      collections.deque(maxlen=_N_HIST),
-        'z_B_ddot': collections.deque(maxlen=_N_HIST),
-        'F':        collections.deque(maxlen=_N_HIST),
-        's_dot':    collections.deque(maxlen=_N_HIST),
+        't':        collections.deque(maxlen=_MAX_EP_STEPS),
+        'z_B':      collections.deque(maxlen=_MAX_EP_STEPS),
+        'z_W':      collections.deque(maxlen=_MAX_EP_STEPS),
+        'z_B_ddot': collections.deque(maxlen=_MAX_EP_STEPS),
+        'F':        collections.deque(maxlen=_MAX_EP_STEPS),
+        's_dot':    collections.deque(maxlen=_MAX_EP_STEPS),
+        's_pos':    collections.deque(maxlen=_MAX_EP_STEPS),
     }
 
     # figure layout
@@ -265,6 +264,23 @@ def init_render(env):
         else:
             ax.set_xlabel('t (s)', fontsize=8)
 
+    # bump marker vlines — one per bump per ts-axis, drawn once car reaches each bump
+    bump_vlines: list[list] = []  # [bump_idx][ax_idx]
+    if RENDER_BUMP_MARKERS and ax_r:
+        bumps = getattr(getattr(env, '_road', None), '_bumps', [])
+        colors = ['#e05a1c', '#4a86c8', '#2ca02c', '#9467bd', '#8c564b']
+        for i, (x0, A, L) in enumerate(bumps):
+            col  = colors[i % len(colors)]
+            label = f'bump {i+1}  H={A*100:.0f}cm'
+            lines = []
+            for j, ax in enumerate(ax_r):
+                vl = ax.axvline(x=0, color=col, lw=1.0, ls='--', alpha=0.7,
+                                label=(label if j == 0 else None), visible=False)
+                lines.append(vl)
+            if ax_r:
+                ax_r[0].legend(fontsize=6, loc='upper left', framealpha=0.6)
+            bump_vlines.append(lines)
+
     if env.render_mode == 'human':
         plt.ion()
         plt.show(block=False)
@@ -295,6 +311,7 @@ def init_render(env):
         'mb_label':       mb_label,
         'status_text':    status_text,
         'ts':             ts,
+        'bump_vlines':    bump_vlines,
     }
 
 
@@ -309,10 +326,11 @@ def push_history(env):
     h['z_B_ddot'].append(env._last_z_B_ddot)
     h['F'].append(0.0)
     h['s_dot'].append(float(env._v))
+    h['s_pos'].append(env._s_pos)
 
 
 def update_artists(env):
-    """Update all artists in-place."""
+    # update all matplotlib artists to reflect the current simulation state
 
     art = env._artists
     ys  = env._y_scale
@@ -320,17 +338,17 @@ def update_artists(env):
 
     z_B    = float(x[5])
     z_W    = z_B + float(x[2])
-    zeta_0 = float(env._road.get_height(env._t))
+    # use arc-length position (matches ODE) not road.speed × time
+    zeta_0 = float(env._road.get_height_at(env._s_pos))
 
     # draw-space heights for the two masses (RENDER_GROUND_Y shifts entire system)
     y_W      = RENDER_Y_W_NOM + RENDER_GROUND_Y + z_W * ys
     y_B      = RENDER_Y_B_NOM + RENDER_GROUND_Y + z_B * ys
     y_road_0 = RENDER_GROUND_Y + zeta_0 * ys
 
-    # road profile (gray line, car at x=0, road scrolls left)
-    v_disp  = max(env._v, 0.1)
-    t_q     = env._t + _ROAD_X / v_disp
-    road_h  = env._road.get_height_array(t_q) * ys + RENDER_GROUND_Y
+    # road profile: positions relative to car's true arc-length position
+    s_q    = env._s_pos + _ROAD_X
+    road_h = env._road.get_height_array_pos(s_q) * ys + RENDER_GROUND_Y
     art['road_line'].set_data(_ROAD_X, road_h)
 
     h = env._ren_hist
@@ -403,8 +421,24 @@ def update_artists(env):
         line.set_data(t_arr, np.array(_map[key]))
 
     if len(t_arr) > 1:
-        t_hi = t_arr[-1]
         for ax in env._ax_r:
-            ax.set_xlim(t_hi - RENDER_HIST_SECS, t_hi)
+            ax.set_xlim(0, max(t_arr[-1], 1.0))
             ax.relim()
             ax.autoscale_view(scalex=False, scaley=True)
+
+    # bump marker vlines: reveal each line once the car reaches that bump's start
+    bump_vlines = art.get('bump_vlines', [])
+    if bump_vlines and len(t_arr) > 0:
+        bumps   = getattr(getattr(env, '_road', None), '_bumps', [])
+        s_arr   = np.array(h['s_pos'])
+        for i, (x0, _A, _L) in enumerate(bumps):
+            if i >= len(bump_vlines):
+                break
+            idx = np.searchsorted(s_arr, x0)
+            reached = idx < len(t_arr)
+            for vl in bump_vlines[i]:
+                if reached:
+                    vl.set_xdata([t_arr[idx], t_arr[idx]])
+                    vl.set_visible(True)
+                else:
+                    vl.set_visible(False)
