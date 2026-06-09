@@ -1,11 +1,7 @@
-# Mandl (2021) §5.1.1 — single severe urban speed bump
-# H=10 cm, W=1 m.  Peak road velocity: ζ̇_max = π·H/W·v ≈ 4.4 m/s at 50 km/h.
-# Braking from 50 km/h to comfortable crossing speed (~17 km/h) needs ~34 m;
-# bump placed at x=60 m so both baselines and RL have a clean lead-in.
 name: single_severe
 description: "Single severe urban speed bump (Mandl §5.1.1) at 50 km/h"
 source: "Mandl (2021) §5.1.1"
 vehicle_speed_kmh: 50.0
 bumps:
-  - catalog_id: 2    # severe_bump: H=10cm, W=1m
+  - catalog_id: 2
     x_start_m: 60.0

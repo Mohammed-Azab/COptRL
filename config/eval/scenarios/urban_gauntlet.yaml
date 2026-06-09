@@ -1,17 +1,15 @@
-# Urban gauntlet — all 5 Mandl bump types in sequence at 50 km/h
-# 60 m lead-in, then bumps spaced 20-25 m apart (realistic urban road).
 name: urban_gauntlet
 description: "All 5 Mandl bump types in sequence at 50 km/h"
 source: "Mandl (2021) — combined scenario"
 vehicle_speed_kmh: 50.0
 bumps:
-  - catalog_id: 4    # raised_crosswalk: H=10cm, W=5m    @ x=60
+  - catalog_id: 4
     x_start_m: 60.0
-  - catalog_id: 2    # severe_bump:      H=10cm, W=1m    @ x=86  (gap=21)
+  - catalog_id: 2
     x_start_m: 86.0
-  - catalog_id: 4    # raised_crosswalk: H=10cm, W=5m    @ x=108 (gap=21)
+  - catalog_id: 4
     x_start_m: 108.0
-  - catalog_id: 0    # short_bump:       H=2.5cm, W=0.92m @ x=134 (gap=21)
+  - catalog_id: 0
     x_start_m: 134.0
-  - catalog_id: 1    # medium_bump:      H=6.25cm, W=2.22m @ x=157 (gap=22)
+  - catalog_id: 1
     x_start_m: 157.0

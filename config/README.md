@@ -4,6 +4,20 @@ All YAML files in this directory are loaded at runtime. CLI flags always overrid
 
 ---
 
+## Bump catalog (Mandl 2021)
+
+Referenced by 0-based `catalog_id` in road, curriculum, and scenario configs. Dimensions from `src/road/speed_bumps.json`. Peak ζ̇ = π·H/W·v.
+
+| ID | Name | H (cm) | W (m) | Peak ζ̇ @ 20 m/s |
+|----|------|---------|-------|-----------------|
+| 0  | short_bump | 2.5 | 0.92 | ~1.7 m/s |
+| 1  | medium_bump | 6.25 | 2.22 | ~1.8 m/s |
+| 2  | severe_bump | 10 | 1.00 | ~6.3 m/s |
+| 3  | long_bump | 12.5 | 9.50 | ~0.8 m/s |
+| 4  | raised_crosswalk | 10 | 5.00 | ~1.3 m/s |
+
+---
+
 ## `algo/algo_configs.yaml`
 
 PPO constructor kwargs passed directly to SB3, plus training meta-settings consumed by `train.py`.
@@ -68,6 +82,12 @@ defaults:
 
 After a tuning run, `tune/<study_name>/<road>/exp_<n>/best_params.yaml` is written in the same format as `algo_configs.yaml` and can be copied directly into that file.
 
+### Tuning history
+- `learning_rate`: using `lin_3e-4` (linear decay to 0) — a fixed rate of 8.49e-05 from an Optuna trial degraded after curriculum level advances.
+- `net_arch pi/vf`: [256, 256] — [512, 512] showed no benefit.
+- `ent_coef`: 0.005 — raised from 0 to prevent premature policy collapse.
+- `n_steps` / `batch_size`: 4096 / 256 — scaled together to reduce gradient variance.
+
 ---
 
 ## `reward/reward_params.yaml`
@@ -118,6 +138,12 @@ observations:
   noise_height_std / noise_distance_std / noise_width_std
   pt1_tau             PT1 filter time constant [s]
 ```
+
+### Calibration notes
+- `a_B_comfort`: 3.0 (was 0.5) — normalises the heave reward so typical Mandl body accelerations (2–5 m/s²) map near 1.
+- `reward_heave_clip`: 8.0 (was 1.0) — old value clipped too aggressively and killed the gradient.
+- `a_limit` (terminal): 5.0 (was 1.0) — 5 m/s² RMS is achievable with good speed management.
+- `preview_distance`: 40 m (was 20 m) — 40 m gives enough lead-in to brake from 50 km/h (braking distance ≈ 34 m).
 
 ---
 
@@ -170,6 +196,9 @@ levels:
 
 Add more levels by extending the `levels` dict and the `thresholds` list. The wrapper always uses the last level once all thresholds are passed.
 
+### Threshold rationale
+Thresholds require positive returns (+50 / +30 / +10). Earlier runs (exp_19) used negative thresholds (−80/−60/−40), which let the agent blow through levels 0–2 in ~100 k steps each without mastering them — level-2 mean was only −35 at advancement. Level 3 then ran 2.7 M steps with no convergence. `advance_window` is 5 (was 3) to require sustained performance before advancing.
+
 ---
 
 ## `gym_env/env_params.yaml`
@@ -177,22 +206,25 @@ Add more levels by extending the `levels` dict and the `thresholds` list. The wr
 Physics constants and episode settings. Changing these values requires reinstalling the gym package (`just build-gym-env`).
 
 ```
-m_B, m_W            sprung / unsprung masses [kg]
-c_T                 tyre damping [N·s/m]
-k_T                 tyre radial stiffness [N/m]
-k_S                 suspension spring stiffness [N/m]
-D, A                damper characteristic (D = slope, A = compression/rebound ratio)
-v_d, v_z            velocity thresholds for high-speed damper slopes [m/s]
-f1_cmp / f2_cmp / f1_rbd / f2_rbd   bumpstop progression factors
-dz_cmp / dz_rbd     bumpstop clearance limits [m]
-F_ks_nlin_max       bumpstop force cap [N]
-DT                  control step [s]  (default 0.02 = 50 Hz)
-DT_SIM              ODE sub-step [s]  (default 0.001 = 1 kHz)
-EPISODE_STEPS       maximum steps per episode
+...
 TRUNC_TRAVEL        suspension travel truncation limit [m]
 TRUNC_ZS            body displacement truncation limit [m]
-OBS_HIGH            clip bounds for [ζ, ζ̇] in the observation
+...
 ```
+
+Truncation fires only on numerical blow-up, not normal operation. Limits calibrated from 50 worst-case (full-throttle) episodes: max |z_W − z_B| observed = 0.094 m, max |z_B| observed = 0.284 m.
+
+---
+
+## `baseline/mpc_params.yaml`
+
+```
+N                   prediction horizon [steps]  (N × DT = horizon in seconds)
+nlp_solver_max_iter max SQP iterations per solve
+n_episodes          default number of eval episodes
+```
+
+N = 150 steps at DT = 0.02 s gives a 3 s horizon, covering the full braking distance at 50 km/h (~40 m) plus bump crossing and recovery. With partial condensing (`cond_N = 10`) the QP size is fixed and solve time stays ~1 ms. `nlp_solver_max_iter = 10` gives good quality at ~5 ms/solve.
 
 ---
 

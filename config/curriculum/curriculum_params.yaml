@@ -1,41 +1,19 @@
 # Curriculum configuration for COptRL speed-bump training.
 # Speed values are in km/h — loaders convert to m/s internally.
-#
-# Performance-gated advancement: the agent stays at a level until its mean
-# eval return (averaged over the last `advance_window` evaluations) meets or
-# exceeds the threshold for that level. This ensures harder roads are only
-# introduced once the agent has genuinely learned the current difficulty.
-#
-# Bump types are referenced by 0-based catalog ID from speed_bumps.json (Mandl 2021):
-#   0 = short_bump    peak ζ̇ ≈ 1.7 m/s @20 m/s  — moderate
-#   1 = medium_bump   peak ζ̇ ≈ 1.8 m/s @20 m/s  — moderate
-#   2 = severe_bump   peak ζ̇ ≈ 6.3 m/s @20 m/s  — very steep
-#   3 = long_bump     peak ζ̇ ≈ 0.8 m/s @20 m/s  — gentle despite height
-#   4 = raised_crosswalk  peak ζ̇ ≈ 1.3 m/s @20 m/s  — gentle
 
-# Minimum mean eval return required to leave each level.
-# Set a level's threshold to a very high value to keep it as the final level.
-#
-# exp_19 post-mortem: thresholds were -80/-60/-40 (all negative), so the agent
-# blew through levels 0-2 in 100k steps each before truly mastering them.
-# Level 2 mean was only -35 when it advanced. Level 3 then ran 2.7M steps with
-# no convergence because the foundation was too shallow.
-# Thresholds now require POSITIVE returns — real mastery, not just "not terrible".
 advance_return_threshold:
-  0:  +50.0   # leave level 0 once mean eval return ≥ +50  (agent hit +77 best in exp_19, so +50 mean is achievable but requires consistency)
-  1:  +30.0   # leave level 1 once mean eval return ≥ +30
-  2:  +10.0   # leave level 2 once mean eval return ≥ +10  (hard: severe bumps + tight spacing)
+  0:  +50.0
+  1:  +30.0
+  2:  +10.0
   # level 3 has no threshold — it is the final level
 
-# Number of consecutive eval runs that must all meet the threshold.
-# Higher = more stable gating, slower advancement.
-advance_window: 5            # was 3 — agent was advancing before truly mastering level
+advance_window: 5
 
 levels:
   0:                              # easy — gentle slopes, wide spacing
     num_bumps_range:  [1, 2]
-    catalog_ids:      [3, 4]      # long_bump and raised_crosswalk: peak ζ̇ < 1.5 m/s @20 m/s
-    min_gap:          20.0        # m — comfortable braking + acceleration distance
+    catalog_ids:      [3, 4]
+    min_gap:          20.0        # m
     max_gap:          50.0        # m
     flat_start:       12.0
     v_random_low:     25.0   # km/h
@@ -62,7 +40,7 @@ levels:
   3:                              # expert — full catalog, more bumps, minimum realistic spacing
     num_bumps_range:  [2, 6]
     catalog_ids:      [0, 1, 2, 3, 4]
-    min_gap:          5.0         # m — tight private-road spacing
+    min_gap:          5.0         # m
     max_gap:          15.0        # m
     flat_start:       8.0
     v_random_low:     18.0   # km/h

@@ -11,7 +11,6 @@ RENDER_TS_SPEED: true
 # whether to freeze the render on episode end
 RENDER_FREEZE_EPISODE: true
 
-# dashed vertical markers on time-series plots showing when each bump is reached
 RENDER_BUMP_MARKERS: true
 
 # nominal draw-space sizes

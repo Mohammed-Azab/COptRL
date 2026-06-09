@@ -3,14 +3,14 @@
 
 PPO:
   policy: MlpPolicy
-  learning_rate: "lin_3e-4"    # linear decay 3e-4 → 0; prevents oscillation at level 3 (exp_20)
-  n_steps: 4096                # was 2048 — larger rollout reduces gradient variance
-  batch_size: 256              # was 64 — scaled with n_steps
+  learning_rate: "lin_3e-4"
+  n_steps: 4096
+  batch_size: 256
   n_epochs: 10
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
-  ent_coef: 0.005              # was 0.0 — small entropy bonus prevents premature policy collapse
+  ent_coef: 0.005
   vf_coef: 0.5
   max_grad_norm: 0.5
   policy_kwargs:
@@ -26,7 +26,7 @@ training:
   n_envs: 4
   n_eval_envs: 1
   eval_freq: 20_000
-  n_eval_episodes: 10          # was 5 — more episodes per eval gives more reliable mean estimates
+  n_eval_episodes: 10
   checkpoint_freq: 100_000
   norm_obs: true
   norm_reward: true

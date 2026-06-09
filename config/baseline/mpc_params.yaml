@@ -1,11 +1,9 @@
 # MPC solver parameters
 
-# Prediction horizon [steps]  (horizon_s = N * DT = 150 * 0.02 = 3.0 s)
-# 3s covers the full braking distance at 50 km/h (~40m) plus bump crossing and recovery.
-# With partial condensing (cond_N=10) the QP size is fixed, so solve time stays ~1ms.
+# Prediction horizon [steps]
 N: 150
 
-# Max SQP iterations per solve — 10 gives good quality at ~5 ms/solve
+# Max SQP iterations per solve
 nlp_solver_max_iter: 10
 
 # Number of default eval episodes

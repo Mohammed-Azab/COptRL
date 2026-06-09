@@ -1,23 +1,16 @@
 # Rule-based human driver parameters
-# All distance/speed/acceleration values in SI (m, m/s, m/s²)
 
 # How far ahead the driver scans for bumps [m]
-# A real driver at 50 km/h notices a bump from ~30-50 m
 preview_m: 40.0
 
-# Peak road velocity the driver is willing to accept while crossing a bump [m/s]
-# ζ̇_max = π·H/W · v_cross  — lower = slower crossing = more comfort
-# 1.5 m/s → cautious urban driver
-# 3.0 m/s → aggressive driver
+# Peak road velocity the driver will accept while crossing a bump [m/s]
 zeta_dot_limit: 1.5
 
 # Comfortable deceleration before a bump [m/s²]
-# 2.5 m/s² ≈ moderate braking (not emergency)
 a_brake: 2.5
 
 # Comfortable re-acceleration after a bump [m/s²]
 a_accel: 2.0
 
 # Speed-control proportional horizon [s]
-# Speed error is closed over this time window
 ctrl_horizon: 1.2
