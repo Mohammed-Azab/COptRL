@@ -25,7 +25,7 @@ enable:
   action_smooth: true
   progress:      true
   w_progress:    0.2   # weight on forward-progress reward (v/v_max, always positive)
-  w_bump_cross:  50.0   # one-shot reward each time the agent reaches a bump end
+  w_bump_cross:  10.0   # one-shot reward each time the agent reaches a bump end
 
 velocity:
   v_max:  72.0   # km/h  (= 20 m/s)

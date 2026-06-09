@@ -1,0 +1,117 @@
+Agent was biasing to choose zero acceleration to reduce the oscilation so the best action to be done was literaliy nth which is dumb and  naive
+
+    # check reward params and obs clip
+    # reward_jerk_clip is tighter than the obs clip -> limits worst-case penalty
+    # reward_accel_clip is tighter than the obs clip -> limits worst-case penalty
+
+---
+
+Issue 2 — w_bump_cross=50 caused training instability (discovered after 3M-step run, exp_17)
+
+Symptom:
+  Training return oscillated wildly throughout 3M steps with no convergence.
+  Best model was at step 520k (early), never consistently beaten afterwards.
+  Eval curve swings: +119 → +97 → +85 → -1 → -50 → +98 → +119 → ... (random walk).
+
+Root cause:
+  w_bump_cross was set to 50.0. The per-step reward maximum is +0.20 (progress).
+  One bump crossing = 50 pts = 250 individual steps of maximum reward.
+  With 1-5 bumps randomly spawned per episode, the crossing bonus alone varied by
+  up to 200 pts purely from road randomness — nothing the agent could control.
+  The agent alternated between: (a) learning to rush through bumps for the bonus,
+  (b) getting hammered by comfort penalties from high-speed bump hits, (c) learning
+  to brake carefully, (d) forgetting because the variance obscured the signal.
+
+Fix:
+  Lowered w_bump_cross from 50 → 10.
+  Rationale: 10/bump is still a meaningful incentive to cross bumps
+  (~50 steps of maximum per-step reward), but no longer drowns out the
+  per-step comfort/speed signal that teaches the agent HOW to cross them.
+
+Effect on human driver baseline:
+  Before (w_bump_cross=50): avg return = +0.2,  std = 117
+  After  (w_bump_cross=10): avg return = -139.8, std = 126
+  RMS accel and comfort scores unchanged — only the return scale shifted.
+  All 20 episodes: bumps_passed = bumps_total (driver clears every bump).
+  The more negative baseline mean is correct — the terminal_penalty=-100 fires
+  on ~55% of episodes where RMS >= a_limit=5.0, which now dominates returns
+  since the crossing bonus no longer masks it.
+
+Lesson:
+  Keep per-episode one-shot bonuses within ~10-20x the typical per-step reward.
+  Large sparse bonuses mask the dense shaping signal and destabilise policy gradients.
+
+---
+
+Issue 3 — RewardConfig dataclass defaults were stale (silent bug)
+
+  The Python dataclass had old hardcoded defaults that no longer matched
+  config/reward/reward_params.yaml:
+    a_B_comfort:      0.5  (yaml: 3.0)   — reward gradient zeroed for realistic accel range
+    reward_heave_clip: 1.0 (yaml: 8.0)   — same issue
+    a_limit:          1.0  (yaml: 5.0)   — comfort threshold impossibly tight
+    preview_distance: 20.0 (yaml: 40.0)  — insufficient look-ahead for braking at 50 km/h
+    w_bump_cross:     5.0  (yaml: 50→10) — out of sync
+
+  If yaml loading ever fails (FileNotFoundError), the code silently fell back to stale
+  defaults, breaking the reward calibration without any visible error.
+
+Fix:
+  Updated all dataclass defaults to match the current yaml values.
+  Defaults now serve as the canonical fallback and stay in sync.
+
+---
+
+Issue 4 — a_B_comfort and reward_heave_clip too small for Mandl bump range
+
+  Original: a_B_comfort=0.5, reward_heave_clip=1.0
+  With Mandl bumps producing body accelerations of 2-5 m/s², the reward
+  r_heave = -(clip(z_Bddot, heave_clip) / a_B_comfort)^2 was:
+    - clipped at 1.0 m/s² (heave_clip), so all accelerations above 1 m/s² got
+      identical reward = -(1.0/0.5)^2 = -4 regardless of being 2 or 8 m/s²
+    - The gradient was zero across the entire realistic operating range
+    - Agent could not distinguish between a 2 m/s² and a 5 m/s² hit
+
+Fix:
+  a_B_comfort: 0.5 → 3.0   (calibrated to Mandl bump midpoint)
+  reward_heave_clip: 1.0 → 8.0   (preserves gradient up to extreme impacts)
+  This restored the reward gradient across the 2-5 m/s² range the agent actually sees.
+
+---
+
+Issue 5 — exp_19: curriculum thresholds too lenient, agent never mastered levels 0-2
+
+Run: exp_19 — 3M steps, PPO, curriculum=on, w_bump_cross=10 (fixed from Issue 2)
+
+Symptom:
+  Eval return oscillated wildly throughout 3M steps at level 3 with no convergence.
+  Best model at step 100,000 (eval +77.5) — never beaten in the remaining 2.9M steps.
+  Eval curve: +77.5 → +24.9 → -20.9 → -43.8 → ... → -213.3 (random walk at level 3).
+  Curriculum advanced through 3 levels in only 300k total steps (100k per level).
+
+  Level performance table:
+    Level 0: 5 evals, mean +48.8, best +77.5,  threshold -80.0 → advanced at  100k
+    Level 1: 5 evals, mean +36.5, best +59.3,  threshold -60.0 → advanced at  200k
+    Level 2: 5 evals, mean -35.0, best -16.1,  threshold -40.0 → advanced at  300k
+    Level 3: 135 evals, mean -73.5, best +34.2             → active, never converged
+
+Root cause:
+  All three gating thresholds were NEGATIVE (-80, -60, -40), meaning the agent could
+  advance even with a mean losing return. Level 0 mean was +48.8 (well above -80),
+  so it advanced after just 5 evals (100k steps) without being challenged. Level 2
+  mean was -35 — barely above -40 — meaning the agent was NOT mastering level 2
+  before being pushed into level 3 (more bumps, tighter spacing).
+  With a shallow foundation, level 3 caused catastrophic oscillation throughout.
+
+Fix:
+  Raised thresholds to require POSITIVE mean returns before advancing:
+    Level 0: -80  →  +50   (agent hit +77 best in exp_19; +50 mean requires consistency)
+    Level 1: -60  →  +30
+    Level 2: -40  →  +10   (hard level; positive return is real mastery)
+  Increased total_timesteps: 3M → 5M (stricter thresholds = more time per level).
+
+Lesson:
+  Performance-gated curriculum thresholds should be POSITIVE or at worst zero.
+  A negative threshold only ensures "not completely failing", not genuine mastery.
+  Watch the curriculum level table: if the agent advances with ≤ 5 evals per level,
+  the thresholds are too easy regardless of their sign.

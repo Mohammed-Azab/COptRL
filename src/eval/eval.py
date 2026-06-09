@@ -101,6 +101,8 @@ def _record(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["wheel_accels"].append(info.get("z_W_ddot", 0.0))
     ep["rms_accel_running"].append(info.get("rms_accel", 0.0))
     ep["comfort_score_running"].append(info.get("comfort_score", 0.0))
+    ep["bumps_passed_running"].append(info.get("bumps_passed", 0))
+    ep["bumps_total_running"].append(info.get("bumps_total", 0))
     for k in _REWARD_TERM_KEYS:
         ep[k].append(info.get(k, 0.0))
 
@@ -127,8 +129,14 @@ def run_episode(
     venv.norm_reward = False
 
     reset_opts = {"road": scenario_road} if scenario_road is not None else None
-    reset_out  = venv.reset(options=reset_opts)
-    obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out
+    if reset_opts is not None:
+        # pass options directly to the underlying DummyVecEnv and normalise manually
+        raw_obs        = venv.venv.reset(options=reset_opts)
+        venv.ret       = np.zeros(venv.num_envs)
+        obs: np.ndarray = venv.normalize_obs(raw_obs)
+    else:
+        reset_out       = venv.reset()
+        obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out
 
     done = np.array([False])
     ep: dict = defaultdict(list)
@@ -168,6 +176,8 @@ def episode_metrics(ep: dict) -> dict:
         "comfort_score":         float(ep["comfort_score_running"][-1]),
         "action_rms":            float(np.sqrt(np.mean(actions ** 2))),
         "action_smoothness_rms": float(np.sqrt(np.mean(np.diff(actions) ** 2))) if len(actions) > 1 else 0.0,
+        "bumps_passed":          int(ep["bumps_passed_running"][-1]) if ep["bumps_passed_running"] else 0,
+        "bumps_total":           int(ep["bumps_total_running"][-1])  if ep["bumps_total_running"]  else 0,
     }
     for k in _REWARD_TERM_KEYS:
         metrics[f"total_{k}"] = float(np.sum(ep.get(k, [0.0])))
@@ -190,11 +200,13 @@ def aggregate_episodes(all_metrics: list[dict]) -> dict:
 
 
 def print_episode_line(ep_i: int, n: int, m: dict) -> None:
+    bumps_str = f'{m["bumps_passed"]}/{m["bumps_total"]}' if m.get("bumps_total") else "-"
     print(
         f"  ep {ep_i+1:>3d}/{n}"
         f"  return={m['total_return']:+9.1f}"
         f"  rms_accel={m['rms_accel']:.3f} m/s²"
         f"  comfort={m['comfort_score']:.3f}"
+        f"  bumps={bumps_str}"
         f"  speed_rmse={m['speed_rmse']:.2f} km/h"
     )
 

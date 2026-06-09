@@ -1,4 +1,4 @@
-"""Evaluation harness for the rule-based human driver baseline."""
+# evaluation runner for the human driver baseline
 from __future__ import annotations
 
 import os
@@ -31,14 +31,28 @@ def _load_driver_cfg() -> dict:
         return yaml.safe_load(fh)
 
 
+def _steps_for_road(road, dt: float = 0.02, margin: float = 1.5) -> int:
+    # enough steps to cross the full road at the design speed
+    if road is None or not hasattr(road, '_bumps') or not road._bumps:
+        return 1200
+    x0, _, L = road._bumps[-1]
+    road_length = x0 + L + 20.0          # last bump end + generous buffer
+    v = max(float(road.speed), 1.0)
+    return max(int(road_length / v / dt * margin), 600)
+
+
 def run_episode(env, ctrl: HumanDriverController, seed: int,
                 scenario_road=None, collect_frames: bool = False,
                 render_live: bool = False) -> dict:
     # deep-copy so the env's set_speed() calls don't corrupt the shared template
     road_for_ep = copy.deepcopy(scenario_road) if scenario_road is not None else None
+
+    # ensure enough steps to traverse all bumps (default budget assumes v_max)
+    raw = env.unwrapped
+    raw._max_episode_steps = _steps_for_road(road_for_ep)
+
     opts   = {"road": road_for_ep} if road_for_ep is not None else {}
     obs, _ = env.reset(seed=seed, options=opts or None)
-    raw    = env.unwrapped
 
     # respect the road's design speed (scenarios run at their specified km/h)
     saved_v_max = ctrl.v_max
@@ -90,6 +104,7 @@ def run_episode(env, ctrl: HumanDriverController, seed: int,
         'comfort_score':  round(max(0.0, 1.0 - rms_accel / cfg.a_limit), 4),
         'n_steps':        n_steps,
         'bumps_passed':   int(raw._bumps_passed),
+        'bumps_total':    len(raw._bump_ends),
         'act_us_mean':    round(float(np.mean(act_times)) * 1e6, 1),
         '_speeds':        speeds,
         '_v_refs':        v_refs,
@@ -222,8 +237,8 @@ def main() -> None:
     print(f'  a_brake   : {ctrl.a_brake} m/s²')
     print(f'  episodes  : {args.n_episodes}')
     print(f'  road      : {scenario_label}\n')
-    print(f'  {"Ep":>3}  {"Return":>9}  {"RMS-a m/s²":>10}  {"Comfort":>8}  {"Bumps":>5}  {"Act µs":>8}')
-    print(f'  {"-"*3}  {"-"*9}  {"-"*10}  {"-"*8}  {"-"*5}  {"-"*8}')
+    print(f'  {"Ep":>3}  {"Return":>9}  {"RMS-a m/s²":>10}  {"Comfort":>8}  {"Bumps":>7}  {"Act µs":>8}')
+    print(f'  {"-"*3}  {"-"*9}  {"-"*10}  {"-"*8}  {"-"*7}  {"-"*8}')
 
     results: list[dict] = []
     for ep in range(args.n_episodes):
@@ -232,11 +247,12 @@ def main() -> None:
                         collect_frames=args.save_gif,
                         render_live=args.render)
         results.append(r)
+        bumps_str = f'{r["bumps_passed"]}/{r["bumps_total"]}'
         print(
             f'  {ep+1:>3}  {r["episode_return"]:>+9.1f}  '
             f'{r["rms_accel"]:>10.3f}  '
             f'{r["comfort_score"]:>8.3f}  '
-            f'{r["bumps_passed"]:>5}  '
+            f'{bumps_str:>7}  '
             f'{r["act_us_mean"]:>8.1f}'
         )
         if args.save_plots or args.save_gif:

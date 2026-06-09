@@ -4,18 +4,18 @@ from QuarterCar_env.config.config_manager import _load_yaml
 
 @dataclass(frozen=True)
 class RewardConfig:
-    # weights — longitudinal
-    w_tracking:      float = 0.5
-    w_accel:         float = 0.8
-    w_jerk:          float = 0.3
-    w_action_smooth: float = 0.2
+    # weights — longitudinal  (keep in sync with config/reward/reward_params.yaml)
+    w_tracking:      float = 0.3
+    w_accel:         float = 0.4
+    w_jerk:          float = 0.2
+    w_action_smooth: float = 0.1
 
     # weights — vertical
-    w_heave:     float = 0.8
-    w_wheel:     float = 0.3
-    a_B_comfort: float = 0.5
-    a_W_comfort: float = 30.0
-    reward_heave_clip: float = 1.0
+    w_heave:           float = 0.8
+    w_wheel:           float = 0.3
+    a_B_comfort:       float = 3.0
+    a_W_comfort:       float = 30.0
+    reward_heave_clip: float = 8.0
     reward_wheel_clip: float = 60.0
     enable_heave:       bool = True
     enable_wheel:       bool = True
@@ -32,7 +32,7 @@ class RewardConfig:
     w_progress: float = 0.2
 
     # bump-crossing reward: positive one-shot reward each time a bump end is cleared
-    w_bump_cross: float = 5.0
+    w_bump_cross: float = 10.0
 
     # velocity (stored internally in m/s; config files use km/h)
     v_max: float = 20.0   # m/s
@@ -54,10 +54,10 @@ class RewardConfig:
     # terminal
     terminal_bonus:   float = 100.0
     terminal_penalty: float = -100.0
-    a_limit:          float = 1.0
+    a_limit:          float = 5.0
 
     # observation — preview
-    preview_distance:    float = 20.0
+    preview_distance:    float = 40.0
     h_clip:              float = 0.15
     n_peaks:             int   = 3
     peak_height_min:     float = 0.01

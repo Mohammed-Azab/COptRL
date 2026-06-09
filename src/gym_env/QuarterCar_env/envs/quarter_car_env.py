@@ -137,9 +137,7 @@ class QuarterCarEnv(gym.Env):
             "z_ddot": bool(show_ts_z_ddot),
         }
 
-    # ------------------------------------------------------------------
-    # Gymnasium interface
-    # ------------------------------------------------------------------
+    # gymnasium interface
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -184,9 +182,15 @@ class QuarterCarEnv(gym.Env):
         self._episode_reward = 0.0
         self._episode_count += 1
 
-        if self._fig is not None:
-            close_env(self)
-        self._ren_hist = None
+        if self._fig is not None and self.render_mode == 'human':
+            # keep the window open between episodes — just clear the history
+            if self._ren_hist is not None:
+                for buf in self._ren_hist.values():
+                    buf.clear()
+        else:
+            if self._fig is not None:
+                close_env(self)
+            self._ren_hist = None
 
         self._v_ref_last     = self._rcfg.v_max
         self._speed_err_sq   = 0.0
@@ -324,9 +328,7 @@ class QuarterCarEnv(gym.Env):
     def close(self):
         close_env(self)
 
-    # ------------------------------------------------------------------
-    # Observation / info helpers
-    # ------------------------------------------------------------------
+    # observation and info helpers
 
     def _build_obs_bounds(self):
         cfg     = self._rcfg
@@ -381,6 +383,8 @@ class QuarterCarEnv(gym.Env):
             'v_ref_kmh':       float(self._v_ref_last * 3.6),
             'speed_error':       float(self._v_ref_last - self._v),
             'speed_error_rms':   float(np.sqrt(self._speed_err_sq / n)),
+            'bumps_passed':    int(self._bumps_passed),
+            'bumps_total':     len(self._bump_ends),
         }
 
     def get_comfort_metric(self) -> float:
@@ -388,21 +392,13 @@ class QuarterCarEnv(gym.Env):
         rms = np.sqrt(self._accel_sq / n)
         return float(max(0.0, 1.0 - rms / self._rcfg.a_limit))
 
-    # ------------------------------------------------------------------
-    # Speed reference profile
-    # ------------------------------------------------------------------
+    # speed reference profile
 
     def _compute_max_distance(self) -> Optional[float]:
-        """
-        Auto-compute a sensible max_distance from road layout and episode budget.
-
-        For speed_bump: last bump end + 5 m buffer, capped by the maximum
-        distance reachable at v_max within the episode step budget.
-
-        For recorded: full track length.
-
-        For iso / sine_sweep / flat: None (step-based termination only).
-        """
+        # work out a sensible max_distance from the road layout and step budget:
+        #   speed_bump: last bump end + 5 m, capped by v_max * episode budget
+        #   recorded: full track length
+        #   flat/iso/etc: None (step count terminates instead)
         episode_budget_m = self._max_episode_steps * DT * self._rcfg.v_max
 
         if self.road_profile == 'speed_bump' and self._road._bumps:
