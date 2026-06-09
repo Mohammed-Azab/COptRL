@@ -143,7 +143,6 @@ def _save_plot(result: dict, ep_i: int, save_dir: Path) -> None:
     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
 
     axes[0].plot(t, [v * 3.6 for v in result['_speeds']], label='speed km/h')
-    axes[0].plot(t, [v * 3.6 for v in result['_v_refs']], '--', label='v_ref km/h', alpha=0.6)
     axes[0].set_ylabel('speed [km/h]')
     axes[0].legend(fontsize=8)
     axes[0].grid(alpha=0.3)

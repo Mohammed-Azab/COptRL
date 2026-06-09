@@ -115,13 +115,14 @@ class HumanDriverController:
         # A P-controller on speed error gives near-zero action at braking onset
         # (v_t ≈ v at d == d_brake), so we detect the zone and command full decel.
         needs_brake = False
+        on_bump     = False
         bumps = getattr(road, '_bumps', [])
         for x0, A, L in bumps:
             if s_pos >= x0 + L:
                 continue
             v_cross = self._crossing_speed(A, L)
             if s_pos >= x0:
-                # on the bump — brake if still too fast
+                on_bump = True
                 if v > v_cross:
                     needs_brake = True
                 continue
@@ -134,8 +135,9 @@ class HumanDriverController:
 
         if needs_brake:
             a_desired = -self.a_brake
+        elif on_bump:
+            a_desired = 0.0
         else:
-            # gentle re-acceleration toward v_max
             a_desired = min(self.a_accel, (v_max - v) / self.ctrl_horizon)
 
         a_desired = float(np.clip(a_desired, -self.a_brake, self.a_accel))
