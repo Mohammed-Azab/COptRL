@@ -150,3 +150,43 @@ Lesson:
   A constant learning rate that works well for early curriculum levels is too large
   for the fine-tuning phase at the hardest level. Linear LR decay naturally gives
   aggressive early learning and conservative late refinement within one training run.
+
+---
+
+Issue 7 — exp_21: curriculum threshold above achievable ceiling, agent never advanced
+
+Run: exp_21 — 5M steps, PPO, Optuna hyperparameters, curriculum on, step_bonus=0.5 (new scale)
+
+Symptom:
+  Agent spent all 5M steps on level 0. Best model saved at 80k steps (very early).
+  Eval return plateaued: +145 to +212 range, rolling-10 mean peaked at ~+198.
+  No improvement after 500k steps — 4.5M steps of wasted compute.
+
+  Level performance table:
+    Level 0: 250 evals, mean +168.7, best +212.7, threshold +230.0 → active, never advanced
+
+Root cause:
+  The curriculum thresholds (+230/+210/+190) were set by shifting the pre-step_bonus
+  thresholds (+80/+60/+40) by +150 (expected episode shift = 0.5 × 300 steps).
+  However the advance condition uses a ROLLING MEAN of 10 consecutive eval means.
+  Individual evals varied from +145 to +212. The rolling-10 mean peaked at ~+198 —
+  32 points below the threshold of +230. Even on the agent's best streak the threshold
+  was unreachable.
+
+  Secondary cause: best model saved at 80k steps, plateau from 500k onward.
+  Optuna hyperparameters (clip_range=0.1, lin_3e-5) converge conservatively and quickly.
+  Once the agent hit its skill ceiling at level 0, no further gradient existed to improve.
+
+Fix:
+  Lowered thresholds to just below the observed rolling-mean ceiling:
+    Level 0: +230 → +190  (agent peak rolling mean was ~+198; +190 is achievable)
+    Level 1: +210 → +175  (proportionally easier given harder road distribution)
+    Level 2: +190 → +155
+
+Lesson:
+  After any reward scale change, run a short human-driver or MPC sweep to measure
+  the ACTUAL rolling-mean ceiling for each curriculum level BEFORE setting thresholds.
+  Shifting old thresholds by a scalar offset is unreliable because episode length
+  variance and rolling-mean smoothing make the actual ceiling non-trivial to predict.
+  Threshold should be "just below what the agent can consistently sustain", not
+  "just above what's theoretically possible".

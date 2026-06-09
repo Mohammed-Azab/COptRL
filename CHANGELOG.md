@@ -1,5 +1,26 @@
 # Changelog
 
+## exp_21 results and reward/curriculum calibration
+
+exp_21: 5M steps, PPO with Optuna-tuned hyperparameters, curriculum on, step_bonus=0.5.
+Agent stayed on level 0 the entire run — never advanced. Best model saved at 80k steps.
+Eval return oscillated +145–+212 for 4.5M steps with no improvement trend.
+
+Key findings:
+- **Curriculum threshold too high**: level 0 threshold was +230 but agent's rolling-10 eval mean peaked at ~+198. Threshold was above the observable ceiling, making advancement impossible.
+- **Early plateau**: policy converged by ~500k steps; remaining 4.5M steps added nothing. The Optuna hyperparameters (clip_range=0.1, lin_3e-5 LR decay) learn correctly but conservatively — the step budget was effectively wasted after the agent reached its skill ceiling on level 0.
+
+Changes:
+- Lowered thresholds so agent can actually advance: +230/+210/+190 → **+190/+175/+155**
+- Added `step_bonus=0.5` to reward: constant +0.5 added to every step, shifting episode returns by ~+150. Human driver mean: −123 → +19.8 (barely positive = "neutral"). Good RL returns: +50 → +200. Bad returns stay negative.
+- `reward_bounds()` in `utils.py` now includes `step_bonus` so printed range reflects the actual reward scale.
+
+Baselines after step_bonus:
+- Human driver (random road, 100 ep): mean +24.7, max +294, std 142
+- Fixed scenarios: single_crosswalk +203.7, urban_gauntlet +318.7, table31_resonance +334.5
+
+---
+
 ## PPO hyperparameter tuning for level 3 stability
 
 exp_20 showed the agent finding good policies at level 3 (+27.5 best) but immediately bouncing away — a classic sign that the constant learning rate is too large for fine-tuning after curriculum advances.

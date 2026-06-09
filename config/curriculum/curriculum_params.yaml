@@ -2,11 +2,11 @@
 # Speed values are in km/h — loaders convert to m/s internally.
 
 advance_return_threshold:
-  0:  +230.0
-  1:  +210.0
-  2:  +190.0
+  0:  +190.0
+  1:  +175.0
+  2:  +155.0
 
-advance_window: 10  # episodes
+advance_window: 7  # episodes
 
 levels:
   0:                              # easy — gentle slopes, wide spacing
