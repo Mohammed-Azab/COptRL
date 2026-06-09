@@ -115,3 +115,38 @@ Lesson:
   A negative threshold only ensures "not completely failing", not genuine mastery.
   Watch the curriculum level table: if the agent advances with ≤ 5 evals per level,
   the thresholds are too easy regardless of their sign.
+
+---
+
+Issue 6 — exp_20: level 3 oscillation — constant learning rate too large for fine-tuning
+
+Run: exp_20 — 5M steps, PPO, curriculum=on, thresholds +50/+30/+10 (fixed from Issue 5)
+
+Symptom:
+  Curriculum advanced correctly (25 evals at level 2 vs 5 in exp_19), but level 3
+  still oscillated for 4.28M steps with no convergence.
+  Best eval at level 3: +27.5 — agent CAN visit good policies, but immediately
+  bounces away. Eval swings: +42→-133→+17→-194→-6→-111→-159→-7 (random walk).
+  Best model still from level 1 (220k steps), same as exp_19.
+
+Root cause:
+  Constant learning rate 3e-4 is appropriate for early curriculum levels where large
+  policy changes are needed, but too large for fine-tuning at level 3. Once the agent
+  finds a good trajectory (+27.5), the next PPO update overshoots and destroys it.
+  Additionally ent_coef=0 means no exploration pressure to recover from collapses,
+  and small batch_size=64 means noisy gradient estimates amplify the instability.
+
+Fix (exp_21):
+  learning_rate: 3e-4 constant → "lin_3e-4" (linear decay 3e-4 → 0 over 5M steps)
+    At level 3 entry (~720k): LR ≈ 2.6e-4  (still learning fast)
+    At 2.5M steps:            LR ≈ 1.5e-4  (more conservative)
+    At 4M steps:              LR ≈ 6e-5    (fine-tuning regime)
+  n_steps: 2048 → 4096  (larger rollout reduces gradient variance)
+  batch_size: 64 → 256  (scaled with n_steps)
+  ent_coef: 0.0 → 0.005 (small entropy bonus prevents premature policy collapse)
+  n_eval_episodes: 5 → 10 (more reliable eval mean estimates for advancement gating)
+
+Lesson:
+  A constant learning rate that works well for early curriculum levels is too large
+  for the fine-tuning phase at the hardest level. Linear LR decay naturally gives
+  aggressive early learning and conservative late refinement within one training run.

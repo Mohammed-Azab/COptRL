@@ -27,6 +27,14 @@ def load_algo_config(config_path: str | Path) -> dict[str, Any]:
         return yaml.safe_load(fh)
 
 
+def _parse_lr(lr_val):
+    # "lin_X" → linear decay from X to 0  (SB3 convention: callable(progress_remaining))
+    if isinstance(lr_val, str) and lr_val.startswith("lin_"):
+        initial = float(lr_val[4:])
+        return lambda p: initial * p
+    return lr_val
+
+
 def build_model(
     algo: str,
     venv: VecEnv,
@@ -38,6 +46,8 @@ def build_model(
     cls    = _REGISTRY[algo]
     kw     = copy.deepcopy(algo_kwargs)
     policy = kw.pop("policy", "MlpPolicy")
+    if "learning_rate" in kw:
+        kw["learning_rate"] = _parse_lr(kw["learning_rate"])
 
     if resume:
         model = cls.load(

@@ -1,5 +1,16 @@
 # Changelog
 
+## PPO hyperparameter tuning for level 3 stability
+
+exp_20 showed the agent finding good policies at level 3 (+27.5 best) but immediately bouncing away — a classic sign that the constant learning rate is too large for fine-tuning after curriculum advances.
+
+- **Linear LR decay**: `3e-4 → 0` over the training run. LR at level 3 entry (~720k steps) is still ~2.6e-4 for fast learning; by 4M steps it has fallen to ~6e-5 for fine-tuning.
+- **Larger rollouts**: `n_steps` 2048 → 4096, `batch_size` 64 → 256. More environment steps per update reduces gradient variance without increasing wall time.
+- **Entropy coefficient**: `ent_coef` 0.0 → 0.005. A small entropy bonus prevents premature policy collapse when the agent overshoots and needs to recover.
+- **Eval episodes**: 5 → 10 per evaluation so the mean used for curriculum advancement gating is more reliable.
+
+---
+
 ## Curriculum and training improvements
 
 Raised curriculum advancement thresholds from negative values to positive returns so the agent must genuinely master each level before moving up. exp_19 showed the agent blowing through levels 0–2 in 100k steps each because thresholds (-80/-60/-40) were trivially easy; level 3 then ran 2.7M steps without convergence.

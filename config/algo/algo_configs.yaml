@@ -3,30 +3,30 @@
 
 PPO:
   policy: MlpPolicy
-  learning_rate: 3.0e-04       # reverted — tuned 8.49e-05 degraded after curriculum advances
-  n_steps: 2048
-  batch_size: 64
+  learning_rate: "lin_3e-4"    # linear decay 3e-4 → 0; prevents oscillation at level 3 (exp_20)
+  n_steps: 4096                # was 2048 — larger rollout reduces gradient variance
+  batch_size: 256              # was 64 — scaled with n_steps
   n_epochs: 10
   gamma: 0.99
   gae_lambda: 0.95
   clip_range: 0.2
-  ent_coef: 0.0
+  ent_coef: 0.005              # was 0.0 — small entropy bonus prevents premature policy collapse
   vf_coef: 0.5
   max_grad_norm: 0.5
   policy_kwargs:
     net_arch:
-      pi: [256, 256]           # reverted — [512,512] showed no benefit over simpler arch
+      pi: [256, 256]
       vf: [256, 256]
 
 
 # training meta-settings (not passed to SB3, consumed by train.py)
 training:
   seed: 42
-  total_timesteps: 5_000_000   # 5M — stricter thresholds mean agent spends longer per level
-  n_envs: 4                    # 4 parallel envs for 4× faster experience collection
+  total_timesteps: 5_000_000
+  n_envs: 4
   n_eval_envs: 1
   eval_freq: 20_000
-  n_eval_episodes: 5
+  n_eval_episodes: 10          # was 5 — more episodes per eval gives more reliable mean estimates
   checkpoint_freq: 100_000
   norm_obs: true
   norm_reward: true
