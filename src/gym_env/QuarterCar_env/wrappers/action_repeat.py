@@ -2,7 +2,7 @@ import gymnasium as gym
 
 
 class ActionRepeat(gym.Wrapper):
-    """Repeat action n_repeat times, accumulate reward."""
+    # repeat the same action n_repeat times and accumulate the reward
 
     def __init__(self, env, n_repeat: int = 2):
         super().__init__(env)

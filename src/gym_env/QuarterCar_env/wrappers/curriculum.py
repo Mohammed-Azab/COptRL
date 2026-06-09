@@ -14,9 +14,7 @@ class CurriculumWrapper(gym.Wrapper):
         self._active_level: int   = 0          # controlled by callback (training env)
         self._forced_level: Optional[int] = None  # controlled by sync callback (eval env)
 
-    # ------------------------------------------------------------------
-    # Level control API
-    # ------------------------------------------------------------------
+    # level control
 
     def set_level(self, level: int) -> None:
         # one-way advance — training env, called by PerformanceCurriculumCallback
@@ -32,9 +30,7 @@ class CurriculumWrapper(gym.Wrapper):
             return self._forced_level
         return self._active_level
 
-    # ------------------------------------------------------------------
-    # Gymnasium interface
-    # ------------------------------------------------------------------
+    # gymnasium interface
 
     def reset(self, **kwargs):
         lvl_cfg = self._levels[self.current_level]

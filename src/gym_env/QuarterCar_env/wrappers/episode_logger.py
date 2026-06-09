@@ -6,7 +6,7 @@ import gymnasium as gym
 
 
 class EpisodeLogger(gym.Wrapper):
-    """Append one CSV row per episode: episode, return, rms_accel, peak_accel, road_profile."""
+    # writes one CSV row per episode: return, rms_accel, peak_accel, road_profile
 
     def __init__(self, env, log_dir: str):
         super().__init__(env)

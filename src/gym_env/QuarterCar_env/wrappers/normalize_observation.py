@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 class NormalizeObservation(gym.ObservationWrapper):
-    """Running mean/std normalisation with save/load."""
+    # running mean/std normalisation with optional stats save and load
 
     def __init__(self, env, epsilon: float = 1e-8, stats_path: str = None):
         super().__init__(env)

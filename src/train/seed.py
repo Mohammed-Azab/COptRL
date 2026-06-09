@@ -8,7 +8,7 @@ import torch
 
 
 def seed_everything(seed: int) -> None:
-    """Seed Python, NumPy, PyTorch, and CUDA."""
+    # seed Python, NumPy, PyTorch and CUDA so runs are reproducible
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)

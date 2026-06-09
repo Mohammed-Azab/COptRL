@@ -2,7 +2,7 @@ import gymnasium as gym
 
 
 class RewardScaler(gym.RewardWrapper):
-    """Scale reward by a constant."""
+    # scales every reward by a fixed constant
 
     def __init__(self, env, scale: float = 1.0):
         super().__init__(env)

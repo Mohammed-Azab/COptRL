@@ -1,4 +1,4 @@
-""" Constant-speed dummy agent """
+# constant-speed dummy agent
 
 import argparse
 import sys

@@ -25,7 +25,7 @@ def _load_space(config_path: Path = _TUNE_CONFIG_PATH) -> dict:
 
 
 class Objective:
-    """Optuna objective: sample PPO hyperparameters, train briefly, return eval return."""
+    # optuna objective: samples PPO hyperparams, trains briefly, returns mean eval return
 
     def __init__(
         self,

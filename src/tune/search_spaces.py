@@ -4,11 +4,9 @@ import optuna
 
 
 def sample_from_config(trial: optuna.Trial, space: dict) -> dict:
-    """Build SB3 kwargs from a YAML search-space dict.
-
-    Supported types: float_log, float, int, categorical.
-    n_units is a special key: resolved to policy_kwargs.net_arch.
-    """
+    # build SB3 hyperparameter kwargs from a YAML search-space dict.
+    # supported types: float_log, float, int, categorical.
+    # n_units is special: it maps to policy_kwargs.net_arch.
     params: dict = {}
     n_units = None
 
