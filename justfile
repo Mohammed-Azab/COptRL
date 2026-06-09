@@ -71,7 +71,7 @@ tb-run run:
 #        just human-driver --render                   live window
 #        just human-driver --save-gif --save-plots    headless: GIF + PNG
 human-driver *args="":
-    PYTHONPATH=src {{venv}} src/baseline/human_driver/driver_eval.py {{args}}
+    PYTHONPATH=src:src/baseline {{venv}} src/baseline/human_driver/driver_eval.py {{args}}
 
 # MPC baseline (requires acados — see docs)
 # usage: just mpc
@@ -79,7 +79,7 @@ human-driver *args="":
 #        just mpc --render                            live window
 #        just mpc --save-gif --save-plots             headless: GIF + PNG
 mpc *args="":
-    PYTHONPATH=src:src/baseline/mpc {{venv}} src/baseline/mpc/mpc.py {{args}}
+    PYTHONPATH=src:src/baseline:src/baseline/mpc {{venv}} src/baseline/mpc/mpc.py {{args}}
 
 # tests
 test *args="":
