@@ -4,7 +4,7 @@
 preview_m: 40.0
 
 # Peak road velocity the driver will accept while crossing a bump [m/s]
-zeta_dot_limit: 1.5
+zeta_dot_limit: 0.7
 
 # Comfortable deceleration before a bump [m/s²]
 a_brake: 2.5
