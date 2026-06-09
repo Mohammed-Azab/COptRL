@@ -77,7 +77,7 @@ def _build_ts_specs(env):
     if flags.get("f", False):
         specs.append(('F', None, r'$F_D\ (N)$', '#008800', None))
     if flags.get("speed", False):
-        specs.append(('s_dot', None, r'$\dot{s}\ (m/s)$', '#aa00aa', None))
+        specs.append(('s_dot', 'v_ref', r'speed (km/h)', '#aa00aa', '#888888'))
     if flags.get("z_ddot", False):
         specs.append(('z_B_ddot', None, r'$\ddot{z}_B\ (m/s^2)$', 'k', None))
     return specs
@@ -136,6 +136,7 @@ def init_render(env):
         'z_B_ddot': collections.deque(maxlen=_MAX_EP_STEPS),
         'F':        collections.deque(maxlen=_MAX_EP_STEPS),
         's_dot':    collections.deque(maxlen=_MAX_EP_STEPS),
+        'v_ref':    collections.deque(maxlen=_MAX_EP_STEPS),
         's_pos':    collections.deque(maxlen=_MAX_EP_STEPS),
     }
 
@@ -249,11 +250,12 @@ def init_render(env):
     ts = {}
     for i, ax in enumerate(ax_r):
         k1, k2, ylabel, c1, c2 = _ts_specs[i]
-        ts[k1], = ax.plot([], [], '-', color=c1, lw=1,
-                          label=(r'$z_B$' if k1 == 'z_B' else None))
+        _label1 = r'$z_B$' if k1 == 'z_B' else ('v' if k1 == 's_dot' else None)
+        ts[k1], = ax.plot([], [], '-', color=c1, lw=1, label=_label1)
         if k2:
-            ts[k2], = ax.plot([], [], '--', color=c2, lw=1, label=r'$z_W$')
-        if k1 == 'z_B':
+            _label2 = r'$z_W$' if k2 == 'z_W' else ('v_ref' if k2 == 'v_ref' else k2)
+            ts[k2], = ax.plot([], [], '--', color=c2, lw=1, label=_label2)
+        if k1 in ('z_B', 's_dot'):
             ax.legend(fontsize=7, loc='upper left', framealpha=0.6)
         ax.set_ylabel(ylabel, fontsize=8)
         ax.tick_params(labelsize=7)
@@ -326,6 +328,7 @@ def push_history(env):
     h['z_B_ddot'].append(env._last_z_B_ddot)
     h['F'].append(0.0)
     h['s_dot'].append(float(env._v))
+    h['v_ref'].append(float(env._v_ref_last))
     h['s_pos'].append(env._s_pos)
 
 
@@ -401,7 +404,7 @@ def update_artists(env):
         f't={env._t:6.2f} s    s={env._s_pos:6.1f} m\n'
         f'z_B={z_B*100:+.2f} cm  z_W={z_W*100:+.2f} cm\n'
         f'\u03b6={zeta_0*100:.3f} cm\n'
-        f'v={env._v:.1f} m/s    '
+        f'v={env._v*3.6:.1f} km/h  vref={env._v_ref_last*3.6:.1f} km/h\n'
         f'ep reward={env._episode_reward:.2f}'
     )
 
@@ -411,11 +414,12 @@ def update_artists(env):
     t_arr = np.array(h['t'])
     ts    = art['ts']
     _map = {
-        'z_B':      h['z_B'],
-        'z_W':      h['z_W'],
-        'z_B_ddot': h['z_B_ddot'],
-        'F':        h['F'],
-        's_dot':    h['s_dot'],
+        'z_B':      np.array(h['z_B']),
+        'z_W':      np.array(h['z_W']),
+        'z_B_ddot': np.array(h['z_B_ddot']),
+        'F':        np.array(h['F']),
+        's_dot':    np.array(h['s_dot']) * 3.6,   # m/s → km/h
+        'v_ref':    np.array(h['v_ref']) * 3.6,   # m/s → km/h
     }
     for key, line in ts.items():
         line.set_data(t_arr, np.array(_map[key]))
