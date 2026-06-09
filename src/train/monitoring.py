@@ -66,6 +66,7 @@ class PerformanceCurriculumCallback(EvalCallback):
         eval_env,
         train_venv:     VecNormalize,
         curriculum_cfg: dict,
+        start_level:    int = 0,
         **eval_kwargs,
     ):
         super().__init__(eval_env, **eval_kwargs)
@@ -73,13 +74,28 @@ class PerformanceCurriculumCallback(EvalCallback):
         self._thresholds   = curriculum_cfg.get("advance_return_threshold", {})
         self._window       = int(curriculum_cfg.get("advance_window", 3))
         self._max_level    = len(curriculum_cfg["levels"]) - 1
-        self._current_level = 0
+        self._current_level = min(max(start_level, 0), self._max_level)
+        self._start_level   = self._current_level
 
         # per-level eval returns and step bookkeeping
         self._level_returns:       dict[int, list[float]] = defaultdict(list)
         self._level_best_return:   dict[int, float]       = {}
-        self._level_step_unlocked: dict[int, int]  = {0: 0}
+        self._level_step_unlocked: dict[int, int]  = {self._current_level: 0}
         self._level_step_advanced: dict[int, int]  = {}   # None key = still active
+
+    # push start_level to both envs before training begins
+
+    def _on_training_start(self) -> None:
+        super()._on_training_start()
+        if self._start_level > 0:
+            try:
+                self._train_venv.venv.env_method("set_level", self._start_level)
+            except Exception:
+                pass
+            try:
+                self.eval_env.venv.env_method("set_forced_level", self._start_level)
+            except Exception:
+                pass
 
     # eval callback hook
 
@@ -193,6 +209,7 @@ def build_callbacks(
     n_eval_episodes:  int,
     checkpoint_freq:  int,
     curriculum_cfg:   dict | None = None,
+    start_level:      int = 0,
 ) -> tuple[CallbackList, Optional[PerformanceCurriculumCallback]]:
     # returns (CallbackList, curriculum_cb) — curriculum_cb is None when disabled
     best_model_path = model_dir / "best"
@@ -216,6 +233,7 @@ def build_callbacks(
             eval_venv,
             train_venv     = train_venv,
             curriculum_cfg = curriculum_cfg,
+            start_level    = start_level,
             **eval_kwargs,
         )
         eval_cb = curriculum_cb

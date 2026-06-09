@@ -3,27 +3,25 @@
 
 PPO:
   policy: MlpPolicy
-  learning_rate: "lin_3e-4"
-  n_steps: 4096
+  learning_rate: "lin_3e-5"
+  n_steps: 1024
   batch_size: 256
   n_epochs: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  ent_coef: 0.005
-  vf_coef: 0.5
-  max_grad_norm: 0.5
+  gamma: 0.9734285310022986
+  gae_lambda: 0.9776478343048407
+  clip_range: 0.1
+  ent_coef: 0.0020983727254434213
+  vf_coef: 0.6926142978851177
+  max_grad_norm: 0.827220270040963
   policy_kwargs:
     net_arch:
-      pi: [256, 256]
-      vf: [256, 256]
+      pi: [128, 128]
+      vf: [128, 128]
 
-
-# training meta-settings (not passed to SB3, consumed by train.py)
 training:
   seed: 42
   total_timesteps: 5_000_000
-  n_envs: 4
+  n_envs: 5
   n_eval_envs: 1
   eval_freq: 20_000
   n_eval_episodes: 10

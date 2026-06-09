@@ -8,6 +8,7 @@ from pathlib import Path
 
 import optuna
 import yaml
+from tqdm import tqdm as _tqdm
 
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
@@ -166,22 +167,47 @@ def main() -> None:
     print(f"  seed        : {seed}\n")
 
     best_so_far: float | None = None
+    trial_count: int = 0
+
+    _tqdm.write(
+        f"  {'#':>3}  {'return':>8}  {'time':>5}  {'lr':>9}  {'steps':>5}  "
+        f"{'batch':>5}  {'ent':>9}  {'clip':>4}  {'n_units':>7}  {'epochs':>6}  note"
+    )
+    _tqdm.write(
+        f"  {'-'*3}  {'-'*8}  {'-'*5}  {'-'*9}  {'-'*5}  "
+        f"{'-'*5}  {'-'*9}  {'-'*4}  {'-'*7}  {'-'*6}  {'-'*14}"
+    )
 
     def _on_trial_end(study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
-        nonlocal best_so_far
+        nonlocal best_so_far, trial_count
+        trial_count += 1
+        dur_s = (
+            (trial.datetime_complete - trial.datetime_start).total_seconds()
+            if trial.datetime_complete and trial.datetime_start else 0
+        )
         if trial.value is None:
+            _tqdm.write(f"  {trial_count:>3}/{args.trials}  {'FAILED':>8}  {dur_s:>4.0f}s")
             return
-        completed = len([t for t in study.trials if t.value is not None])
-        is_best   = best_so_far is None or trial.value > best_so_far
+
+        p       = trial.params
+        is_best = best_so_far is None or trial.value > best_so_far
         if is_best:
             best_so_far = trial.value
-            print(f"  trial {completed:>3d}/{args.trials}  return={trial.value:+.3f}  ★ new best"
-                  f"  lr={trial.params.get('learning_rate', '?'):.1e}"
-                  f"  n_steps={trial.params.get('n_steps', '?')}"
-                  f"  clip={trial.params.get('clip_range', '?')}")
-        elif completed % 5 == 0:
-            print(f"  trial {completed:>3d}/{args.trials}  return={trial.value:+.3f}"
-                  f"  best={best_so_far:+.3f}")
+            note = "★ new best"
+        else:
+            note = f"best={best_so_far:+.3f}"
+
+        _tqdm.write(
+            f"  {trial_count:>3}/{args.trials}  {trial.value:>+8.3f}  {dur_s:>4.0f}s"
+            f"  {p.get('learning_rate', 0):>9.2e}"
+            f"  {p.get('n_steps', 0):>5d}"
+            f"  {p.get('batch_size', 0):>5d}"
+            f"  {p.get('ent_coef', 0):>9.2e}"
+            f"  {p.get('clip_range', 0):.2f}"
+            f"  {p.get('n_units', 0):>7d}"
+            f"  {p.get('n_epochs', 0):>6d}"
+            f"  {note}"
+        )
 
     try:
         study.optimize(

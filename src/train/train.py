@@ -91,6 +91,13 @@ def parse_args() -> argparse.Namespace:
                     action="store_true",
                     default=False,
                     help="Wrap training env with CurriculumWrapper (speed_bump only).")
+    p.add_argument(
+                    "--cl",
+                    type=int,
+                    default=None,
+                    metavar="N",
+                    dest="curriculum_level",
+                    help="Start (and pin) curriculum at level N instead of 0. Requires --curriculum.")
 
     return p.parse_args()
 
@@ -254,6 +261,16 @@ def main() -> None:
     rcfg           = load_reward_config()
     curriculum_cfg = load_curriculum_config(_CURRICULUM_PATH) if args.curriculum else None
 
+    start_level = 0
+    if args.curriculum_level is not None:
+        if not args.curriculum:
+            print("WARNING: --curriculum-level has no effect without --curriculum; ignoring.")
+        elif curriculum_cfg is not None:
+            max_level = len(curriculum_cfg["levels"]) - 1
+            start_level = max(0, min(args.curriculum_level, max_level))
+            if start_level != args.curriculum_level:
+                print(f"WARNING: --curriculum-level {args.curriculum_level} clamped to {start_level}.")
+
     #  output directories
     exp_root = _ROOT / "models" / args.algo / args.road
     if args.run_name is None:
@@ -320,6 +337,7 @@ def main() -> None:
         n_eval_episodes=train_meta["n_eval_episodes"],
         checkpoint_freq=max(train_meta["checkpoint_freq"] // n_envs, 1),
         curriculum_cfg=curriculum_cfg,
+        start_level=start_level,
     )
 
     bounds = reward_bounds(rcfg, EPISODE_STEPS)
@@ -335,7 +353,11 @@ def main() -> None:
     print(f"  v_max      : {rcfg.v_max * 3.6:.0f} km/h")
     print(f"  v_min      : {rcfg.v_min * 3.6:.1f} km/h")
     print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
-    print(f"  curriculum : {'on (' + str(len(curriculum_cfg['levels'])) + ' levels, performance-gated)' if curriculum_cfg else 'off'}")
+    if curriculum_cfg:
+        _lvl_info = f"on ({len(curriculum_cfg['levels'])} levels, start={start_level}, performance-gated)"
+    else:
+        _lvl_info = "off"
+    print(f"  curriculum : {_lvl_info}")
     print(f"  output     : {model_dir}")
     print(f"  reward range  episode  [{bounds['episode_min']:+.0f},  {bounds['episode_max']:+.0f}]")
     print(f"                per-step [{bounds['per_step_min']:+.2f}, {bounds['per_step_max']:+.2f}]")

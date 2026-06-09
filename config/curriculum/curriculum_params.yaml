@@ -2,12 +2,11 @@
 # Speed values are in km/h — loaders convert to m/s internally.
 
 advance_return_threshold:
-  0:  +50.0
-  1:  +30.0
-  2:  +10.0
-  # level 3 has no threshold — it is the final level
+  0:  +80.0
+  1:  +60.0
+  2:  +40.0
 
-advance_window: 5
+advance_window: 10  # episodes
 
 levels:
   0:                              # easy — gentle slopes, wide spacing
