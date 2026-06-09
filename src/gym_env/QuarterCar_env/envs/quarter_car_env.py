@@ -417,22 +417,28 @@ class QuarterCarEnv(gym.Env):
         cfg = self._rcfg
         if self.road_profile != 'speed_bump' or not self._road._bumps:
             return cfg.v_max
-        # reduce v_ref near tall bumps: closer + taller → slower target
-        heights = self._road.get_spatial_preview(
-            s_pos=self._s_pos, t_current=t, v_current=max(self._v, 0.5),
-            lookahead_m=cfg.preview_distance, n_points=20,
-        )
-        max_h = float(np.max(heights))
-        if max_h < cfg.peak_height_min:
+
+        # Analytic nearest-bump search — avoids sample-grid aliasing on narrow bumps.
+        # Sampling at 2m intervals (n_points=20, lookahead=40m) would miss W<2m bumps
+        # intermittently as the sample grid shifts, creating rapid v_ref oscillation.
+        s = self._s_pos
+        best_d: float | None = None
+        best_h: float = 0.0
+        for x0, A, L in self._road._bumps:
+            if x0 + L <= s:
+                continue                      # already passed
+            d_to_entry = max(0.0, x0 - s)    # 0 when car is on the bump
+            if d_to_entry > cfg.preview_distance:
+                continue                      # beyond horizon
+            if best_d is None or d_to_entry < best_d:
+                best_d = d_to_entry
+                best_h = A                    # peak height = A (cosine profile)
+
+        if best_d is None or best_h < cfg.peak_height_min:
             return cfg.v_max
-        for i in range(len(heights)):
-            if heights[i] >= cfg.peak_height_min:
-                d = (i + 1) * cfg.preview_distance / len(heights)
-                break
-        else:
-            return cfg.v_max
-        h_ratio   = float(min(1.0, max_h / cfg.h_clip))
-        proximity = float(max(0.0, 1.0 - d / cfg.preview_distance))
+
+        h_ratio   = float(min(1.0, best_h / cfg.h_clip))
+        proximity = float(max(0.0, 1.0 - best_d / cfg.preview_distance))
         # up to 50% reduction at the bump face; tapers with distance
         v_ref = cfg.v_max * (1.0 - 0.5 * h_ratio * proximity)
         return float(max(cfg.v_min, v_ref))
