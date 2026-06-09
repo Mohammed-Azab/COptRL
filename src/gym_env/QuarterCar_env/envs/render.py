@@ -27,7 +27,6 @@ _MAX_EP_STEPS = 4000  # large enough for any episode; deques never truncate mid-
 # Speed-vector arrow constants (schematic axes, data coordinates)
 _ARR_X0      = -2.5   # arrow base x
 _ARR_Y_V     =  7.5   # y for actual-speed arrow
-_ARR_Y_VREF  =  6.8   # y for v_ref arrow (dashed, below)
 _ARR_MAX_LEN =  8.0   # full-length at v_max (tip at x = 5.5)
 
 
@@ -83,7 +82,7 @@ def _build_ts_specs(env):
     if flags.get("f", False):
         specs.append(('F', None, r'$F_D\ (N)$', '#008800', None))
     if flags.get("speed", False):
-        specs.append(('s_dot', 'v_ref', r'speed (km/h)', '#aa00aa', '#888888'))
+        specs.append(('s_dot', None, r'speed (km/h)', '#aa00aa', None))
     if flags.get("z_ddot", False):
         specs.append(('z_B_ddot', None, r'$\ddot{z}_B\ (m/s^2)$', 'k', None))
     return specs
@@ -289,22 +288,15 @@ def init_render(env):
                 ax_r[0].legend(fontsize=6, loc='upper left', framealpha=0.6)
             bump_vlines.append(lines)
 
-    # Speed-vector arrows — solid for v, dashed for v_ref
+    # Speed-vector arrow
     v_max_kmh = env._rcfg.v_max * 3.6
-    v_line,    = ax_s.plot([_ARR_X0, _ARR_X0], [_ARR_Y_V,    _ARR_Y_V],    '-',
+    v_line,    = ax_s.plot([_ARR_X0, _ARR_X0], [_ARR_Y_V, _ARR_Y_V], '-',
                            color='#aa00aa', lw=2.5, zorder=8)
-    v_head,    = ax_s.plot([_ARR_X0],          [_ARR_Y_V],                  '>',
+    v_head,    = ax_s.plot([_ARR_X0],          [_ARR_Y_V],            '>',
                            color='#aa00aa', ms=8,  zorder=8)
-    vref_line, = ax_s.plot([_ARR_X0, _ARR_X0], [_ARR_Y_VREF, _ARR_Y_VREF], '--',
-                           color='#888888', lw=2.0, zorder=8)
-    vref_head, = ax_s.plot([_ARR_X0],          [_ARR_Y_VREF],               '>',
-                           color='#888888', ms=6,  zorder=8)
-    ax_s.text(_ARR_X0 - 0.1, _ARR_Y_V,    'v',     ha='right', va='center',
+    ax_s.text(_ARR_X0 - 0.1, _ARR_Y_V, 'v', ha='right', va='center',
               fontsize=7.5, color='#aa00aa', fontweight='bold', zorder=8)
-    ax_s.text(_ARR_X0 - 0.1, _ARR_Y_VREF, 'v_ref', ha='right', va='center',
-              fontsize=7.5, color='#888888', fontweight='bold', zorder=8)
-    # scale tick at v_max
-    ax_s.plot([_ARR_X0 + _ARR_MAX_LEN] * 2, [_ARR_Y_VREF - 0.15, _ARR_Y_V + 0.15],
+    ax_s.plot([_ARR_X0 + _ARR_MAX_LEN] * 2, [_ARR_Y_V - 0.2, _ARR_Y_V + 0.2],
               color='#cccccc', lw=0.8, ls=':', zorder=7)
     ax_s.text(_ARR_X0 + _ARR_MAX_LEN, _ARR_Y_V + 0.3,
               f'{v_max_kmh:.0f} km/h', ha='center', va='bottom',
@@ -343,8 +335,6 @@ def init_render(env):
         'bump_vlines':    bump_vlines,
         'v_line':         v_line,
         'v_head':         v_head,
-        'vref_line':      vref_line,
-        'vref_head':      vref_head,
     }
 
 
@@ -435,20 +425,16 @@ def update_artists(env):
         f't={env._t:6.2f} s    s={env._s_pos:6.1f} m\n'
         f'z_B={z_B*100:+.2f} cm  z_W={z_W*100:+.2f} cm\n'
         f'\u03b6={zeta_0*100:.3f} cm\n'
-        f'v={env._v*3.6:.1f} km/h  vref={env._v_ref_last*3.6:.1f} km/h\n'
+        f'v={env._v*3.6:.1f} km/h\n'
         f'ep reward={env._episode_reward:.2f}'
     )
 
-    # speed-vector arrows
-    v_max = env._rcfg.v_max
-    v_frac    = float(np.clip(env._v            / v_max, 0.03, 1.0))
-    vref_frac = float(np.clip(env._v_ref_last   / v_max, 0.03, 1.0))
-    v_tip    = _ARR_X0 + v_frac    * _ARR_MAX_LEN
-    vref_tip = _ARR_X0 + vref_frac * _ARR_MAX_LEN
+    # speed-vector arrow
+    v_max  = env._rcfg.v_max
+    v_frac = float(np.clip(env._v / v_max, 0.03, 1.0))
+    v_tip  = _ARR_X0 + v_frac * _ARR_MAX_LEN
     art['v_line'].set_xdata([_ARR_X0, v_tip])
     art['v_head'].set_xdata([v_tip])
-    art['vref_line'].set_xdata([_ARR_X0, vref_tip])
-    art['vref_head'].set_xdata([vref_tip])
 
     # time-series
     if not env._show_ts:

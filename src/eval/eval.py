@@ -290,11 +290,8 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
     ax_wheel.set_ylabel("wheel accel [m/s²]", fontsize=9)
     ax_wheel.legend(fontsize=7, loc="upper right")
 
-    # Speed vs reference
-    ax_speed.fill_between(t, ep["speeds"], ep["v_refs"],
-                          alpha=0.12, color="#1B5E20", label="tracking error")
+    # Speed
     ax_speed.plot(t, ep["speeds"], color="#1B5E20", lw=1.4, label="speed v")
-    ax_speed.plot(t, ep["v_refs"], color="#A5D6A7", lw=1.0, ls="--", label="v_ref")
     ax_speed.set_ylabel("speed [m/s]", fontsize=9)
     ax_speed.legend(fontsize=7, loc="upper right")
 
