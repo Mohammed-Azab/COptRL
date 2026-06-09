@@ -31,6 +31,9 @@ class RewardConfig:
     # progress reward weight (positive: encourages forward movement)
     w_progress: float = 0.2
 
+    # constant added to every step's reward to shift the range
+    step_bonus: float = 0.0
+
     # bump-crossing reward: positive one-shot reward each time a bump end is cleared
     w_bump_cross: float = 10.0
 
@@ -107,6 +110,7 @@ def load_reward_config() -> RewardConfig:
         enable_progress      = bool(e.get("progress",      True)),
         w_progress           = float(e.get("w_progress",   0.2)),
         w_bump_cross         = float(e.get("w_bump_cross", 5.0)),
+        step_bonus           = float(e.get("step_bonus",   0.0)),
 
         v_max = float(v.get("v_max", 72.0)) / 3.6,   # config in km/h → m/s
         a_max = float(v.get("a_max",  5.0)),

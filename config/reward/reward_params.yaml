@@ -25,6 +25,7 @@ enable:
   progress:      true
   w_progress:    0.2
   w_bump_cross:  10.0
+  step_bonus:    0.5
 
 velocity:
   v_max:  72.0   # km/h  (= 20 m/s)

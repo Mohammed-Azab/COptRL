@@ -122,7 +122,7 @@ def compute_reward(
         bd["r_progress"] = 0.0
 
     scale = float(np.clip(v / cfg.v_max, 0.0, 1.0)) if cfg.enable_vel_scaling else 1.0
-    total = scale * core + tracking_penalty + jerk_smooth_penalty + progress_reward
+    total = scale * core + tracking_penalty + jerk_smooth_penalty + progress_reward + cfg.step_bonus
 
     total = float(np.nan_to_num(total, nan=0.0, posinf=0.0, neginf=0.0))
     for key in bd:

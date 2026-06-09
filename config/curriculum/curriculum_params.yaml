@@ -2,9 +2,9 @@
 # Speed values are in km/h — loaders convert to m/s internally.
 
 advance_return_threshold:
-  0:  +80.0
-  1:  +60.0
-  2:  +40.0
+  0:  +230.0
+  1:  +210.0
+  2:  +190.0
 
 advance_window: 10  # episodes
 
@@ -14,7 +14,7 @@ levels:
     catalog_ids:      [3, 4]
     min_gap:          20.0        # m
     max_gap:          50.0        # m
-    flat_start:       12.0
+    flat_start:       25.0        # m  (≥ brake dist from 54 km/h = 23 m)
     v_random_low:     25.0   # km/h
     v_random_high:    54.0   # km/h
 
@@ -23,7 +23,7 @@ levels:
     catalog_ids:      [0, 1, 3, 4]
     min_gap:          12.0        # m
     max_gap:          35.0        # m
-    flat_start:       10.0
+    flat_start:       40.0        # m  (≥ brake dist from 72 km/h = 40 m)
     v_random_low:     25.0   # km/h
     v_random_high:    72.0   # km/h
 
@@ -32,7 +32,7 @@ levels:
     catalog_ids:      [0, 1, 2, 3, 4]
     min_gap:          8.0         # m
     max_gap:          25.0        # m
-    flat_start:       10.0
+    flat_start:       40.0        # m  (≥ brake dist from 72 km/h = 40 m)
     v_random_low:     18.0   # km/h
     v_random_high:    72.0   # km/h
 
@@ -41,6 +41,6 @@ levels:
     catalog_ids:      [0, 1, 2, 3, 4]
     min_gap:          5.0         # m
     max_gap:          15.0        # m
-    flat_start:       8.0
+    flat_start:       40.0        # m  (≥ brake dist from 72 km/h = 40 m)
     v_random_low:     18.0   # km/h
     v_random_high:    72.0   # km/h
