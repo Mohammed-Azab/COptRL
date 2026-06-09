@@ -77,12 +77,11 @@ class PerformanceCurriculumCallback(EvalCallback):
 
         # per-level eval returns and step bookkeeping
         self._level_returns:       dict[int, list[float]] = defaultdict(list)
+        self._level_best_return:   dict[int, float]       = {}
         self._level_step_unlocked: dict[int, int]  = {0: 0}
         self._level_step_advanced: dict[int, int]  = {}   # None key = still active
 
-    # ------------------------------------------------------------------
-    # EvalCallback hook
-    # ------------------------------------------------------------------
+    # eval callback hook
 
     def _on_step(self) -> bool:
         # detect whether an eval is about to run THIS step (n_calls already incremented)
@@ -92,9 +91,7 @@ class PerformanceCurriculumCallback(EvalCallback):
             self._on_eval_result(float(self.last_mean_reward))
         return result
 
-    # ------------------------------------------------------------------
-    # Internal logic
-    # ------------------------------------------------------------------
+    # internal logic
 
     def _on_eval_result(self, mean_return: float) -> None:
         level = self._current_level
@@ -102,6 +99,20 @@ class PerformanceCurriculumCallback(EvalCallback):
         if getattr(self, "model", None) is not None:
             self.logger.record("curriculum/level",       float(level))
             self.logger.record("curriculum/mean_return", mean_return)
+
+        # save per-level best model alongside the overall best
+        if mean_return > self._level_best_return.get(level, -np.inf):
+            self._level_best_return[level] = mean_return
+            if getattr(self, "model", None) is not None and self.best_model_save_path is not None:
+                level_path = Path(self.best_model_save_path) / f"level_{level}"
+                level_path.mkdir(parents=True, exist_ok=True)
+                self.model.save(str(level_path / "best_model"))
+                if isinstance(self.eval_env, VecNormalize):
+                    self.eval_env.save(str(level_path / "best_model_vec_normalize.pkl"))
+                print(
+                    f"\n  [Curriculum]  Level {level} best updated: {mean_return:+.2f}"
+                    f"  → {level_path}/best_model\n"
+                )
 
         threshold = float(self._thresholds.get(level, np.inf))
         window    = self._level_returns[level][-self._window:]
@@ -131,9 +142,7 @@ class PerformanceCurriculumCallback(EvalCallback):
             f"step={self.num_timesteps:,}\n"
         )
 
-    # ------------------------------------------------------------------
-    # Reporting
-    # ------------------------------------------------------------------
+    # reporting
 
     def level_report(self) -> dict:
         report: dict = {}
@@ -174,9 +183,7 @@ class PerformanceCurriculumCallback(EvalCallback):
             )
 
 
-# ------------------------------------------------------------------
-# Factory
-# ------------------------------------------------------------------
+# callback factory
 
 def build_callbacks(
     model_dir:        Path,

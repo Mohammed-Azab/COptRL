@@ -22,7 +22,7 @@ PPO:
 # training meta-settings (not passed to SB3, consumed by train.py)
 training:
   seed: 42
-  total_timesteps: 3_000_000   # 3M — performance-gated curriculum needs more budget
+  total_timesteps: 5_000_000   # 5M — stricter thresholds mean agent spends longer per level
   n_envs: 4                    # 4 parallel envs for 4× faster experience collection
   n_eval_envs: 1
   eval_freq: 20_000

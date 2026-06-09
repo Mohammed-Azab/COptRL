@@ -15,10 +15,16 @@
 
 # Minimum mean eval return required to leave each level.
 # Set a level's threshold to a very high value to keep it as the final level.
+#
+# exp_19 post-mortem: thresholds were -80/-60/-40 (all negative), so the agent
+# blew through levels 0-2 in 100k steps each before truly mastering them.
+# Level 2 mean was only -35 when it advanced. Level 3 then ran 2.7M steps with
+# no convergence because the foundation was too shallow.
+# Thresholds now require POSITIVE returns — real mastery, not just "not terrible".
 advance_return_threshold:
-  0:  -80.0   # leave level 0 once mean eval return ≥ -80  (was -120, too lenient)
-  1:  -60.0   # leave level 1 once mean eval return ≥ -60  (was -100)
-  2:  -40.0   # leave level 2 once mean eval return ≥ -40  (was -80)
+  0:  +50.0   # leave level 0 once mean eval return ≥ +50  (agent hit +77 best in exp_19, so +50 mean is achievable but requires consistency)
+  1:  +30.0   # leave level 1 once mean eval return ≥ +30
+  2:  +10.0   # leave level 2 once mean eval return ≥ +10  (hard: severe bumps + tight spacing)
   # level 3 has no threshold — it is the final level
 
 # Number of consecutive eval runs that must all meet the threshold.

@@ -127,7 +127,7 @@ def _summarize_monitor(monitor_dir: Path) -> dict | None:
 
 
 def _eval_curve(best_dir: Path, snap_every: int = 100_000) -> dict | None:
-    """Read evaluations.npz and return mean eval return at regular step snapshots."""
+    # read evaluations.npz and build a snapshot dict of mean return at regular intervals
     eval_file = best_dir / "evaluations.npz"
     if not eval_file.exists():
         return None
@@ -160,7 +160,7 @@ def _eval_curve(best_dir: Path, snap_every: int = 100_000) -> dict | None:
 
 
 def _curriculum_summary(level_report: dict | None, curriculum_cfg: dict | None) -> dict | None:
-    """Wrap the per-level performance report for summary.json."""
+    # bundle the per-level performance report into the summary.json format
     if not level_report or not curriculum_cfg:
         return None
     n_levels    = len(curriculum_cfg.get("levels", {}))
@@ -388,7 +388,7 @@ def main() -> None:
         max_r  = mon_summary['max_reward']
         min_r  = mon_summary['min_reward']
 
-        def gap(v): return f"{emax - v:+.0f} from max"
+        def gap(v): return f"{emax - v:+.0f} below ceiling"
 
         print("\nTraining summary")
         print(f"  episodes     : {mon_summary['episodes']}")
