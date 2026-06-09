@@ -56,11 +56,12 @@ PPO:
 
 # defaults for tune.py — overridden by CLI flags
 defaults:
-  timesteps_per_trial: 100_000
-  n_eval_episodes:     5       
+  timesteps_per_trial: 300_000   # 300k gives a meaningful learning signal per trial
+  n_eval_episodes:     10        # more episodes → more reliable Optuna objective
   eval_road:           speed_bump
   train_road:          speed_bump
   seed:                0
   n_jobs:              1
   direction:           maximize
-  use_curriculum:      true
+  use_curriculum:      false     # off: each trial trains on the same road distribution
+                                 # (curriculum thresholds are too strict for short trials)

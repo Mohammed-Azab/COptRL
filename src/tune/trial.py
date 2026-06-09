@@ -3,10 +3,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import numpy as np
 import optuna
 import yaml
 from stable_baselines3 import PPO
+from stable_baselines3.common.evaluation import evaluate_policy
 
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "src" / "gym_env"))
@@ -74,31 +74,22 @@ class Objective:
             **params,
         )
         model.learn(total_timesteps=self.timesteps)
-        train_venv.close()
 
         eval_venv = make_eval_vec_env(
             road=self.eval_road,
             n_envs=1,
             base_seed=trial_seed + 5_000,
-            train_venv=model.get_vec_normalize_env(),
+            train_venv=train_venv,
         )
 
-        returns = []
-        for _ in range(self.n_eval_episodes):
-            reset_out = eval_venv.reset()
-            obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
-            ep_return, done = 0.0, False
-            while not done:
-                action, _ = model.predict(obs, deterministic=True)
-                step_out = eval_venv.step(action)
-                obs    = step_out[0]
-                reward = step_out[1]
-                if len(step_out) == 5:
-                    done = bool(step_out[2][0] or step_out[3][0])
-                else:
-                    done = bool(step_out[2][0])
-                ep_return += float(reward[0])
-            returns.append(ep_return)
-        eval_venv.close()
+        mean_return, _ = evaluate_policy(
+            model, eval_venv,
+            n_eval_episodes=self.n_eval_episodes,
+            deterministic=True,
+            warn=False,
+        )
 
-        return float(np.mean(returns))
+        eval_venv.close()
+        train_venv.close()
+
+        return float(mean_return)
