@@ -141,7 +141,6 @@ def init_render(env):
         'z_B_ddot': collections.deque(maxlen=_MAX_EP_STEPS),
         'F':        collections.deque(maxlen=_MAX_EP_STEPS),
         's_dot':    collections.deque(maxlen=_MAX_EP_STEPS),
-        'v_ref':    collections.deque(maxlen=_MAX_EP_STEPS),
         's_pos':    collections.deque(maxlen=_MAX_EP_STEPS),
     }
 
@@ -258,7 +257,7 @@ def init_render(env):
         _label1 = r'$z_B$' if k1 == 'z_B' else ('v' if k1 == 's_dot' else None)
         ts[k1], = ax.plot([], [], '-', color=c1, lw=1, label=_label1)
         if k2:
-            _label2 = r'$z_W$' if k2 == 'z_W' else ('v_ref' if k2 == 'v_ref' else k2)
+            _label2 = r'$z_W$' if k2 == 'z_W' else k2
             ts[k2], = ax.plot([], [], '--', color=c2, lw=1, label=_label2)
         if k1 in ('z_B', 's_dot'):
             ax.legend(fontsize=7, loc='upper left', framealpha=0.6)
@@ -349,7 +348,6 @@ def push_history(env):
     h['z_B_ddot'].append(env._last_z_B_ddot)
     h['F'].append(0.0)
     h['s_dot'].append(float(env._v))
-    h['v_ref'].append(float(env._v_ref_last))
     h['s_pos'].append(env._s_pos)
 
 
@@ -447,7 +445,6 @@ def update_artists(env):
         'z_B_ddot': np.array(h['z_B_ddot']),
         'F':        np.array(h['F']),
         's_dot':    np.array(h['s_dot']) * 3.6,   # m/s → km/h
-        'v_ref':    np.array(h['v_ref']) * 3.6,   # m/s → km/h
     }
     for key, line in ts.items():
         line.set_data(t_arr, np.array(_map[key]))
