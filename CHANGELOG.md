@@ -1,5 +1,28 @@
 # Changelog
 
+## v_ref oscillation fix — analytic bump search replaces sampling
+
+**Bug**: `_compute_v_ref` sampled the road at 20 points over 40 m (= 2 m spacing). Catalog
+bumps narrower than 2 m (catalog 0: W=0.92 m, catalog 1: W=2.22 m, catalog 2: W=1.0 m) were
+intermittently missed as the sample grid shifted each step (~0.14 m at 25 km/h), producing
+10–13 v_ref oscillations per bump passage between ~49 km/h and 72 km/h.
+
+**Fix**: `_compute_v_ref` now iterates `_road._bumps` directly, finds the nearest un-passed
+bump within `preview_distance`, and computes v_ref analytically from its height and distance to
+entry face. No sampling, no aliasing. The reference now ramps smoothly down as the car
+approaches the bump and resets to v_max in one step after passing it.
+
+**Training impact** — see analysis below:
+- Level 0 uses catalog IDs [3, 4] (W=9.5 m and 5.0 m) — wide enough that sampling aliasing
+  was minimal; level 0 training behavior is essentially unchanged.
+- Levels 1–3 use catalog IDs 0–2 which include the narrow bumps. The fix removes noisy reward
+  signal and noisy observations at those levels, so training at levels 1+ should be noticeably
+  cleaner. **Do not compare exp_22+ returns at level 1+ with pre-fix baselines directly.**
+- The fix does NOT invalidate exp_21 results: exp_21 never advanced past level 0, and level 0
+  uses only wide bumps (W ≥ 5 m) where sampling was reliable.
+
+---
+
 ## exp_21 results and reward/curriculum calibration
 
 exp_21: 5M steps, PPO with Optuna-tuned hyperparameters, curriculum on, step_bonus=0.5.
