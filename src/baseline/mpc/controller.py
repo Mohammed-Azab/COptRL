@@ -1,4 +1,3 @@
-import hashlib
 import os
 import tempfile
 from contextlib import contextmanager
@@ -10,7 +9,7 @@ import numpy as np
 from QuarterCar_env.config.env_params import PHYSICS, DT
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
 from road.road_generator import RoadGenerator
-from ocp import build_solver
+from ocp import build_solver_simple
 
 
 # v_ref preview — mirrors env._compute_v_ref but position-based
@@ -30,34 +29,27 @@ def _v_ref_at(s_pos: float, bumps: list, cfg: RewardConfig) -> float:
     if not bumps:
         return cfg.v_max
     preview = cfg.preview_distance
-    n = 20
-    s_pts   = s_pos + np.linspace(preview / n, preview, n)
-    heights = np.zeros(n)
+    best_d: float | None = None
+    best_h: float = 0.0
     for x0, A, L in bumps:
-        dx = s_pts - x0
-        mask = (dx >= 0.0) & (dx <= L)
-        heights[mask] += (A / 2.0) * (1.0 - np.cos(2.0 * np.pi * dx[mask] / L))
-    max_h = float(np.max(heights))
-    if max_h < cfg.peak_height_min:
+        if x0 + L <= s_pos:
+            continue
+        d_to_entry = max(0.0, x0 - s_pos)
+        if d_to_entry > preview:
+            continue
+        if best_d is None or d_to_entry < best_d:
+            best_d = d_to_entry
+            best_h = A
+    if best_d is None or best_h < cfg.peak_height_min:
         return cfg.v_max
-    for i, h in enumerate(heights):
-        if h >= cfg.peak_height_min:
-            d = (i + 1) * preview / n
-            break
-    else:
-        return cfg.v_max
-    h_ratio   = min(1.0, max_h / cfg.h_clip)
-    proximity = max(0.0, 1.0 - d / preview)
-    return max(cfg.v_min, cfg.v_max * (1.0 - 0.5 * h_ratio * proximity))
+    h_ratio   = float(min(1.0, best_h / cfg.h_clip))
+    proximity = float(max(0.0, 1.0 - best_d / preview))
+    return float(max(cfg.v_min, cfg.v_max * (1.0 - 0.5 * h_ratio * proximity)))
 
 
 # bump geometry hash — used to detect road changes
 
-_OCP_VERSION = 'v3'   # bump when cost structure changes (nr/nr_e dimensions)
-
-def _bumps_hash(bumps: list) -> str:
-    key = (_OCP_VERSION + str(sorted(bumps))).encode()
-    return hashlib.md5(key).hexdigest()[:8]
+_OCP_VERSION = 'v4'   # bump when cost structure changes (nr/nr_e dimensions)
 
 
 @contextmanager
@@ -97,28 +89,26 @@ class MPCController:
         self._N                   = N
         self._dt                  = dt
         self._nlp_solver_max_iter = nlp_solver_max_iter
-        self._solver              = None
-        self._bumps_hash          = None
         self._bumps: list         = []
         self._prev_u              = 0.0
         self._gen_base            = Path(tempfile.gettempdir()) / 'acados_qc'
 
+        # 2-state speed-planner OCP: only [v, s_pos] as state — no suspension.
+        # The full 7-state model causes ACADOS_NAN_DETECTED/MINSTEP from the
+        # bumpstop Jacobians and non-equilibrium states during bump crossings.
+        # Road info enters only through v_ref (online parameter).
+        gen_dir = str(self._gen_base / (_OCP_VERSION + '_simple'))
+        os.makedirs(gen_dir, exist_ok=True)
+        with _suppress_native_output():
+            self._solver = build_solver_simple(
+                self._physics, self._cfg,
+                N=self._N, dt=self._dt, gen_dir=gen_dir,
+                nlp_solver_max_iter=self._nlp_solver_max_iter,
+            )
+
     def reset(self, road: RoadGenerator) -> None:
-        bumps = list(road._bumps) if road.profile == 'speed_bump' else []
-        bh    = _bumps_hash(bumps)
-        if bh != self._bumps_hash:
-            # rebuild (and recompile) solver for this road geometry
-            gen_dir = str(self._gen_base / bh)
-            os.makedirs(gen_dir, exist_ok=True)
-            with _suppress_native_output():
-                self._solver = build_solver(
-                    self._physics, bumps, self._cfg,
-                    N=self._N, dt=self._dt, gen_dir=gen_dir,
-                    nlp_solver_max_iter=self._nlp_solver_max_iter,
-                )
-            self._bumps_hash = bh
-            self._bumps      = bumps
-        self._prev_u = 0.0
+        self._bumps   = list(road._bumps) if road.profile == 'speed_bump' else []
+        self._prev_u  = 0.0
 
     def act(self, x: np.ndarray, s_pos: float, road: RoadGenerator) -> float:
         # hot-path: road must have been set via reset() before calling act()
@@ -129,12 +119,10 @@ class MPCController:
         dt     = self._dt
         solver = self._solver
 
-        # augmented state: append s_pos as x[6]
-        x_aug = np.append(x.astype(float), float(s_pos))
-
-        # set initial state
-        solver.set(0, 'lbx', x_aug)
-        solver.set(0, 'ubx', x_aug)
+        # 2-state initial condition: [v, s_pos]
+        x_init = np.array([float(x[4]), float(s_pos)])
+        solver.set(0, 'lbx', x_init)
+        solver.set(0, 'ubx', x_init)
 
         # precompute v_ref along nominal trajectory and set as online parameter
         v_ref_seq = _v_ref_seq(s_pos, float(x[4]), self._bumps, self._cfg, N, dt)

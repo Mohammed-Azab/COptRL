@@ -33,7 +33,11 @@ _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / 'src' / 'gym_env'))
 sys.path.insert(0, str(_ROOT / 'src'))
 sys.path.insert(0, str(_ROOT / 'src' / 'eval'))
+sys.path.insert(0, str(_ROOT / 'src' / 'baseline'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # baseline/mpc on path for controller/ocp
+_acados_py = str(_ROOT / 'acados' / 'interfaces' / 'acados_template')
+if _acados_py not in sys.path:
+    sys.path.insert(0, _acados_py)
 
 import QuarterCar_env.envs  # noqa: F401
 from QuarterCar_env.config.env_params import PHYSICS, DT
