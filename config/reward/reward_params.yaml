@@ -18,7 +18,7 @@ vertical:
   enable_vel_scaling: true
 
 enable:
-  tracking:      true
+  tracking:      false   # removed from reward — v_ref hint now lives in observation only
   accel:         true
   jerk:          true
   action_smooth: true

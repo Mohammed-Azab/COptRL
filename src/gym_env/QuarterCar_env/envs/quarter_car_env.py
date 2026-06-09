@@ -335,10 +335,11 @@ class QuarterCarEnv(gym.Env):
         a_bound = cfg.accel_clip / cfg.a_comfort
         j_bound = cfg.jerk_clip  / cfg.j_max
 
-        # base obs: [ζ, ζ̇, v/v_max, filtered_a, filtered_jerk, prev_action]
+        # base obs: [ζ, ζ̇, v/v_max, filtered_a, filtered_jerk, prev_action, speed_error]
+        # speed_error = clip((v_ref - v) / v_max, -1, 1): hint only, not in reward
         # PreviewWrapper appends the peak slots on top of this
-        extra_high = np.array([1.0, a_bound, j_bound, 1.0], dtype=np.float32)
-        extra_low  = np.array([0.0, -a_bound, -j_bound, -1.0], dtype=np.float32)
+        extra_high = np.array([1.0, a_bound, j_bound, 1.0, 1.0], dtype=np.float32)
+        extra_low  = np.array([0.0, -a_bound, -j_bound, -1.0, -1.0], dtype=np.float32)
         high = np.concatenate([OBS_HIGH, extra_high])
         low  = np.concatenate([OBS_LOW,  extra_low])
         return high, low
@@ -355,11 +356,13 @@ class QuarterCarEnv(gym.Env):
 
         a_bound = cfg.accel_clip / cfg.a_comfort
         j_bound = cfg.jerk_clip  / cfg.j_max
+        speed_err = float(np.clip((self._v_ref_last - self._v) / cfg.v_max, -1.0, 1.0))
         scalars = np.array([
             float(np.clip(self._v / cfg.v_max, 0.0, 1.0)),
             float(np.clip(self._filtered_a / cfg.a_comfort, -a_bound, a_bound)),
             float(np.clip(self._filtered_jerk / cfg.j_max, -j_bound, j_bound)),
             float(self._prev_action),
+            speed_err,
         ], dtype=np.float32)
 
         return np.concatenate([base_obs, scalars])
