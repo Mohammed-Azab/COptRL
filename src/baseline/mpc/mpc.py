@@ -32,13 +32,15 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / 'src' / 'gym_env'))
 sys.path.insert(0, str(_ROOT / 'src'))
+sys.path.insert(0, str(_ROOT / 'src' / 'eval'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # baseline/mpc on path for controller/ocp
 
 import QuarterCar_env.envs  # noqa: F401
-from QuarterCar_env.config.env_params import PHYSICS
+from QuarterCar_env.config.env_params import PHYSICS, DT
 from QuarterCar_env.config.reward_params import load_reward_config
 from controller import MPCController
 from scenario_loader import load_scenario, list_scenarios, make_road_generator
+from data_logger import RunLogger, EpisodeData
 
 
 def _load_mpc_cfg() -> dict:
@@ -234,6 +236,10 @@ def main() -> None:
                             help='save per-episode time-series PNG')
             ap.add_argument('--results-dir', default=None)
             ap.add_argument('--out', default=None)
+            ap.add_argument('--log-data', metavar='DIR', default=None,
+                            help='Save run data (.mat/.npz) to DIR/MPC/<road>/<ts>/. '
+                                 'Omit DIR to use <repo>/data/.',
+                            nargs='?', const='__default__')
             args = ap.parse_args()
 
             if args.save_gif and not args.render:
@@ -279,6 +285,25 @@ def main() -> None:
                   f'{"Bumps":>7}  {"Solve ms":>9}')
             print(f'  {"-"*3}  {"-"*9}  {"-"*10}  {"-"*8}  {"-"*7}  {"-"*9}')
 
+            log_root = (
+                _ROOT / 'data'
+                if args.log_data == '__default__'
+                else Path(args.log_data) if args.log_data
+                else None
+            )
+            run_logger: RunLogger | None = (
+                RunLogger(
+                    method='MPC',
+                    road=scenario_label,
+                    out_root=log_root,
+                    dt=DT,
+                    v_max_kmh=cfg.v_max * 3.6,
+                    a_comfort=cfg.a_comfort,
+                    a_limit=cfg.a_limit,
+                )
+                if log_root is not None else None
+            )
+
             results: list[dict] = []
             episode_iter = range(args.n_episodes)
             progress_bar = None
@@ -315,6 +340,16 @@ def main() -> None:
                     f'{bumps_str:>7}  '
                     f'{r["solve_ms_mean"]:>9.2f}'
                 )
+                if run_logger is not None:
+                    run_logger.add(EpisodeData(
+                        v=r['_speeds'],
+                        v_ref=r['_v_refs'],
+                        z_B_ddot=r['_accels'],
+                        action=r['_actions'],
+                        episode_return=r['episode_return'],
+                        rms_accel=r['rms_accel'],
+                        comfort_score=r['comfort_score'],
+                    ))
                 if args.save_plots or args.save_gif:
                     save_dir.mkdir(parents=True, exist_ok=True)
                 if args.save_plots:
@@ -354,6 +389,12 @@ def main() -> None:
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(summary, indent=2))
             print(f'\n  Results → {out}')
+
+            if run_logger is not None:
+                saved = run_logger.save()
+                print(f'  data logged → {run_logger.save_dir}')
+                if 'mat' not in saved:
+                    print('  (install scipy for .mat output: pip install scipy)')
 
             del ctrl
             del env

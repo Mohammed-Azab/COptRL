@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 _ROOT = Path(__file__).resolve().parents[2]
-for _p in ("src/gym_env", "src", "src/train", "src/baseline"):
+for _p in ("src/gym_env", "src", "src/train", "src/baseline", "src/eval"):
     sys.path.insert(0, str(_ROOT / _p))
 
 import gymnasium as gym
@@ -23,6 +23,7 @@ from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.config.reward_params import load_reward_config
 from QuarterCar_env.config.env_params import EPISODE_STEPS, DT
 from scenario_loader import load_scenario, list_scenarios, make_road_generator
+from data_logger import RunLogger, EpisodeData
 
 
 _ALGO_MAP: dict[str, type] = {"PPO": PPO, "TD3": TD3}
@@ -64,6 +65,10 @@ def parse_args() -> argparse.Namespace:
                    help="Output directory for JSON + figures.")
     p.add_argument("--no-deterministic", action="store_true",
                    help="Sample from policy stochastically instead of taking the mode.")
+    p.add_argument("--log-data", metavar="DIR", default=None,
+                   help="Save run data (.mat/.npz) to DIR/PPO/<road>/<timestamp>/. "
+                        "Default root is <repo>/data/ when flag is given without value.",
+                   nargs="?", const="__default__")
     return p.parse_args()
 
 
@@ -497,6 +502,25 @@ def main() -> None:
 
     model, vecnorm_path = load_model(args.algo, args.model_path, args.vecnorm_path)
 
+    log_root = (
+        _ROOT / "data"
+        if args.log_data == "__default__"
+        else Path(args.log_data) if args.log_data
+        else None
+    )
+    run_logger: RunLogger | None = (
+        RunLogger(
+            method=args.algo,
+            road=scenario_label,
+            out_root=log_root,
+            dt=DT,
+            v_max_kmh=rcfg.v_max * 3.6,
+            a_comfort=rcfg.a_comfort,
+            a_limit=rcfg.a_limit,
+        )
+        if log_root is not None else None
+    )
+
     all_eps:     list[dict] = []
     all_metrics: list[dict] = []
 
@@ -514,6 +538,19 @@ def main() -> None:
         all_metrics.append(m)
         print_episode_line(ep_i, args.n_episodes, m)
 
+        if run_logger is not None:
+            run_logger.add(EpisodeData(
+                v=ep["speeds"],
+                v_ref=ep["v_refs"],
+                z_B_ddot=ep["body_accels"],
+                z_W_ddot=ep["wheel_accels"],
+                action=ep["actions"],
+                reward=ep["rewards"],
+                episode_return=m["total_return"],
+                rms_accel=m["rms_accel"],
+                comfort_score=m["comfort_score"],
+            ))
+
         if args.save_plots:
             save_dir.mkdir(parents=True, exist_ok=True)
             plot_timeseries(ep, ep_i, rcfg, bounds, save_dir)
@@ -523,6 +560,12 @@ def main() -> None:
 
     save_dir.mkdir(parents=True, exist_ok=True)
     save_json(agg, all_metrics, args.algo, args.road, args.model_path, save_dir)
+
+    if run_logger is not None:
+        saved = run_logger.save()
+        print(f"  data logged → {run_logger.save_dir}")
+        if "mat" not in saved:
+            print("  (install scipy for .mat output: pip install scipy)")
 
     if args.save_plots:
         print("\n  Generating summary figures ...")
