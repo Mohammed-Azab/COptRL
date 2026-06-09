@@ -4,9 +4,7 @@ import casadi as ca
 from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 
 
-# -----------------------------------------------------------------------
 # CasADi symbolic ODE
-# -----------------------------------------------------------------------
 
 def _ode_expr(x: ca.SX, zq: ca.SX, p: dict) -> ca.SX:
     # quarter-car ODE — state: [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B]
@@ -62,9 +60,7 @@ def _zq_expr(s: ca.SX, v: ca.SX, bumps: list) -> ca.SX:
     return zd
 
 
-# -----------------------------------------------------------------------
 # acados model builder
-# -----------------------------------------------------------------------
 
 def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
     model      = AcadosModel()
@@ -122,9 +118,7 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
     return model
 
 
-# -----------------------------------------------------------------------
 # full OCP solver factory
-# -----------------------------------------------------------------------
 
 def build_solver(
     physics:              dict,
@@ -178,20 +172,25 @@ def build_solver(
     # so this residual provides both the "go fast" and "brake before bumps" signal
     speed_err = (v - v_ref) / v_max_v
 
+    # velocity scale mirrors env reward: core (heave/wheel/accel) is multiplied by
+    # v/v_max so creeping to avoid bump vibration is no longer cheaper than braking
+    # and crossing at speed.  Tracking and action-smooth stay unscaled (same as env).
+    vel_scale = v / v_max_v
+
     # residuals for NONLINEAR_LS  (cost = 0.5 * (r - yref)' W (r - yref))
     r = ca.vertcat(
-        z_B_ddot / cfg.a_B_comfort,   # heave       — target 0
-        z_W_ddot / cfg.a_W_comfort,   # wheel       — target 0
-        speed_err,                    # speed err   — target 0 (two-sided)
-        a_long    / cfg.a_comfort,    # long. accel — target 0
-        u_sym[0],                     # action mag  — target 0
+        vel_scale * z_B_ddot / cfg.a_B_comfort,   # heave       — scaled, target 0
+        vel_scale * z_W_ddot / cfg.a_W_comfort,   # wheel       — scaled, target 0
+        speed_err,                                 # speed err   — unscaled, target 0
+        vel_scale * a_long    / cfg.a_comfort,     # long. accel — scaled, target 0
+        u_sym[0],                                  # action mag  — unscaled, target 0
     )
     nr = r.shape[0]
 
     # terminal residual — must not depend on u; drop a_long and u_sym[0]
     r_e = ca.vertcat(
-        z_B_ddot / cfg.a_B_comfort,
-        z_W_ddot / cfg.a_W_comfort,
+        vel_scale * z_B_ddot / cfg.a_B_comfort,
+        vel_scale * z_W_ddot / cfg.a_W_comfort,
         speed_err,
     )
     nr_e = r_e.shape[0]
@@ -251,4 +250,7 @@ def build_solver(
 
     ocp.code_export_directory = gen_dir
 
-    return AcadosOcpSolver(ocp, json_file=f'{gen_dir}/acados_ocp.json')
+    solver = AcadosOcpSolver(ocp, json_file=f'{gen_dir}/acados_ocp.json', verbose=False)
+    solver.options_set('print_level', 0)
+    solver.options_set('qp_print_level', 0)
+    return solver

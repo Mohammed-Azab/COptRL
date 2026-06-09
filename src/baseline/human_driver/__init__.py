@@ -1,16 +1,8 @@
-"""
-Rule-based human driver baseline.
-
-Models a cautious urban driver who:
-  1. Scans ahead up to `preview_m` metres for speed bumps.
-  2. For each visible bump, computes a comfortable crossing speed based on
-     bump steepness (peak slope ζ̇_max = π·H/W).
-  3. Starts braking at the kinematically correct distance to arrive at that
-     speed using a comfortable deceleration of `a_brake` m/s².
-  4. Holds a linear speed ramp through the braking zone, crosses the bump,
-     then re-accelerates back to cruise speed.
-
-The resulting speed profile is identical to what a driver-model textbook would
-call a "look-ahead proportional speed planner" — no optimisation, no model
-integration, just geometry + kinematics.
-"""
+# Human driver baseline — rule-based speed planner for the quarter-car env.
+#
+# Looks ahead up to preview_m metres for upcoming bumps, figures out the
+# fastest safe crossing speed from bump slope (π·H/W), then starts braking at
+# exactly the right distance to arrive at that speed. Crosses the bump and
+# re-accelerates. Pure geometry and kinematics — nothing fancy.
+#
+# Parameters live in config/baseline/human_driver_params.yaml.

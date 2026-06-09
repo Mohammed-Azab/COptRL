@@ -28,13 +28,9 @@ def list_scenarios() -> list[str]:
 
 
 def load_scenario(name_or_path: str) -> tuple[list, float, str, str]:
-    """Load a named scenario and return (bumps, speed_m_s, name, description).
-
-    bumps: list of (x_start_m, height_m, width_m) tuples ready for RoadGenerator
-    speed_m_s: vehicle speed converted from km/h
-    name: scenario name string
-    description: human-readable scenario description
-    """
+    # loads a named scenario yaml and returns (bumps, speed_m_s, name, description)
+    # bumps: list of (x_start_m, height_m, width_m) tuples for RoadGenerator
+    # speed_m_s: vehicle speed in m/s (converted from km/h in the yaml)
     path = Path(name_or_path)
     if not path.exists():
         d = _find_root() / 'config' / 'eval' / 'scenarios'
@@ -64,7 +60,7 @@ def load_scenario(name_or_path: str) -> tuple[list, float, str, str]:
 
 
 def make_road_generator(name_or_path: str):
-    """Convenience: load a scenario and return a ready RoadGenerator."""
+    # load a scenario and hand back a ready-to-use RoadGenerator
     from road.road_generator import RoadGenerator
 
     bumps, speed, _, _ = load_scenario(name_or_path)

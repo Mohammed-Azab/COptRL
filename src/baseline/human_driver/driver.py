@@ -1,18 +1,3 @@
-"""
-Rule-based human driver baseline.
-
-Models a cautious urban driver who:
-  1. Scans ahead up to `preview_m` metres for speed bumps.
-  2. For each visible bump, computes a comfortable crossing speed based on
-     bump steepness (peak slope ζ̇_max = π·H/W).
-  3. From current speed, computes the exact braking distance needed to arrive
-     at that crossing speed at comfortable deceleration.
-  4. Inside that zone, follows a kinematically correct linear speed ramp
-     (constant deceleration), then re-accelerates after clearing the bump.
-
-Parameters are loaded from config/baseline/human_driver_params.yaml so they
-stay in sync with the rest of the project config.
-"""
 from __future__ import annotations
 
 import json
@@ -60,19 +45,17 @@ class HumanDriverController:
         self.a_accel        = a_accel        if a_accel        is not None else float(p.get('a_accel',        2.0))
         self.ctrl_horizon   = ctrl_horizon   if ctrl_horizon   is not None else float(p.get('ctrl_horizon',   1.2))
 
-    # ------------------------------------------------------------------
-    # Speed planning
-    # ------------------------------------------------------------------
+    # speed planning
 
     def _crossing_speed(self, H: float, W: float) -> float:
-        """Target speed so that peak road velocity ζ̇ = π·H/W·v ≤ zeta_dot_limit."""
+        # fastest safe crossing speed for a bump of height H and width W
         peak_slope = np.pi * H / W
         if peak_slope < 1e-6:
             return self.v_max
         return float(np.clip(self.zeta_dot_limit / peak_slope, self.v_min, self.v_max))
 
     def _target_speed(self, s_pos: float, v: float, road: 'RoadGenerator') -> float:
-        """Return the most restrictive speed target given current position and speed."""
+        # scan ahead and return the lowest speed we need to be at right now
         bumps = getattr(road, '_bumps', [])
         if not bumps:
             return self.v_max
@@ -114,12 +97,10 @@ class HumanDriverController:
 
         return max(self.v_min, v_target)
 
-    # ------------------------------------------------------------------
-    # Control interface — matches MPCController.act signature
-    # ------------------------------------------------------------------
+    # control interface — same signature as MPCController.act
 
     def act(self, x: np.ndarray, s_pos: float, road: 'RoadGenerator') -> float:
-        """Return normalised action u ∈ [-1, 1]."""
+        # returns normalised action u in [-1, 1]
         v     = float(x[4])
         v_max = self.v_max if self.v_max is not None else v
         v_min = self.v_min if self.v_min is not None else 0.0

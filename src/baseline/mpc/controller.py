@@ -1,6 +1,7 @@
 import hashlib
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -12,9 +13,7 @@ from road.road_generator import RoadGenerator
 from ocp import build_solver
 
 
-# -----------------------------------------------------------------------
 # v_ref preview — mirrors env._compute_v_ref but position-based
-# -----------------------------------------------------------------------
 
 def _v_ref_seq(s_pos: float, v0: float, bumps: list, cfg: RewardConfig, N: int, dt: float) -> np.ndarray:
     out = np.empty(N)
@@ -52,20 +51,33 @@ def _v_ref_at(s_pos: float, bumps: list, cfg: RewardConfig) -> float:
     return max(cfg.v_min, cfg.v_max * (1.0 - 0.5 * h_ratio * proximity))
 
 
-# -----------------------------------------------------------------------
 # bump geometry hash — used to detect road changes
-# -----------------------------------------------------------------------
 
-_OCP_VERSION = 'v2'   # bump when cost structure changes (nr/nr_e dimensions)
+_OCP_VERSION = 'v3'   # bump when cost structure changes (nr/nr_e dimensions)
 
 def _bumps_hash(bumps: list) -> str:
     key = (_OCP_VERSION + str(sorted(bumps))).encode()
     return hashlib.md5(key).hexdigest()[:8]
 
 
-# -----------------------------------------------------------------------
-# MPC Controller
-# -----------------------------------------------------------------------
+@contextmanager
+def _suppress_native_output():
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
+    try:
+        os.dup2(devnull_fd, 1)
+        os.dup2(devnull_fd, 2)
+        yield
+    finally:
+        os.dup2(saved_stdout, 1)
+        os.dup2(saved_stderr, 2)
+        os.close(saved_stdout)
+        os.close(saved_stderr)
+        os.close(devnull_fd)
+
+
+# MPC controller
 
 class MPCController:
     def __init__(
@@ -91,8 +103,6 @@ class MPCController:
         self._prev_u              = 0.0
         self._gen_base            = Path(tempfile.gettempdir()) / 'acados_qc'
 
-    # ------------------------------------------------------------------
-
     def reset(self, road: RoadGenerator) -> None:
         bumps = list(road._bumps) if road.profile == 'speed_bump' else []
         bh    = _bumps_hash(bumps)
@@ -100,16 +110,15 @@ class MPCController:
             # rebuild (and recompile) solver for this road geometry
             gen_dir = str(self._gen_base / bh)
             os.makedirs(gen_dir, exist_ok=True)
-            self._solver     = build_solver(
-                self._physics, bumps, self._cfg,
-                N=self._N, dt=self._dt, gen_dir=gen_dir,
-                nlp_solver_max_iter=self._nlp_solver_max_iter,
-            )
+            with _suppress_native_output():
+                self._solver = build_solver(
+                    self._physics, bumps, self._cfg,
+                    N=self._N, dt=self._dt, gen_dir=gen_dir,
+                    nlp_solver_max_iter=self._nlp_solver_max_iter,
+                )
             self._bumps_hash = bh
             self._bumps      = bumps
         self._prev_u = 0.0
-
-    # ------------------------------------------------------------------
 
     def act(self, x: np.ndarray, s_pos: float, road: RoadGenerator) -> float:
         # hot-path: road must have been set via reset() before calling act()
@@ -133,7 +142,8 @@ class MPCController:
             solver.set(k, 'p', np.array([v_ref_seq[k]]))
         solver.set(N, 'p', np.array([v_ref_seq[-1]]))
 
-        status = solver.solve()
+        with _suppress_native_output():
+            status = solver.solve()
         # 0 = success, 2 = max_iter (partial solve, still usable)
         if status not in (0, 2):
             return self._prev_u   # keep last action on solver failure

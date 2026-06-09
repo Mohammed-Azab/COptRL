@@ -4,8 +4,6 @@ import os
 
 from pathlib import Path as _Path
 
-# ACADOS_SOURCE_DIR must be the cmake install prefix (~/acados) which has
-# include/acados_c/ and lib/libacados.so — source tree lacks both
 _acados = _Path.home() / 'acados'
 os.environ['ACADOS_SOURCE_DIR'] = str(_acados)
 _lib = str(_acados / 'lib')
@@ -14,14 +12,22 @@ if _lib not in os.environ.get('LD_LIBRARY_PATH', ''):
 
 import argparse
 import copy
+import gc
+import io
 import json
 import sys
 import time
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
 import yaml
+
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    tqdm = None
 
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / 'src' / 'gym_env'))
@@ -41,20 +47,30 @@ def _load_mpc_cfg() -> dict:
         return yaml.safe_load(fh)
 
 
+def _steps_for_road(road, dt: float = 0.02, margin: float = 1.5) -> int:
+    # budget based on v_min (2 m/s) — MPC may creep at minimum speed and still
+    # needs enough steps to reach every bump before the episode terminates
+    if road is None or not hasattr(road, '_bumps') or not road._bumps:
+        return 4000
+    x0, _, L = road._bumps[-1]
+    road_length = x0 + L + 20.0
+    cfg = load_reward_config()
+    v = max(float(cfg.v_min), 1.0)  # worst-case: car drives at v_min the whole way
+    return max(int(road_length / v / dt * margin), 1200)
+
+
 def run_episode(env, ctrl: MPCController, seed: int,
                 scenario_road=None, collect_frames: bool = False,
                 render_live: bool = False) -> dict:
     # deep-copy so the env's set_speed() calls don't corrupt the shared template
     road_for_ep = copy.deepcopy(scenario_road) if scenario_road is not None else None
+
+    # ensure enough steps to traverse all bumps
+    raw = env.unwrapped
+    raw._max_episode_steps = _steps_for_road(road_for_ep)
+
     opts     = {"road": road_for_ep} if road_for_ep is not None else {}
     obs, _   = env.reset(seed=seed, options=opts or None)
-    raw      = env.unwrapped
-
-    # respect road's design speed (scenario speed cap)
-    saved_v_max = ctrl._cfg.v_max
-    if road_for_ep is not None and hasattr(road_for_ep, 'speed'):
-        ctrl._cfg = ctrl._cfg._replace(v_max=min(ctrl._cfg.v_max, float(road_for_ep.speed))) \
-            if hasattr(ctrl._cfg, '_replace') else ctrl._cfg
     ctrl.reset(raw._road)
 
     ep_return  = 0.0
@@ -100,6 +116,7 @@ def run_episode(env, ctrl: MPCController, seed: int,
         'comfort_score':  round(max(0.0, 1.0 - rms_accel / cfg.a_limit), 4),
         'n_steps':        n_steps,
         'bumps_passed':   int(raw._bumps_passed),
+        'bumps_total':    len(raw._bump_ends),
         'solve_ms_mean':  round(float(np.mean(solve_times)) * 1e3, 2),
         'solve_ms_max':   round(float(np.max(solve_times))  * 1e3, 2),
         '_speeds':        speeds,
@@ -189,133 +206,166 @@ def _save_plot(result: dict, ep_i: int, save_dir: Path) -> None:
 
 
 def main() -> None:
-    mcfg = _load_mpc_cfg()
+    output = io.StringIO()
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull_fd, 1)
+    os.dup2(devnull_fd, 2)
+    terminal_out = os.fdopen(os.dup(saved_stdout), 'w', buffering=1)
 
-    ap = argparse.ArgumentParser('MPC baseline for QuarterCar Model')
-    ap.add_argument('--n-episodes', type=int,   default=mcfg.get('n_episodes', 20))
-    ap.add_argument('--horizon',    type=int,   default=mcfg.get('N', 50),
-                    help='prediction horizon (steps)')
-    ap.add_argument('--seed',       type=int,   default=42)
-    ap.add_argument('--road',       default='speed_bump')
-    ap.add_argument('--scenario',   default=None,
-                    help=f'fixed eval scenario name (available: {list_scenarios()})')
-    ap.add_argument('--render',      action='store_true',
-                    help='show live window (render_mode=human, like eval.py)')
-    ap.add_argument('--save-gif',   action='store_true',
-                    help='save per-episode GIF (headless-safe offscreen rendering)')
-    ap.add_argument('--save-plots', action='store_true',
-                    help='save per-episode time-series PNG')
-    ap.add_argument('--results-dir', default=None)
-    ap.add_argument('--out',        default=None)
-    args = ap.parse_args()
+    try:
+        with redirect_stdout(output):
+            mcfg = _load_mpc_cfg()
 
-    if args.save_gif and not args.render:
-        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+            ap = argparse.ArgumentParser('MPC baseline for QuarterCar Model')
+            ap.add_argument('--n-episodes', type=int, default=mcfg.get('n_episodes', 20))
+            ap.add_argument('--horizon', type=int, default=mcfg.get('N', 50),
+                            help='prediction horizon (steps)')
+            ap.add_argument('--seed', type=int, default=42)
+            ap.add_argument('--road', default='speed_bump')
+            ap.add_argument('--scenario', default=None,
+                            help=f'fixed eval scenario name (available: {list_scenarios()})')
+            ap.add_argument('--render', action='store_true',
+                            help='show live window (render_mode=human, like eval.py)')
+            ap.add_argument('--save-gif', action='store_true',
+                            help='save per-episode GIF (headless-safe offscreen rendering)')
+            ap.add_argument('--save-plots', action='store_true',
+                            help='save per-episode time-series PNG')
+            ap.add_argument('--results-dir', default=None)
+            ap.add_argument('--out', default=None)
+            args = ap.parse_args()
 
-    cfg  = load_reward_config()
-    ctrl = MPCController(
-        cfg=cfg, physics=dict(PHYSICS), N=args.horizon,
-        nlp_solver_max_iter=mcfg.get('nlp_solver_max_iter', 10),
-    )
+            if args.save_gif and not args.render:
+                os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-    if args.render:
-        render_mode = 'human'
-    elif args.save_gif:
-        render_mode = 'rgb_array'
-    else:
-        render_mode = 'none'
-    env  = gym.make('QuarterCar_env/QuarterCar', road_profile=args.road,
-                    render_mode=render_mode)
+            cfg  = load_reward_config()
+            ctrl = MPCController(
+                cfg=cfg, physics=dict(PHYSICS), N=args.horizon,
+                nlp_solver_max_iter=mcfg.get('nlp_solver_max_iter', 10),
+            )
 
-    scenario_road = None
-    scenario_label = args.road
-    if args.scenario:
-        _, speed, sc_name, sc_desc = load_scenario(args.scenario)
-        scenario_road  = make_road_generator(args.scenario)
-        scenario_label = args.scenario
-        print(f'\n  Scenario : {sc_name}')
-        print(f'           : {sc_desc}')
-        print(f'           : v={speed*3.6:.1f} km/h, {len(scenario_road._bumps)} bump(s)')
+            if args.render:
+                render_mode = 'human'
+            elif args.save_gif:
+                render_mode = 'rgb_array'
+            else:
+                render_mode = 'none'
+            env  = gym.make('QuarterCar_env/QuarterCar', road_profile=args.road,
+                            render_mode=render_mode)
 
-    save_dir = (
-        Path(args.results_dir) if args.results_dir
-        else _ROOT / 'eval' / 'results' / f'mpc_{scenario_label}'
-    )
+            scenario_road = None
+            scenario_label = args.road
+            if args.scenario:
+                _, speed, sc_name, sc_desc = load_scenario(args.scenario)
+                scenario_road = make_road_generator(args.scenario)
+                scenario_label = args.scenario
+                print(f'\n  Scenario : {sc_name}')
+                print(f'           : {sc_desc}')
+                print(f'           : v={speed*3.6:.1f} km/h, {len(scenario_road._bumps)} bump(s)')
 
-    print(f'\n  MPC Baseline')
-    print(f'  horizon  : {args.horizon} steps  ({args.horizon * 0.02:.2f}s)  '
-          f'(config/baseline/mpc_params.yaml)')
-    print(f'  episodes : {args.n_episodes}')
-    print(f'  road     : {scenario_label}')
-    print(f'  solver   : acados SQP-RTI + HPIPM\n')
-    print(f'  {"Ep":>3}  {"Return":>9}  {"RMS-a m/s²":>10}  {"Comfort":>8}  '
-          f'{"Bumps":>5}  {"Solve ms":>9}')
-    print(f'  {"-"*3}  {"-"*9}  {"-"*10}  {"-"*8}  {"-"*5}  {"-"*9}')
+            save_dir = (
+                Path(args.results_dir) if args.results_dir
+                else _ROOT / 'eval' / 'results' / 'mpc' / f'{scenario_label}'
+            )
 
-    results: list[dict] = []
-    for ep in range(args.n_episodes):
-        r = run_episode(env, ctrl, seed=args.seed + ep,
-                        scenario_road=scenario_road,
-                        collect_frames=args.save_gif,
-                        render_live=args.render)
-        results.append(r)
-        print(
-            f'  {ep+1:>3}  {r["episode_return"]:>+9.1f}  '
-            f'{r["rms_accel"]:>10.3f}  '
-            f'{r["comfort_score"]:>8.3f}  '
-            f'{r["bumps_passed"]:>5}  '
-            f'{r["solve_ms_mean"]:>9.2f}'
-        )
-        if args.save_plots or args.save_gif:
-            save_dir.mkdir(parents=True, exist_ok=True)
-        if args.save_plots:
-            _save_plot(r, ep, save_dir)
-        if args.save_gif and r['_frames']:
-            _save_gif(r['_frames'], save_dir / f'mpc_ep{ep+1}.gif')
+            print(f'\n  MPC Baseline')
+            print(f'  horizon  : {args.horizon} steps  ({args.horizon * 0.02:.2f}s)  '
+                  f'(config/baseline/mpc_params.yaml)')
+            print(f'  episodes : {args.n_episodes}')
+            print(f'  road     : {scenario_label}')
+            print(f'  solver   : acados SQP-RTI + HPIPM\n')
+            print(f'  {"Ep":>3}  {"Return":>9}  {"RMS-a m/s²":>10}  {"Comfort":>8}  '
+                  f'{"Bumps":>7}  {"Solve ms":>9}')
+            print(f'  {"-"*3}  {"-"*9}  {"-"*10}  {"-"*8}  {"-"*7}  {"-"*9}')
 
-    env.close()
+            results: list[dict] = []
+            episode_iter = range(args.n_episodes)
+            progress_bar = None
+            if tqdm is not None:
+                progress_bar = tqdm(
+                    episode_iter,
+                    total=args.n_episodes,
+                    desc='MPC episodes',
+                    unit='ep',
+                    file=terminal_out,
+                    leave=False,
+                )
+                episode_iter = progress_bar
 
-    rets     = [r['episode_return']  for r in results]
-    rms_vals = [r['rms_accel']       for r in results]
-    comforts = [r['comfort_score']   for r in results]
-    solves   = [r['solve_ms_mean']   for r in results]
+            for ep in episode_iter:
+                r = run_episode(env, ctrl, seed=args.seed + ep,
+                                scenario_road=scenario_road,
+                                collect_frames=args.save_gif,
+                                render_live=args.render)
+                results.append(r)
+                if progress_bar is not None:
+                    progress_bar.set_postfix(
+                        {
+                            'return': f'{r["episode_return"]:+.1f}',
+                            'solve_ms': f'{r["solve_ms_mean"]:.2f}',
+                        },
+                        refresh=False,
+                    )
+                bumps_str = f'{r["bumps_passed"]}/{r["bumps_total"]}'
+                print(
+                    f'  {ep+1:>3}  {r["episode_return"]:>+9.1f}  '
+                    f'{r["rms_accel"]:>10.3f}  '
+                    f'{r["comfort_score"]:>8.3f}  '
+                    f'{bumps_str:>7}  '
+                    f'{r["solve_ms_mean"]:>9.2f}'
+                )
+                if args.save_plots or args.save_gif:
+                    save_dir.mkdir(parents=True, exist_ok=True)
+                if args.save_plots:
+                    _save_plot(r, ep, save_dir)
+                if args.save_gif and r['_frames']:
+                    _save_gif(r['_frames'], save_dir / f'mpc_ep{ep+1}.gif')
 
-    print(f'\n  {"avg":>3}  {np.mean(rets):>+9.1f}  {np.mean(rms_vals):>10.3f}  '
-          f'{np.mean(comforts):>8.3f}  {"":>5}  {np.mean(solves):>9.2f}')
-    print(f'  {"std":>3}  {np.std(rets):>9.1f}  {np.std(rms_vals):>10.3f}  '
-          f'{np.std(comforts):>8.3f}')
-    print(f'  {"max":>3}  {np.max(rets):>+9.1f}')
-    print(f'  {"min":>3}  {np.min(rets):>+9.1f}')
+            rets = [r['episode_return'] for r in results]
+            rms_vals = [r['rms_accel'] for r in results]
+            comforts = [r['comfort_score'] for r in results]
+            solves = [r['solve_ms_mean'] for r in results]
 
-    best_rl = _best_rl(_ROOT / 'models')
-    if best_rl:
-        gap = np.mean(rets) - best_rl['best_mean_return']
-        print(f'\n  RL best  : {best_rl["best_mean_return"]:+.1f}  '
-              f'({best_rl["exp"]} @ step {best_rl["best_step"]:,})')
-        print(f'  MPC mean : {np.mean(rets):+.1f}')
-        print(f'  gap      : {gap:+.1f}  (positive = MPC better)')
+            print(f'\n  {"avg":>3}  {np.mean(rets):>+9.1f}  {np.mean(rms_vals):>10.3f}  '
+                  f'{np.mean(comforts):>8.3f}  {"":>5}  {np.mean(solves):>9.2f}')
+            print(f'  {"std":>3}  {np.std(rets):>9.1f}  {np.std(rms_vals):>10.3f}  '
+                  f'{np.std(comforts):>8.3f}')
+            print(f'  {"max":>3}  {np.max(rets):>+9.1f}')
+            print(f'  {"min":>3}  {np.min(rets):>+9.1f}')
 
-    clean = [{k: v for k, v in r.items() if not k.startswith('_')} for r in results]
-    summary = {
-        'method':          'MPC-acados',
-        'horizon_steps':   args.horizon,
-        'horizon_secs':    round(args.horizon * 0.02, 3),
-        'n_episodes':      args.n_episodes,
-        'mean_return':     round(float(np.mean(rets)),     2),
-        'std_return':      round(float(np.std(rets)),      2),
-        'max_return':      round(float(np.max(rets)),      2),
-        'min_return':      round(float(np.min(rets)),      2),
-        'mean_rms_accel':  round(float(np.mean(rms_vals)), 4),
-        'mean_comfort':    round(float(np.mean(comforts)), 4),
-        'mean_solve_ms':   round(float(np.mean(solves)),   3),
-        'rl_comparison':   best_rl,
-        'episodes':        clean,
-    }
+            clean = [{k: v for k, v in r.items() if not k.startswith('_')} for r in results]
+            summary = {
+                'method': 'MPC-acados',
+                'horizon_steps': args.horizon,
+                'horizon_secs': round(args.horizon * 0.02, 3),
+                'n_episodes': args.n_episodes,
+                'mean_return': round(float(np.mean(rets)), 2),
+                'std_return': round(float(np.std(rets)), 2),
+                'max_return': round(float(np.max(rets)), 2),
+                'min_return': round(float(np.min(rets)), 2),
+                'mean_rms_accel': round(float(np.mean(rms_vals)), 4),
+                'mean_comfort': round(float(np.mean(comforts)), 4),
+                'mean_solve_ms': round(float(np.mean(solves)), 3),
+                'episodes': clean,
+            }
 
-    out = Path(args.out) if args.out else save_dir / 'summary.json'
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(summary, indent=2))
-    print(f'\n  Results → {out}')
+            out = Path(args.out) if args.out else save_dir / 'summary.json'
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(summary, indent=2))
+            print(f'\n  Results → {out}')
+
+            del ctrl
+            del env
+            gc.collect()
+    finally:
+        try:
+            terminal_out.close()
+            os.write(saved_stdout, output.getvalue().encode('utf-8'))
+        finally:
+            os.close(saved_stdout)
+            os.close(saved_stderr)
+            os.close(devnull_fd)
 
 
 if __name__ == '__main__':
