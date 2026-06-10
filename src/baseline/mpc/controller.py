@@ -52,8 +52,7 @@ class MPCController:
         self._prev_u              = 0.0
         self._gen_base            = Path(tempfile.gettempdir()) / 'acados_qc'
 
-        # 3-state speed-planner: [v, s_pos, u_prev]. No suspension dynamics —
-        # the full 7-state model causes solver failures from bumpstop Jacobians.
+        # 3-state speed-planner: [v, s_pos, u_prev]; no suspension dynamics
         gen_dir = str(self._gen_base / (_OCP_VERSION + '_simple'))
         os.makedirs(gen_dir, exist_ok=True)
         with _suppress_native_output():

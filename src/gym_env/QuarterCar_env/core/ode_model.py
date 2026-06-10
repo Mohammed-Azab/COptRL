@@ -159,7 +159,7 @@ class QuarterCarODE:
     def step(
         self,
         x: np.ndarray,
-        road,        # RoadGenerator — duck typed; needs get_height_dot_at(s, v)
+        road,        # RoadGenerator: needs get_height_dot_at(s, v)
         s_pos: float,
         v: float,
     ) -> tuple[np.ndarray, float, float]:

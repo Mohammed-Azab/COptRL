@@ -63,15 +63,15 @@ class RoadGenerator:
         return bumps
 
     def get_height(self, t: float) -> float:
-        # legacy time-based query — kept for render/tests; env uses get_height_at(s)
+        # legacy, env uses get_height_at(s)
         return self.get_height_at(self.speed * t)
 
     def get_height_dot(self, t: float) -> float:
-        # legacy time-based query — env uses get_height_dot_at(s, v)
+        # legacy, env uses get_height_dot_at(s, v)
         return self.get_height_dot_at(self.speed * t, self.speed)
 
     def get_height_at(self, s: float) -> float:
-        # ζ(s) — road height at arc-length position s [m]
+        # ζ(s): road height at arc-length position s [m]
         if self.profile == 'flat':
             return 0.0
         if self.profile == 'speed_bump':
@@ -87,7 +87,7 @@ class RoadGenerator:
         return 0.0
 
     def get_height_dot_at(self, s: float, v: float) -> float:
-        # ζ̇(s, v) = dζ/dx · v — road velocity at arc-length s, vehicle speed v
+        # ζ̇(s, v) = dζ/dx · v: road velocity at arc-length s, vehicle speed v
         if self.profile == 'flat':
             return 0.0
         if self.profile == 'speed_bump':
@@ -105,7 +105,7 @@ class RoadGenerator:
         return 0.0
 
     def get_height_array(self, t_array: np.ndarray) -> np.ndarray:
-        # vectorised time-based query — legacy, kept for tests
+        # vectorised time-based query, legacy, kept for tests
         t = np.asarray(t_array, dtype=np.float64)
         return self.get_height_array_pos(self.speed * t)
 
@@ -169,7 +169,7 @@ class RoadGenerator:
         # limit v so peak ζ̇ = v·πH/L stays within ZETA_DOT_LIMIT (obs safe range)
         if self.profile != 'speed_bump' or not self._bumps:
             return
-        ZETA_DOT_LIMIT = 7.0   # m/s — matches OBS_HIGH[1] in env_params.yaml
+        ZETA_DOT_LIMIT = 7.0   # m/s, matches OBS_HIGH[1]
         steepest = max(np.pi * A / L for _, A, L in self._bumps)  # πH/L
         if steepest > 0:
             v_lim = ZETA_DOT_LIMIT / steepest

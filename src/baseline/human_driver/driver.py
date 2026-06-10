@@ -70,7 +70,7 @@ class HumanDriverController:
             v_cross = self._crossing_speed(A, L)
 
             if s_pos >= x0:
-                # on the bump — hold crossing speed
+                # on the bump, hold crossing speed
                 v_target = min(v_target, v_cross)
                 continue
 
@@ -80,7 +80,7 @@ class HumanDriverController:
                 continue
 
             if v <= v_cross:
-                # already at or below crossing speed — nothing to do
+                # already at or below crossing speed
                 continue
 
             # braking distance from *current* speed to v_cross at comfortable decel
@@ -97,7 +97,7 @@ class HumanDriverController:
 
         return max(self.v_min, v_target)
 
-    # control interface — same signature as MPCController.act
+    # control interface, same signature as MPCController.act
 
     def act(self, x: np.ndarray, s_pos: float, road: 'RoadGenerator') -> float:
         # returns normalised action u in [-1, 1]

@@ -1,4 +1,4 @@
-# QuarterCarEnv — Gymnasium env for speed control over road bumps.
+# QuarterCarEnv: Gymnasium env for speed control over road bumps.
 #
 # Action: (1,) float32 in [-1, 1]
 #   a_cmd = action[0] * a_max  [m/s²]

@@ -1,5 +1,5 @@
 """
-Road scenario generator — reads a YAML config and saves each scenario as a
+Road scenario generator. Reads a YAML config and saves each scenario as a
 pandas-backed JSON file.
 
 OUTPUT FORMAT

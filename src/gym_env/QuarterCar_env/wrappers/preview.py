@@ -11,17 +11,15 @@ from QuarterCar_env.config.env_params import DT
 _DENSE_N = 200   # spatial samples for peak detection over the preview horizon
 
 # crossing-frequency normalization: v_max / narrowest catalog bump (0.92 m)
-_FREQ_MAX = 20.0 / 0.92   # ≈ 21.7 Hz — clipped at 1.0 in output
+_FREQ_MAX = 20.0 / 0.92   # ≈21.7 Hz, clipped at 1.0 in output
 
 
 class PreviewWrapper(gym.ObservationWrapper):
     # appends [t2r, height, freq] × n_peaks to the base observation
     #
-    # t2r   — time-to-reach (s) / T_MAX, where T_MAX = preview_distance / v_min
-    #          0 = bump at your position (urgent), 1 = bump at preview horizon (plenty of time)
-    # height — peak height / h_clip  (0-1)
-    # freq   — crossing frequency v/L / _FREQ_MAX  (0-1)
-    #          high value → bump at body/wheel resonance → more impactful at current speed
+    # t2r    time-to-reach / T_MAX, T_MAX = preview_distance / v_min  (0-1)
+    # height peak height / h_clip  (0-1)
+    # freq   crossing frequency v/L / _FREQ_MAX  (0-1)
 
     def __init__(self, env: gym.Env, cfg: RewardConfig | None = None):
         super().__init__(env)
@@ -88,14 +86,14 @@ class PreviewWrapper(gym.ObservationWrapper):
             peak_h      = float(heights[pk])
             peak_w_m    = float(props["widths"][i] * ds)
 
-            # A — time-to-reach: seconds normalised by T_MAX
+            # A: time-to-reach, seconds normalised by T_MAX
             t2r = dist_m / v_safe
             peak_arr[i * 3]     = float(np.clip(t2r / T_MAX, 0.0, 1.0))
 
             # height normalised by h_clip
             peak_arr[i * 3 + 1] = float(np.clip(peak_h / cfg.h_clip, 0.0, 1.0))
 
-            # C — crossing frequency v/L normalised by _FREQ_MAX
+            # C: crossing frequency v/L normalised by _FREQ_MAX
             freq = v_safe / max(peak_w_m, 0.01)
             peak_arr[i * 3 + 2] = float(np.clip(freq / _FREQ_MAX, 0.0, 1.0))
 
@@ -111,7 +109,7 @@ class PreviewWrapper(gym.ObservationWrapper):
                     peak_arr[i * 3 + 2] += float(rng.normal(0, cfg.noise_width_std))    * scale
             peak_arr = np.clip(peak_arr, 0.0, 1.0)
 
-        # B — PT1 low-pass (τ reduced to 0.05s to cut lag at high speed)
+        # B: PT1 low-pass (tau = 0.05s)
         alpha = DT / (cfg.pt1_tau + DT)
         self._filtered_preview = (
             self._filtered_preview + alpha * (peak_arr - self._filtered_preview)

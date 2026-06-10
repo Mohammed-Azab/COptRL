@@ -17,11 +17,11 @@ class CurriculumWrapper(gym.Wrapper):
     # level control
 
     def set_level(self, level: int) -> None:
-        # one-way advance — training env, called by PerformanceCurriculumCallback
+        # one-way advance, training env, called by PerformanceCurriculumCallback
         self._active_level = min(max(self._active_level, int(level)), self._max_level)
 
     def set_forced_level(self, level: Optional[int]) -> None:
-        # pin to level — eval env sync via VecNormalizeSyncCallback
+        # pin to level, eval env sync via VecNormalizeSyncCallback
         self._forced_level = level if level is None else min(int(level), self._max_level)
 
     @property

@@ -1,8 +1,8 @@
-# MPC baseline — acados SQP-RTI + HPIPM on the quarter-car environment
+# MPC baseline: acados SQP-RTI + HPIPM on the quarter-car environment
 #
-# ocp.py        — CasADi symbolic quarter-car ODE + acados OCP/solver builder
-# controller.py — MPCController: caches solver per road geometry, runs SQP-RTI
-# mpc.py        — CLI runner: episodes, comparison table, JSON output
+# ocp.py          CasADi symbolic quarter-car ODE + acados OCP/solver builder
+# controller.py   MPCController: caches solver per road geometry, runs SQP-RTI
+# mpc.py          CLI runner: episodes, comparison table, JSON output
 #
 # usage:
 #   python src/baseline/mpc/mpc.py

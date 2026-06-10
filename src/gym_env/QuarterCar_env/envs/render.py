@@ -25,7 +25,7 @@ from QuarterCar_env.config.render_params import (
 _ROAD_X = np.linspace(-RENDER_ROAD_HALF, RENDER_ROAD_HALF, RENDER_ROAD_N)
 _MAX_EP_STEPS = 4000
 
-# Speed-vector arrow — positions driven by render_params.yaml
+# Speed-vector arrow, positions driven by render_params.yaml
 _ARR_X0      = RENDER_ARR_X
 _ARR_Y_V     = RENDER_ARR_Y
 _ARR_MAX_LEN = RENDER_ARR_LEN
@@ -218,7 +218,7 @@ def init_render(env):
                           r'$m_B$', ha='left', va='center',
                           fontsize=9, color='#333333', zorder=7)
 
-    # info box — publication style: square border, no monospace
+    # info box, publication style: square border, no monospace
     status_text = ax_s.text(
         0.02, 0.97, '', transform=ax_s.transAxes,
         va='top', ha='left', fontsize=8,
@@ -401,7 +401,7 @@ def update_artists(env):
     art['mb_dot'].set_data([0], [y_B])
     art['mb_label'].set_position((-RENDER_W_MB / 2 + 0.05, y_B))
 
-    # info box — horizontal two-row layout
+    # info box, horizontal two-row layout
     n_passed = int(env._bumps_passed)
     n_total  = len(env._bump_ends)
     art['status_text'].set_text(

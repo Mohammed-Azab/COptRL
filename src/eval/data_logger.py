@@ -2,13 +2,13 @@
 Run-data logger for eval.py, driver_eval.py, and mpc.py.
 
 Saves per-episode timeseries to  data/<method>/<road>/<timestamp>/
-  run.mat   — MATLAB struct (all arrays as max_steps × n_episodes matrices)
-  run.npz   — NumPy archive  (same arrays, same layout)
-  run_info.json — human-readable metadata + variable guide
+  run.mat   MATLAB struct (all arrays as max_steps × n_episodes matrices)
+  run.npz   NumPy archive  (same arrays, same layout)
+  run_info.json human-readable metadata + variable guide
 
 Layout (both formats)
 ---------------------
-Timeseries — shape (max_steps, n_episodes), NaN-padded for shorter episodes:
+Timeseries: shape (max_steps, n_episodes), NaN-padded for shorter episodes:
   t           time axis                 [s]
   v_kmh       longitudinal speed        [km/h]
   v_ref_kmh   speed reference           [km/h]
@@ -18,7 +18,7 @@ Timeseries — shape (max_steps, n_episodes), NaN-padded for shorter episodes:
   reward      per-step reward           [-]
   s_pos       arc-length position       [m]       (when available)
 
-Per-episode scalars — shape (n_episodes,):
+Per-episode scalars, shape (n_episodes,):
   episode_return    total episode return
   rms_accel         RMS body accel       [m/s²]
   comfort_score     comfort metric       [0-1]
@@ -49,7 +49,7 @@ MATLAB quick-start
 Python quick-start
 ------------------
     import numpy as np
-    d = np.load('run.npz')          # no allow_pickle needed — no object arrays
+    d = np.load('run.npz')          # no allow_pickle needed, no object arrays
     t, v = d['t'], d['v_kmh']      # (max_steps, n_ep)
     # episode 0
     mask = ~np.isnan(t[:, 0])
@@ -189,7 +189,7 @@ class RunLogger:
         arrays['comfort_score']  = np.array([e.comfort_score  for e in eps])
         arrays['n_steps']        = np.array([e.n_steps        for e in eps], dtype=np.float64)
 
-        # numeric metadata only — no object arrays → npz loads without allow_pickle
+        # numeric metadata only, no object arrays; npz loads without allow_pickle
         meta_num = {
             'meta_dt':         float(dt),
             'meta_v_max_kmh':  float(self.v_max_kmh),
@@ -206,7 +206,7 @@ class RunLogger:
 
         saved: dict[str, Path] = {}
 
-        # ── .npz — pure float arrays, no object dtype ──────────────────────
+        # .npz: pure float arrays, no object dtype
         npz_path = self.save_dir / 'run.npz'
         np.savez(str(npz_path), **arrays, **meta_num)
         saved['npz'] = npz_path
