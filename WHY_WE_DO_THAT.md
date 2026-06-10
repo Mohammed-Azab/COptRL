@@ -437,6 +437,28 @@ because the progress reward outweighs heave penalties.
 
 ---
 
+## Preview observation uses t2r and freq, not dist and width
+
+**What we do:**
+The preview wrapper encodes each upcoming bump as `[t2r, height, freq]` rather than `[dist, height, width]`.
+
+```python
+t2r  = dist_m / v_safe          # time-to-reach in seconds, normalised by T_MAX = preview_distance / v_min
+freq = v_safe / peak_w_m        # crossing frequency in Hz, normalised by _FREQ_MAX = v_max / L_narrowest
+```
+
+**Why — this is not cheating:**
+`dist` and `width` contain the same information, but in a form that requires the neural net to learn to divide by `v` before the signal is useful.
+`t2r` is *Time-to-Contact (TTC)* — the standard automotive safety metric. A driver does not think "that bump is 30 m away"; they think "I have 1.5 s." A policy that receives raw distance misses urgency entirely: 30 m at 20 m/s (1.5 s) and 30 m at 5 m/s (6 s) look identical but demand opposite actions.
+`freq = v / L` is the excitation frequency the suspension will see on crossing. At resonance (body ~1.3 Hz, wheel ~11 Hz) even a small bump produces large accelerations. Providing this directly means the policy doesn't need to approximate a division.
+
+Both features are derived from quantities the real sensor already provides (distance, width, speed). A real control engineer would compute both in one line. Providing them pre-computed removes a hard nonlinear approximation problem and replaces it with a nearly-linear relationship — this is observation engineering, not privilege.
+
+**What breaks if you revert:**
+Replacing t2r with raw dist gives identical information but makes the urgency–speed interaction implicit. The policy must then learn to divide, which takes many more samples and may never fully converge. At high speed the agent will routinely under-react to close bumps; at low speed it will over-react to distant ones.
+
+---
+
 ## Issue 13 — MPC one-sided speed tracking (and why it doesn't decelerate)
 
 **What we observed:**
