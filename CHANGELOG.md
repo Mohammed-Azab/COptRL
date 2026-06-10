@@ -4,6 +4,11 @@ All entries are one line. For design rationale see `WHY_WE_DO_THAT.md`.
 
 ---
 
+- 4dbfb1b — fix reward_bounds: add n_bumps param so episode_max includes crossing rewards
+- 63415b5 — document how agent uses t2r for anticipatory braking in WHY_WE_DO_THAT
+- 0d75578 — add --bump-type and --n-bumps args to train.py for single-bump curriculum
+- (config) — widen random road gaps: min_gap 5→25 m, max_gap 30→50 m, flat_start→60 m
+- (config) — retune for wider roads: EPISODE_STEPS 300→2000, gamma 0.97→0.999, n_steps 1024→4096, timesteps/trial 300k→1M
 - b6dd10f — remove all `enable_*` flags from reward config; disable terms via weight=0 instead
 - b4d8da1 — preview obs: replace dist/width with t2r/freq; reduce pt1_tau 0.2→0.05s; re-enable speed-band with separate v_limit; add noise_active flag
 - 34a0828 — remove dead reward code: tracking-disabled block, all always-true enable guards, else branches

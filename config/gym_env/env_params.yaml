@@ -22,8 +22,9 @@ F_ks_nlin_max: 100000.0
 
 # timing and episode length
 DT: 0.02
-DT_SIM: 0.001  
-EPISODE_STEPS: 300
+DT_SIM: 0.001
+# 2000 steps = 40 s: covers a 5-bump road (worst-case ~308 m) at average crossing speed ~9 m/s
+EPISODE_STEPS: 2000
 
 TRUNC_TRAVEL: 0.20
 TRUNC_ZS: 0.40

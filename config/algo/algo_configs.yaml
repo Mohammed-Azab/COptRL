@@ -1,18 +1,18 @@
-# PPO hyperparameters — passed directly to SB3 PPO constructor.
+# PPO hyperparameters for SB3 PPO constructor.
 # Keys match SB3 API exactly so they can be unpacked with **kwargs.
 
 PPO:
   policy: MlpPolicy
   learning_rate: "lin_3e-5"
-  n_steps: 1024
+  n_steps: 4096
   batch_size: 256
   n_epochs: 10
-  gamma: 0.9734285310022986
-  gae_lambda: 0.9776478343048407
-  clip_range: 0.1
-  ent_coef: 0.0020983727254434213
-  vf_coef: 0.6926142978851177
-  max_grad_norm: 0.827220270040963
+  gamma: 0.999
+  gae_lambda: 0.98
+  clip_range: 0.2
+  ent_coef: 0.002
+  vf_coef: 0.7
+  max_grad_norm: 0.83
   policy_kwargs:
     net_arch:
       pi: [128, 128]
@@ -20,12 +20,12 @@ PPO:
 
 training:
   seed: 42
-  total_timesteps: 5_000_000
+  total_timesteps: 10_000_000
   n_envs: 5
   n_eval_envs: 1
-  eval_freq: 20_000
+  eval_freq: 50_000
   n_eval_episodes: 10
-  checkpoint_freq: 100_000
+  checkpoint_freq: 200_000
   norm_obs: true
   norm_reward: true
   eval_road: speed_bump
