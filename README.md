@@ -173,7 +173,7 @@ Current weights: `Q_zBddot=50.0, Q_zWddot=0.5, Q_a=1.0, Q_v=1.0, Q_step=0.1, w_j
 
 | Level | Bump catalog IDs | Gap range | Advance threshold |
 |---|---|---|---|
-| 0 (easy) | 3, 4 — long/gentle slopes | wide | +50 |
+| 0 (easy) | 3, 4 — long/gentle slopes | wide | 0 |
 | 1 (medium) | 0, 1, 3, 4 | medium | −100 |
 | 2 (hard) | 0–4, incl. severe | tight | −300 |
 | 3 (expert) | 0–4, more bumps | very tight | — |

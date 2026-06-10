@@ -2,7 +2,7 @@
 # Speed values are in km/h; loaders convert to m/s internally.
 
 advance_return_threshold:
-  0:   +50.0   # above naive track-v_ref (~-263 mean); shows bump anticipation
+  0:     0.0   # clearly above naive (~-263 mean); agent navigates gentle bumps with anticipation
   1:  -100.0   # medium bumps harder; shows mixed-catalog planning
   2:  -300.0   # severe bumps present; shows agent can manage severity
 
