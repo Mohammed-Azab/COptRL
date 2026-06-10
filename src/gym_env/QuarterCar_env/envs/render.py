@@ -401,12 +401,14 @@ def update_artists(env):
     art['mb_label'].set_position((-RENDER_W_MB / 2 + 0.05, y_B))
 
     # info box — two-column layout with SI units
+    n_passed = int(env._bumps_passed)
+    n_total  = len(env._bump_ends)
     art['status_text'].set_text(
         f'$t$ = {env._t:.2f} s          $s$ = {env._s_pos:.1f} m\n'
         f'$z_B$ = {z_B*1000:+.2f} mm    $z_W$ = {z_W*1000:+.2f} mm\n'
         f'$\\zeta$ = {zeta_0*1000:.3f} mm\n'
         f'$v$ = {env._v*3.6:.1f} km/h\n'
-        f'$R$ = {env._episode_reward:.2f}'
+        f'$R$ = {env._episode_reward:.2f}    bumps {n_passed}/{n_total}'
     )
 
     # speed arrow
