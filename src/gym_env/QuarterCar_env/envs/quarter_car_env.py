@@ -262,7 +262,7 @@ class QuarterCarEnv(gym.Env):
         self._v_ref_last = v_ref
 
         reward, breakdown = compute_reward(
-            v_new, v_ref,
+            v_new,
             self._last_z_B_ddot,
             self._last_z_W_ddot,
             self._filtered_a,
