@@ -17,10 +17,10 @@ custom_dis:  # m
 # (num_bumps - 1) entries.
 
 # Uniform gap
-constant_dis: 5       # m
+constant_dis: 20      # m
 
 # X-position where the first bump starts [m]
-bump_x_start: 8.0       # m
+bump_x_start: 60.0      # m — v_max²/(2·a_comfort) ≈ 100m; 60m gives hard-braking margin
 
 # Default longitudinal speed
 vehicle_speed: 21.6      # km/h  (= 6 m/s)
@@ -29,7 +29,7 @@ vehicle_speed: 21.6      # km/h  (= 6 m/s)
 random:
   num_bumps_range:     [1, 5]
   catalog_ids:         [0, 1, 2, 3, 4]
-  min_gap:             5.0
-  max_gap:             30.0
-  flat_start:          10.0
+  min_gap:             25.0
+  max_gap:             50.0
+  flat_start:          60.0    # m — always enough for hard braking from v_max; from_random adds physics floor
   v_random_low_factor: 2.0

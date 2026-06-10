@@ -202,7 +202,7 @@ class QuarterCarEnv(gym.Env):
         # bump-crossing state — reset each episode
         self._bumps_passed   = 0
         self._bump_ends      = sorted(
-            x0 + L for (x0, _, L) in self._road._bumps
+            x0 + L + 1.0 for (x0, _, L) in self._road._bumps
         ) if self.road_profile == 'speed_bump' else []
 
         # reset filter state

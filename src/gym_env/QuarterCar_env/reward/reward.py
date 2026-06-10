@@ -96,7 +96,7 @@ def compute_reward(
     # jerk and action_smooth are intentionally NOT velocity-scaled:
     # they measure self-induced longitudinal oscillation which the agent fully controls
     # and which should cost the same at any speed. Scaling them down at low speed lets
-    # the agent oscillate freely while driving slowly — see TRIAL_ERROR.md Issue 5.
+    # the agent oscillate freely while driving slowly.
     jerk_smooth_penalty = 0.0
     if cfg.enable_jerk:
         rj = r_jerk(filtered_jerk, cfg.j_max, cfg.reward_jerk_clip)

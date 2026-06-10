@@ -208,8 +208,11 @@ class RoadGenerator:
         idxs = rng.integers(0, len(eligible), size=n)
         gaps = rng.uniform(min_gap, max(max_gap, min_gap), size=max(n - 1, 0))
 
+        # guarantee the first bump is always reachable without emergency braking
+        _a_max = 5.0
+        flat_start_safe = max(float(flat_start), vehicle_speed ** 2 / (2.0 * _a_max))
         bumps: list = []
-        x = float(flat_start)
+        x = flat_start_safe
         for i, ci in enumerate(idxs):
             A = float(eligible[ci]['height_m'])
             L = float(eligible[ci]['width_m'])
