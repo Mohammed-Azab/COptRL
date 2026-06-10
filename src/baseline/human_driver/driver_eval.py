@@ -22,7 +22,8 @@ sys.path.insert(0, str(_ROOT / 'src' / 'eval'))
 
 import QuarterCar_env.envs  # noqa: F401
 from QuarterCar_env.config.reward_params import load_reward_config
-from QuarterCar_env.config.env_params import DT
+from QuarterCar_env.config.env_params import DT, EPISODE_STEPS
+from QuarterCar_env.reward.utils import reward_bounds
 from driver import HumanDriverController
 from scenario_loader import load_scenario, list_scenarios, make_road_generator
 from data_logger import RunLogger, EpisodeData
@@ -307,6 +308,10 @@ def main() -> None:
     print(f'  {"std":>3}  {np.std(rets):>9.1f}  {np.std(rms_vals):>10.3f}  {np.std(comforts):>8.3f}')
     print(f'  {"max":>3}  {np.max(rets):>+9.1f}')
     print(f'  {"min":>3}  {np.min(rets):>+9.1f}')
+
+    bounds = reward_bounds(cfg, EPISODE_STEPS)
+    print(f'\n  reward range  episode  [{bounds["episode_min"]:+.0f}, {bounds["episode_max"]:+.0f}]  (theoretical)')
+    print(f'                per-step [{bounds["per_step_min"]:+.2f}, {bounds["per_step_max"]:+.2f}]')
 
     # strip internal time-series before saving JSON
     clean = [{k: v for k, v in r.items() if not k.startswith('_')} for r in results]
