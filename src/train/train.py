@@ -362,7 +362,8 @@ def main() -> None:
         start_level=start_level,
     )
 
-    bounds = reward_bounds(rcfg, EPISODE_STEPS)
+    _n_bumps_max = args.n_bumps if args.bump_type is not None else 5
+    bounds = reward_bounds(rcfg, EPISODE_STEPS, n_bumps=_n_bumps_max)
 
     _BUMP_NAMES = {0: 'short_bump', 1: 'medium_bump', 2: 'severe_bump',
                    3: 'long_bump',  4: 'raised_crosswalk'}

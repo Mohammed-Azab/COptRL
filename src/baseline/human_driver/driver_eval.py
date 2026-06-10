@@ -309,8 +309,10 @@ def main() -> None:
     print(f'  {"max":>3}  {np.max(rets):>+9.1f}')
     print(f'  {"min":>3}  {np.min(rets):>+9.1f}')
 
-    bounds = reward_bounds(cfg, EPISODE_STEPS)
-    print(f'\n  reward range  episode  [{bounds["episode_min"]:+.0f}, {bounds["episode_max"]:+.0f}]  (theoretical)')
+    n_bumps_max = max(results, key=lambda r: r['bumps_total'])['bumps_total'] if results else 0
+    bounds = reward_bounds(cfg, EPISODE_STEPS, n_bumps=n_bumps_max)
+    print(f'\n  reward range  episode  [{bounds["episode_min"]:+.0f}, {bounds["episode_max"]:+.0f}]'
+          f'  (theoretical, {n_bumps_max} bumps, {EPISODE_STEPS} steps)')
     print(f'                per-step [{bounds["per_step_min"]:+.2f}, {bounds["per_step_max"]:+.2f}]')
 
     # strip internal time-series before saving JSON

@@ -55,8 +55,7 @@ def _load_mpc_cfg() -> dict:
 
 
 def _steps_for_road(road, dt: float = 0.02, margin: float = 1.5) -> int:
-    # budget based on v_min (2 m/s) — MPC may creep at minimum speed and still
-    # needs enough steps to reach every bump before the episode terminates
+    # step budget based on v_min: worst-case traversal time
     if road is None or not hasattr(road, '_bumps') or not road._bumps:
         return 4000
     x0, _, L = road._bumps[-1]
@@ -373,8 +372,10 @@ def main() -> None:
             print(f'  {"max":>3}  {np.max(rets):>+9.1f}')
             print(f'  {"min":>3}  {np.min(rets):>+9.1f}')
 
-            bounds = reward_bounds(cfg, EPISODE_STEPS)
-            print(f'\n  reward range  episode  [{bounds["episode_min"]:+.0f}, {bounds["episode_max"]:+.0f}]  (theoretical)')
+            n_bumps_max = max(results, key=lambda r: r['bumps_total'])['bumps_total'] if results else 0
+            bounds = reward_bounds(cfg, EPISODE_STEPS, n_bumps=n_bumps_max)
+            print(f'\n  reward range  episode  [{bounds["episode_min"]:+.0f}, {bounds["episode_max"]:+.0f}]'
+                  f'  (theoretical, {n_bumps_max} bumps, {EPISODE_STEPS} steps)')
             print(f'                per-step [{bounds["per_step_min"]:+.2f}, {bounds["per_step_max"]:+.2f}]')
 
             clean = [{k: v for k, v in r.items() if not k.startswith('_')} for r in results]
