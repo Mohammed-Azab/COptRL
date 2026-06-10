@@ -25,11 +25,11 @@ The environment runs a full nonlinear quarter-car ODE (Numba-jitted RK4 at 1 ms 
 | Method | Mean return | RMS body accel | Comfort score | Notes |
 |---|---|---|---|---|
 | PPO | **-** | — | — | exp_16, 1.84M steps, level 0 mastered |
-| Human driver | −106 | 5.78 m/s² | 0.0 | kinematic look-ahead planner |
-| MPC (acados) | −191 ± 394 | 3.66 m/s² | 0.34 | high variance across road configs |
-| Constant speed | ~−359 | high | 0.0 | no braking at all |
+| Human driver | −644 | 5.78 m/s² | 0.0 | kinematic look-ahead planner |
+| MPC (acados) | — | 3.66 m/s² | 0.34 | not re-evaluated on Mandl reward scale |
+| Constant speed | — | high | 0.0 | not re-evaluated on Mandl reward scale |
 
-Returns measured over randomised speed-bump episodes. Lower = worse. The MPC's huge variance is because it sometimes stalls on heavy road configurations.
+Returns measured over randomised speed-bump episodes under Mandl (2024) reward weights (Q_zBddot=50, g-normalised). Lower = worse. MPC/constant-speed returns are pending re-evaluation on the new reward scale.
 
 ![Human driver episode 1: speed and body acceleration](eval/results/human_driver/speed_bump/human_driver_ep1.png)
 
@@ -129,14 +129,14 @@ The preview samples 200 points over a 60 m lookahead, runs `scipy.signal.find_pe
 
 ## Reward function
 
-The per-step reward has four independent buckets that add together:
+The per-step reward follows Mandl (2024) with g-normalised quadratic cost terms:
 
 ```
-R = (v/v_max) × [w_heave·r_heave + w_wheel·r_wheel + w_accel·r_accel]
-  + w_tracking · r_tracking                    (unscaled — always costs the same)
-  + w_jerk · r_jerk + w_action_smooth · r_smooth  (unscaled — see WHY_WE_DO_THAT.md)
-  + w_progress · r_progress
-  + step_bonus
+R = (v/v_max) × [Q_zBddot·J_heave + Q_zWddot·J_wheel + Q_a·J_long]   (velocity-scaled)
+  + Q_v · J_speed                              (unscaled — always costs the same)
+  + w_jerk · J_jerk + w_action_smooth · J_smooth  (unscaled — see WHY_WE_DO_THAT.md)
+  + w_progress · J_progress
+  + Q_step
   + w_bump_cross  (one-shot per bump cleared)
 ```
 
@@ -144,24 +144,24 @@ R = (v/v_max) × [w_heave·r_heave + w_wheel·r_wheel + w_accel·r_accel]
 
 **Tracking and smoothness are unscaled** — they cost the same at any speed. Without this, the agent learned to drive slowly and oscillate freely (see `WHY_WE_DO_THAT.md`).
 
-**`r_progress = v / v_max`** is always positive — it's what stops the agent from sitting still before every bump.
+**`J_progress = s_pos / road_length`** is always positive — it's what stops the agent from sitting still before every bump.
 
 **Bump-crossing bonus** (`w_bump_cross = 20.0`) fires once each time the vehicle clears the end of a bump.
 
 | Term | Formula | Role |
 |---|---|---|
-| r_heave | −(clip(z̈_B, ±8) / 3.0)² | vertical body accel, ISO 2631 aligned |
-| r_wheel | −(clip(z̈_W, ±60) / 30)² | wheel-hop / road holding |
-| r_tracking | r_speed_band(v, v_min, v_ref) | absolute tracking \|v−v_ref\|/v_ref above v_min; hard cliff below v_min |
-| r_accel | −(clip(ā, ±4) / 2.0)² | longitudinal ride comfort |
-| r_jerk | −(clip(j̄, ±4) / 2.0)² | smoothness of acceleration |
-| r_smooth | −(u_t − u_{t−1})² | control chatter |
-| r_progress | v / v_max | positive reward for going fast |
+| J_heave | −(clip(z̈_B, ±8) / g)² | vertical body accel, g-normalised (Mandl 2024) |
+| J_wheel | −(clip(z̈_W, ±60) / g)² | wheel-hop / road holding |
+| J_speed | −\|v−v_ref\|/v_ref above v_min; −1−((v_min−v)/v_min)² below | absolute speed tracking |
+| J_long | −(clip(ā, ±4) / g)² | longitudinal ride comfort |
+| J_jerk | −(clip(j̄, ±4) / j_max)² | smoothness of acceleration |
+| J_smooth | −(u_t − u_{t−1})² | control chatter |
+| J_progress | s_pos / road_length | positive reward for forward progress |
 | bump bonus | +w_bump_cross | one-shot per bump end cleared |
 
 Terminal bonus of ±100 at episode end — requires **both** low RMS body accel (< a_limit = 5 m/s²) and a minimum mean speed.
 
-Current weights: `w_heave=0.8, w_wheel=0.6, w_tracking=0.2, w_accel=0.3, w_jerk=0.4, w_action_smooth=0.1, w_progress=0.15, w_bump_cross=20.0, step_bonus=0.05`
+Current weights: `Q_zBddot=50.0, Q_zWddot=0.5, Q_a=1.0, Q_v=1.0, Q_step=0.1, w_jerk=0.4, w_action_smooth=0.1, w_progress=0.15, w_bump_cross=20.0`
 
 ---
 
@@ -173,9 +173,9 @@ Current weights: `w_heave=0.8, w_wheel=0.6, w_tracking=0.2, w_accel=0.3, w_jerk=
 
 | Level | Bump catalog IDs | Gap range | Advance threshold |
 |---|---|---|---|
-| 0 (easy) | 3, 4 — long/gentle slopes | wide | −80 |
-| 1 (medium) | 0, 1, 3, 4 | medium | −60 |
-| 2 (hard) | 0–4, incl. severe | tight | −40 |
+| 0 (easy) | 3, 4 — long/gentle slopes | wide | +50 |
+| 1 (medium) | 0, 1, 3, 4 | medium | −100 |
+| 2 (hard) | 0–4, incl. severe | tight | −300 |
 | 3 (expert) | 0–4, more bumps | very tight | — |
 
 **Speed bump catalog** (from Mandl 2021 physical measurements):

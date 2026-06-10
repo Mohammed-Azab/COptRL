@@ -30,6 +30,9 @@ All entries are one line. For design rationale see `WHY_WE_DO_THAT.md`.
 - 330fc40 — lower curriculum thresholds; fix reward range display
 - abfae90 — reward: add step_bonus=0.5 to shift per-step range positive/negative
 - 04995fe — apply Optuna results: lower LR, clip=0.1, smaller network, harder curriculum
+- 42bc0fb — refactor reward.py, __init__.py, reward_params.py: improve comments and formatting
+- ee6c92f — fix linter-corrupted reward.py; rescale curriculum thresholds (+50/−100/−300) for Mandl weights
+- fada71d — adopt Mandl naming (Q_/J_), g-normalisation (÷9.81), weights Q_zBddot=50/Q_zWddot=0.5/Q_a=1/Q_v=1, constant-per-episode v_ref
 - 2fe0143 — tune: seed 0→1000 to avoid overlap with training seed 42
 - c6ffa0c — fix tune recipe: remove positional study arg that was swallowing flags
 - e19971a — fix tune: timesteps, curriculum off, eval ordering, evaluate_policy call
