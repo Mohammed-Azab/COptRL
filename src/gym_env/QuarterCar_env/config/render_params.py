@@ -48,3 +48,7 @@ RENDER_DA_CYL_H_TIRE = float(_cfg["RENDER_DA_CYL_H_TIRE"])
 
 RENDER_CONTACT_STEM = float(_cfg["RENDER_CONTACT_STEM"])
 Y_LINE_OFFSET = float(_cfg["Y_LINE_OFFSET"])
+
+RENDER_ARR_X   = float(_cfg.get("RENDER_ARR_X",    -2.5))
+RENDER_ARR_Y   = float(_cfg.get("RENDER_ARR_Y",     5.5))
+RENDER_ARR_LEN = float(_cfg.get("RENDER_ARR_LEN",   8.0))

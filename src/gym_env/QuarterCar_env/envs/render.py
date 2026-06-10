@@ -19,15 +19,16 @@ from QuarterCar_env.config.render_params import (
     RENDER_CONTACT_STEM, RENDER_GROUND_Y,
     Y_LINE_OFFSET,
     RENDER_BUMP_MARKERS,
+    RENDER_ARR_X, RENDER_ARR_Y, RENDER_ARR_LEN,
 )
 
 _ROAD_X = np.linspace(-RENDER_ROAD_HALF, RENDER_ROAD_HALF, RENDER_ROAD_N)
 _MAX_EP_STEPS = 4000
 
-# Speed-vector arrow (data coordinates on schematic axes)
-_ARR_X0      = -2.5   # arrow base x
-_ARR_Y_V     =  5.5   # y for speed arrow — below info box (info box bottom ≈ y 7.0)
-_ARR_MAX_LEN =  8.0   # full-length at v_max (tip at x = 5.5)
+# Speed-vector arrow — positions driven by render_params.yaml
+_ARR_X0      = RENDER_ARR_X
+_ARR_Y_V     = RENDER_ARR_Y
+_ARR_MAX_LEN = RENDER_ARR_LEN
 
 # Publication colour palette for bump markers
 _BUMP_COLOURS = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400']
@@ -400,15 +401,18 @@ def update_artists(env):
     art['mb_dot'].set_data([0], [y_B])
     art['mb_label'].set_position((-RENDER_W_MB / 2 + 0.05, y_B))
 
-    # info box — two-column layout with SI units
+    # info box — horizontal two-row layout
     n_passed = int(env._bumps_passed)
     n_total  = len(env._bump_ends)
     art['status_text'].set_text(
-        f'$t$ = {env._t:.2f} s          $s$ = {env._s_pos:.1f} m\n'
-        f'$z_B$ = {z_B*1000:+.2f} mm    $z_W$ = {z_W*1000:+.2f} mm\n'
-        f'$\\zeta$ = {zeta_0*1000:.3f} mm\n'
-        f'$v$ = {env._v*3.6:.1f} km/h\n'
-        f'$R$ = {env._episode_reward:.2f}    bumps {n_passed}/{n_total}'
+        f'$t$ = {env._t:.2f} s'
+        f'    $s$ = {env._s_pos:.1f} m'
+        f'    $z_B$ = {z_B*1000:+.2f} mm'
+        f'    $z_W$ = {z_W*1000:+.2f} mm'
+        f'    $\\zeta$ = {zeta_0*1000:.3f} mm\n'
+        f'$v$ = {env._v*3.6:.1f} km/h'
+        f'    bumps {n_passed}/{n_total}'
+        f'    $R$ = {env._episode_reward:.2f}'
     )
 
     # speed arrow

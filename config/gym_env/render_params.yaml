@@ -55,3 +55,8 @@ RENDER_DA_CYL_H_TIRE: 0.8
 # contact/ground markers
 RENDER_CONTACT_STEM: 0
 Y_LINE_OFFSET: 0.7
+
+# speed arrow (data coordinates on the schematic axis)
+RENDER_ARR_X:   -2.5   # arrow base x
+RENDER_ARR_Y:    5.5   # arrow y — keep below info box bottom
+RENDER_ARR_LEN:  8.0   # full-length at v_max (tip at x = ARR_X + ARR_LEN)
