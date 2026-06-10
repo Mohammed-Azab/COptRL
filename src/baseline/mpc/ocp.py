@@ -7,11 +7,11 @@ from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 # CasADi symbolic ODE
 
 def _ode_expr(x: ca.SX, zq: ca.SX, p: dict) -> ca.SX:
-    # quarter-car ODE — state: [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B]
+    # quarter-car ODE, state: [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B]
     susp = x[2]   # z_W - z_B
     v_S  = x[1] - x[3]   # ż_W - ż_B
 
-    # nonlinear bumpstop — clamp exponent to ≤30 to prevent exp overflow in SQP jacobians
+    # nonlinear bumpstop: clamp exponent to ≤30 to prevent exp overflow in SQP jacobians
     dz_fc      = susp - p['dz_cmp']
     exp_cmp    = ca.exp(ca.fmin(dz_fc * p['f2_cmp'] / p['dz_S_stat'], 30.0))
     F_cmp      = ca.fmin(
@@ -28,7 +28,7 @@ def _ode_expr(x: ca.SX, zq: ca.SX, p: dict) -> ca.SX:
                ca.if_else(susp < -p['dz_rbd'], F_rbd, 0.0))
     F_spring = p['k_S'] * susp + F_nlin
 
-    # sigmoid-blended piecewise damper — clamp exponent to [-200,200] to prevent overflow
+    # sigmoid-blended piecewise damper: clamp exponent to [-200,200] to prevent overflow
     k    = 50.0
     w_c  = 1.0 / (1.0 + ca.exp(ca.fmin(ca.fmax(-k * v_S,              -200.0), 200.0)))
     w_hc = 1.0 / (1.0 + ca.exp(ca.fmin(ca.fmax(-k * (v_S - p['v_d']), -200.0), 200.0)))
@@ -51,7 +51,7 @@ def _ode_expr(x: ca.SX, zq: ca.SX, p: dict) -> ca.SX:
 
 
 def _zq_expr(s: ca.SX, v: ca.SX, bumps: list) -> ca.SX:
-    # ζ̇(s, v) = dζ/dx · v — symbolic road velocity for given bump layout
+    # ζ̇(s, v) = dζ/dx · v: symbolic road velocity for given bump layout
     zd = ca.SX(0.0)
     for x0, A, L in bumps:
         dx   = s - x0
@@ -89,7 +89,7 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
     # road disturbance at current position
     zq = _zq_expr(s_pos, v_new, bumps)
 
-    # ODE derivatives (use v_new for road sampling — one midpoint approx)
+    # ODE derivatives (use v_new for road sampling, one midpoint approx)
     zq_mid = _zq_expr(s_pos + 0.5 * dt * v_new, v_new, bumps)
     dx_ode = _ode_expr(x_ode, zq_mid, physics)
 
@@ -97,7 +97,7 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
     # acados uses explicit continuous-time model f(x,u,p); it discretises internally
     f_expl = ca.vertcat(dx_ode, v_new)
 
-    # — but x[4] (speed) is a pure integrator driven by u, not the ODE.
+    # x[4] (speed) is a pure integrator driven by u, not the ODE.
     # Override: dx[4] = (v_new - v) / dt is the discrete update;
     # for continuous-time we write it as the commanded acceleration.
     # f_expl[4] = u[0] * a_max  (continuous speed derivative)
@@ -118,11 +118,9 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
     return model
 
 
-# 3-state speed-planner OCP — x = [v, s_pos, u_prev].
-# u_prev is augmented into the state so consecutive-action differences are
-# available at every shooting node, mirroring the jerk/smooth cost in reward.py.
-# The full 7-state suspension ODE is not used: narrow bump Jacobians cause
-# ACADOS_NAN_DETECTED/MINSTEP; road geometry is handled by the env constraints.
+# 3-state speed-planner OCP, x = [v, s_pos, u_prev].
+# u_prev in state gives jerk/smooth cost at every node; matches reward.py.
+# Full 7-state model not used: bumpstop Jacobians cause NaN in SQP.
 
 def build_solver_simple(
     physics:              dict,
@@ -165,21 +163,21 @@ def build_solver_simple(
     ocp.dims.nu = nu
     ocp.dims.np = 0
 
-    # cost residuals mirror compute_reward() — heave/wheel omitted (no suspension state)
+    # cost residuals mirror compute_reward(), heave/wheel omitted (no suspension state)
     vel_scale = v / v_max
     delta_u   = u[0] - u_prev
 
-    r_tracking = (v_max - v) / v_max                          # target 0  (drive v → v_max)
-    r_accel    = vel_scale * u[0] * a_max / cfg.a_comfort     # target 0  (velocity-scaled long. accel)
-    r_jerk     = delta_u * a_max / (float(cfg.j_max) * dt)   # target 0  (rate of accel change)
-    r_smooth   = delta_u                                       # target 0  (action smoothness)
-    r_progress = v / v_max                                     # target 1  (maximise speed)
+    r_tracking = (v_max - v) / v_max                        # target 0  (drive v → v_max)
+    r_accel    = vel_scale * u[0] * a_max / cfg.g           # target 0  (velocity-scaled long. accel)
+    r_jerk     = delta_u * a_max / (float(cfg.j_max) * dt) # target 0  (rate of accel change)
+    r_smooth   = delta_u                                     # target 0  (action smoothness)
+    r_progress = v / v_max                                   # target 1  (maximise speed)
 
     r   = ca.vertcat(r_tracking, r_accel, r_jerk, r_smooth, r_progress)
     r_e = ca.vertcat(r_tracking, r_progress)   # terminal: no u
 
-    W   = np.diag([cfg.w_tracking, cfg.w_accel, cfg.w_jerk, cfg.w_action_smooth, cfg.w_progress])
-    W_e = np.diag([cfg.w_tracking, cfg.w_progress]) * 2.0
+    W   = np.diag([cfg.Q_v, cfg.Q_a, cfg.w_jerk, cfg.w_action_smooth, cfg.w_progress])
+    W_e = np.diag([cfg.Q_v, cfg.w_progress]) * 2.0
 
     ocp.cost.cost_type    = 'NONLINEAR_LS'
     ocp.cost.cost_type_e  = 'NONLINEAR_LS'
@@ -241,9 +239,9 @@ def build_solver(
     ocp.dims.np  = np_
 
     # --- cost: external (lets us express the full reward-aligned cost) ---
-    # cost = w_heave*(zBddot/aBc)^2 + w_wheel*(zWddot/aWc)^2
-    #      + w_track*((vref-v)/vmax)^2 + w_accel*(a/ac)^2
-    #      + w_smooth*(u - u_prev)^2 - w_prog*v/vmax
+    # cost = Q_zBddot*(zBddot/g)^2 + Q_zWddot*(zWddot/g)^2
+    #      + Q_v*((v-v_ref)/v_max)^2 + Q_a*(a/g)^2
+    #      + w_smooth*(u - u_prev)^2 - w_prog*v/v_max
     # We use NONLINEAR_LS cost so acados can use Gauss-Newton Hessian approx.
 
     x_sym = model.x
@@ -263,31 +261,26 @@ def build_solver(
     z_W_ddot = dx_cost[1]
     a_long   = u_sym[0] * a_max_v
 
-    v_ref   = p_sym[0]
-    # two-sided speed tracking: negative = too slow, positive = too fast
-    # v_ref is set per-node by _v_ref_at (v_max on flat, lower near bumps)
-    # so this residual provides both the "go fast" and "brake before bumps" signal
+    v_ref     = p_sym[0]
     speed_err = (v - v_ref) / v_max_v
 
-    # velocity scale mirrors env reward: core (heave/wheel/accel) is multiplied by
-    # v/v_max so creeping to avoid bump vibration is no longer cheaper than braking
-    # and crossing at speed.  Tracking and action-smooth stay unscaled (same as env).
+    # velocity scale mirrors env: heave/wheel/accel multiplied by v/v_max
     vel_scale = v / v_max_v
 
     # residuals for NONLINEAR_LS  (cost = 0.5 * (r - yref)' W (r - yref))
     r = ca.vertcat(
-        vel_scale * z_B_ddot / cfg.a_B_comfort,   # heave       — scaled, target 0
-        vel_scale * z_W_ddot / cfg.a_W_comfort,   # wheel       — scaled, target 0
-        speed_err,                                 # speed err   — unscaled, target 0
-        vel_scale * a_long    / cfg.a_comfort,     # long. accel — scaled, target 0
-        u_sym[0],                                  # action mag  — unscaled, target 0
+        vel_scale * z_B_ddot / cfg.g,   # J_heave, scaled, target 0
+        vel_scale * z_W_ddot / cfg.g,   # J_wheel, scaled, target 0
+        speed_err,                       # J_speed, unscaled, target 0
+        vel_scale * a_long   / cfg.g,   # J_long, scaled, target 0
+        u_sym[0],                        # J_smooth, unscaled, target 0
     )
     nr = r.shape[0]
 
-    # terminal residual — must not depend on u; drop a_long and u_sym[0]
+    # terminal residual: must not depend on u; drop a_long and u_sym[0]
     r_e = ca.vertcat(
-        vel_scale * z_B_ddot / cfg.a_B_comfort,
-        vel_scale * z_W_ddot / cfg.a_W_comfort,
+        vel_scale * z_B_ddot / cfg.g,
+        vel_scale * z_W_ddot / cfg.g,
         speed_err,
     )
     nr_e = r_e.shape[0]
@@ -301,16 +294,16 @@ def build_solver(
     ocp.model.cost_y_expr_e = r_e
 
     W = np.diag([
-        cfg.w_heave,
-        cfg.w_wheel,
-        cfg.w_tracking,
-        cfg.w_accel,
+        cfg.Q_zBddot,
+        cfg.Q_zWddot,
+        cfg.Q_v,
+        cfg.Q_a,
         cfg.w_action_smooth,
     ])
     W_e = np.diag([
-        cfg.w_heave,
-        cfg.w_wheel,
-        cfg.w_tracking,
+        cfg.Q_zBddot,
+        cfg.Q_zWddot,
+        cfg.Q_v,
     ]) * 2.0
     ocp.cost.W      = W
     ocp.cost.W_e    = W_e

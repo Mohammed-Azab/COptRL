@@ -99,6 +99,7 @@ class QuarterCarEnv(gym.Env):
 
         # speed state
         self._v              = self._v0
+        self._v_episode_ref  = self._rcfg.v_max   # constant per episode, Mandl-style
         self._v_ref_last     = self._rcfg.v_max
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
@@ -195,7 +196,10 @@ class QuarterCarEnv(gym.Env):
                 close_env(self)
             self._ren_hist = None
 
-        self._v_ref_last     = self._rcfg.v_max
+        # Mandl-style: sample a constant reference speed for this episode
+        cfg = self._rcfg
+        self._v_episode_ref  = float(self.np_random.uniform(cfg.v_ref_low, cfg.v_max))
+        self._v_ref_last     = self._v_episode_ref
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
@@ -408,31 +412,8 @@ class QuarterCarEnv(gym.Env):
     def _compute_v_ref(self, t: float) -> float:
         if self._ref_speed_profile == "custom" and self._v_ref_fn is not None:
             return float(self._v_ref_fn(t))
-        cfg = self._rcfg
-        if self.road_profile != 'speed_bump' or not self._road._bumps:
-            return cfg.v_max
-
-        s = self._s_pos
-        best_d: float | None = None
-        best_h: float = 0.0
-        for x0, A, L in self._road._bumps:
-            if x0 + L <= s:
-                continue                      # already passed
-            d_to_entry = max(0.0, x0 - s)    # 0 when car is on the bump
-            if d_to_entry > cfg.preview_distance:
-                continue                      # beyond horizon
-            if best_d is None or d_to_entry < best_d:
-                best_d = d_to_entry
-                best_h = A                    # peak height = A (cosine profile)
-
-        if best_d is None or best_h < cfg.peak_height_min:
-            return cfg.v_max
-
-        h_ratio   = float(min(1.0, best_h / cfg.h_clip))
-        proximity = float(max(0.0, 1.0 - best_d / cfg.preview_distance))
-        # up to 50% reduction at the bump face; tapers with distance
-        v_ref = cfg.v_max * (1.0 - 0.5 * h_ratio * proximity)
-        return float(max(cfg.v_min, v_ref))
+        # Mandl-style: constant per episode, sampled in reset()
+        return self._v_episode_ref
     
 
 

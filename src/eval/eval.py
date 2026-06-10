@@ -31,13 +31,12 @@ _VALID_ROADS = ["speed_bump", "flat", "recorded"]
 _ENV_ID = "QuarterCar_env/QuarterCar"
 
 _REWARD_TERM_KEYS = [
-    "r_heave",
-    "r_wheel",
-    "r_tracking",
-    "r_accel",
-    "r_jerk",
-    "r_action_smooth",
-    "r_curve",
+    "J_heave",
+    "J_wheel",
+    "J_speed",
+    "J_long",
+    "J_jerk",
+    "J_smooth",
 ]
 
 
@@ -321,13 +320,12 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
 
     # Per-term breakdown
     term_colors = {
-        "r_heave":         "#00897B",
-        "r_wheel":         "#26A69A",
-        "r_tracking":      "#1E88E5",
-        "r_accel":         "#E53935",
-        "r_jerk":          "#FB8C00",
-        "r_action_smooth": "#8E24AA",
-        "r_curve":         "#00ACC1",
+        "J_heave":  "#00897B",
+        "J_wheel":  "#26A69A",
+        "J_speed":  "#1E88E5",
+        "J_long":   "#E53935",
+        "J_jerk":   "#FB8C00",
+        "J_smooth": "#8E24AA",
     }
     for k, color in term_colors.items():
         vals = ep.get(k, [0.0] * len(t))

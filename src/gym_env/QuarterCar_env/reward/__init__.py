@@ -1,10 +1,10 @@
 from QuarterCar_env.reward.reward import (
-    r_speed_band,
-    r_accel,
+    j_speed,
+    j_long,
     r_jerk,
     r_action_smooth,
-    r_heave,
-    r_wheel,
+    j_heave,
+    j_wheel,
     compute_reward,
     compute_terminal_bonus,
 )

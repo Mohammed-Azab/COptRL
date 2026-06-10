@@ -134,7 +134,7 @@ def _record_step(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["body_accels"].append(info.get("z_B_ddot", 0.0))
     ep["comfort_scores"].append(info.get("comfort_score", 0.0))
     ep["rms_accel_running"].append(info.get("rms_accel", 0.0))
-    for key in ("r_heave", "r_wheel", "r_tracking", "r_accel", "r_jerk", "r_action_smooth", "r_curve"):
+    for key in ("J_heave", "J_wheel", "J_speed", "J_long", "J_jerk", "J_smooth"):
         ep[key].append(info.get(key, 0.0))
 
 
