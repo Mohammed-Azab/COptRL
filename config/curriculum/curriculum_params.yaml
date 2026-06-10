@@ -6,7 +6,7 @@ advance_return_threshold:
   1:  -100.0   # medium bumps harder; shows mixed-catalog planning
   2:  -300.0   # severe bumps present; shows agent can manage severity
 
-advance_window: 7  # episodes
+advance_window: 3  # consecutive eval windows
 
 levels:
   0:                              # easy: gentle slopes, wide spacing
