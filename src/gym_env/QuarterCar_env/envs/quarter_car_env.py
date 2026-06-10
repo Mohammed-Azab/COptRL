@@ -51,6 +51,7 @@ class QuarterCarEnv(gym.Env):
         trunc_travel: float = TRUNC_TRAVEL,
         trunc_zs: float = TRUNC_ZS,
         random_road_on_reset: bool = True,
+        road_override_kwargs: Optional[dict] = None,
     ):
         super().__init__()
         self.render_mode        = render_mode
@@ -116,6 +117,8 @@ class QuarterCarEnv(gym.Env):
             "max_gap":         float(_rd_cfg.get("max_gap",         30.0)),
             "flat_start":      float(_rd_cfg.get("flat_start",      10.0)),
         }
+        if road_override_kwargs:
+            self._random_road_kwargs.update(road_override_kwargs)
         self._v_random_low = self._rcfg.v_min * float(_rd_cfg.get("v_random_low_factor", 2.0))
 
         # filter state — cleared in reset()

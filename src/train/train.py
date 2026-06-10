@@ -98,6 +98,20 @@ def parse_args() -> argparse.Namespace:
                     metavar="N",
                     dest="curriculum_level",
                     help="Start (and pin) curriculum at level N instead of 0. Requires --curriculum.")
+    p.add_argument(
+                    "--bump-type",
+                    type=int,
+                    default=None,
+                    metavar="ID",
+                    help="Restrict training to one bump catalog ID: "
+                         "0=short_bump, 1=medium_bump, 2=severe_bump, "
+                         "3=long_bump, 4=raised_crosswalk.")
+    p.add_argument(
+                    "--n-bumps",
+                    type=int,
+                    default=1,
+                    metavar="N",
+                    help="Bumps per episode when --bump-type is set (default: 1).")
 
     return p.parse_args()
 
@@ -215,6 +229,8 @@ def _write_summary(
             "norm_obs":    True,
             "norm_reward": not args.no_normalize,
             "resume":      args.resume,
+            "bump_type":   args.bump_type,
+            "n_bumps":     args.n_bumps if args.bump_type is not None else None,
         },
 
         "hyperparameters": algo_kwargs,
@@ -247,7 +263,7 @@ def main() -> None:
 
     full_cfg   = load_algo_config(args.config)
     train_meta = full_cfg["training"]
-    algo_kwargs = dict(full_cfg[args.algo])   # shallow copy; build_model pops 'policy'
+    algo_kwargs = dict(full_cfg[args.algo])   
 
     # CLI overrides win over config defaults
     seed      = args.seed      if args.seed      is not None else train_meta["seed"]
@@ -295,11 +311,17 @@ def main() -> None:
     tb_dir.mkdir(parents=True, exist_ok=True)
     mon_dir.mkdir(parents=True, exist_ok=True)
 
-    #  environments
+    # environments
     gamma = algo_kwargs.get("gamma", 0.99)
     norm_reward = normalize and train_meta.get("norm_reward", True)
 
     render_mode = "human" if args.render else "none"
+    _env_kwargs: dict = {"render_mode": render_mode}
+    if args.bump_type is not None:
+        _env_kwargs["road_override_kwargs"] = {
+            "catalog_ids":     [args.bump_type],
+            "num_bumps_range": (args.n_bumps, args.n_bumps),
+        }
     train_venv = make_vec_env(
         road=args.road,
         n_envs=n_envs,
@@ -308,7 +330,7 @@ def main() -> None:
         gamma=gamma,
         norm_obs=normalize,
         norm_reward=norm_reward,
-        env_kwargs={"render_mode": render_mode},
+        env_kwargs=_env_kwargs,
         curriculum_cfg=curriculum_cfg,
     )
     eval_venv = make_eval_vec_env(
@@ -342,6 +364,8 @@ def main() -> None:
 
     bounds = reward_bounds(rcfg, EPISODE_STEPS)
 
+    _BUMP_NAMES = {0: 'short_bump', 1: 'medium_bump', 2: 'severe_bump',
+                   3: 'long_bump',  4: 'raised_crosswalk'}
     print(f"\n{''*58}")
     print(f"  algo       : {args.algo}")
     print(f"  road       : {args.road}  |  eval : {eval_road}")
@@ -353,6 +377,8 @@ def main() -> None:
     print(f"  v_max      : {rcfg.v_max * 3.6:.0f} km/h")
     print(f"  v_min      : {rcfg.v_min * 3.6:.1f} km/h")
     print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
+    if args.bump_type is not None:
+        print(f"  bump mode  : type {args.bump_type} ({_BUMP_NAMES.get(args.bump_type, '?')})  ×  {args.n_bumps} bump(s)")
     if curriculum_cfg:
         _lvl_info = f"on ({len(curriculum_cfg['levels'])} levels, start={start_level}, performance-gated)"
     else:
