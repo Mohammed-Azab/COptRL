@@ -61,10 +61,10 @@ Optuna PPO search space and tuning defaults. Each parameter entry has a `type` a
 ```
 PPO:
   learning_rate      float_log  [1e-5, 1e-3]
-  n_steps            categorical [1024, 2048, 4096]
+  n_steps            categorical [2048, 4096, 8192]
   batch_size         categorical [64, 128, 256]
   n_epochs           int        [5, 20]
-  gamma              float      [0.97, 0.999]
+  gamma              float      [0.99, 0.9999]
   gae_lambda         float      [0.90, 0.99]
   clip_range         categorical [0.1, 0.2, 0.3]
   ent_coef           float_log  [1e-8, 1e-2]
@@ -143,7 +143,7 @@ observations:
 - `a_B_comfort`: 3.0 (was 0.5) — normalises the heave reward so typical Mandl body accelerations (2–5 m/s²) map near 1.
 - `reward_heave_clip`: 8.0 (was 1.0) — old value clipped too aggressively and killed the gradient.
 - `a_limit` (terminal): 5.0 (was 1.0) — 5 m/s² RMS is achievable with good speed management.
-- `preview_distance`: 40 m (was 20 m) — 40 m gives enough lead-in to brake from 50 km/h (braking distance ≈ 34 m).
+- `preview_distance`: 60 m — matches the flat_start so the agent always sees the first bump as it starts moving.
 
 ---
 
