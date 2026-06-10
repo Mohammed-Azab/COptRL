@@ -107,7 +107,7 @@ class QuarterCarEnv(gym.Env):
         self._bumps_passed   = 0
         self._bump_ends: list = []
 
-        # random road config — read once, forwarded to from_random each reset
+        # random road config, forwarded to from_random each reset
         from QuarterCar_env.config.config_manager import _load_yaml
         _rd_cfg = _load_yaml("road_params.yaml").get("random", {})
         self._random_road_kwargs = {
@@ -121,7 +121,7 @@ class QuarterCarEnv(gym.Env):
             self._random_road_kwargs.update(road_override_kwargs)
         self._v_random_low = self._rcfg.v_min * float(_rd_cfg.get("v_random_low_factor", 2.0))
 
-        # filter state — cleared in reset()
+        # filter state, cleared in reset()
         self._prev_a         = 0.0
         self._filtered_a     = 0.0
         self._filtered_jerk  = 0.0
@@ -186,7 +186,7 @@ class QuarterCarEnv(gym.Env):
         self._episode_count += 1
 
         if self._fig is not None and self.render_mode == 'human':
-            # keep the window open between episodes — just clear the history
+            # keep window open between episodes, clear history
             if self._ren_hist is not None:
                 for buf in self._ren_hist.values():
                     buf.clear()
@@ -199,10 +199,10 @@ class QuarterCarEnv(gym.Env):
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
-        # recompute after road regeneration — random roads may have different length
+        # recompute after road regeneration
         self._max_distance = self._compute_max_distance()
 
-        # bump-crossing state — reset each episode
+        # bump-crossing state, reset each episode
         self._bumps_passed   = 0
         self._bump_ends      = sorted(
             x0 + L + 1.0 for (x0, _, L) in self._road._bumps
@@ -244,7 +244,7 @@ class QuarterCarEnv(gym.Env):
         j_clipped = float(np.clip(jerk, -cfg.jerk_clip, cfg.jerk_clip))
         self._filtered_jerk = alpha_j * self._filtered_jerk + (1.0 - alpha_j) * j_clipped
 
-        # 3. Integrate ODE one control step (position-based — no drift)
+        # 3. Integrate ODE one control step (position-based)
         v_road = self._road.speed   # post-geometry-clamp value
         new_state, z_B_ddot, z_W_ddot = self._ode.step(
             self._state, self._road, s_pos_start, v_road
@@ -264,7 +264,7 @@ class QuarterCarEnv(gym.Env):
         v_ref    = self._compute_v_ref(self._t)
         self._v_ref_last = v_ref
 
-        reward, breakdown = compute_reward(
+        reward, breakdown, self._bumps_passed = compute_reward(
             v_new,
             self._last_z_B_ddot,
             self._last_z_W_ddot,
@@ -272,17 +272,13 @@ class QuarterCarEnv(gym.Env):
             self._filtered_jerk,
             self._prev_action, u,
             cfg,
+            s_pos=self._s_pos,
+            road_length=self._max_distance or 0.0,
+            bump_ends=self._bump_ends,
+            bumps_passed=self._bumps_passed,
+            v_ref=v_ref,
         )
         self._speed_err_sq   += (v_ref - v_new) ** 2
-
-        # 4b. Bump-crossing reward — fire once per bump when s_pos clears its end
-        r_bumps = 0.0
-        while (self._bumps_passed < len(self._bump_ends)
-               and self._s_pos >= self._bump_ends[self._bumps_passed]):
-            self._bumps_passed += 1
-            r_bumps += cfg.w_bump_cross
-        reward               += r_bumps
-        breakdown["r_bumps"]  = r_bumps
 
         self._episode_reward += reward
 
@@ -291,19 +287,13 @@ class QuarterCarEnv(gym.Env):
         self._prev_action = u
 
         # 6. Termination / truncation
-        #
-        # Physical safety truncation: numerical blow-up or extreme state.
-        # Thresholds set above the worst observed values (0.094 m travel, 0.28 m z_B)
-        # with margin — fire only if something has gone badly wrong.
         truncated = bool(
             abs(travel) > self._trunc_travel          # suspension blow-up
             or abs(float(new_state[5])) > self._trunc_zs  # body blow-up
         )
         terminated = False
 
-        # Normal termination: step budget exhausted OR road fully cleared.
-        # Both cases give a terminal bonus so the agent is rewarded for quality,
-        # not just for lasting the full 300 steps.
+        # normal termination: step budget exhausted or road cleared
         road_complete = (
             self._max_distance is not None
             and self._s_pos >= self._max_distance
@@ -338,10 +328,10 @@ class QuarterCarEnv(gym.Env):
         a_bound = cfg.accel_clip / cfg.a_comfort
         j_bound = cfg.jerk_clip  / cfg.j_max
 
-        # base obs: [ζ, ζ̇, v/v_max, filtered_a, filtered_jerk, prev_action]
+        # base obs: [ζ, ζ̇, v/v_max, filtered_a, filtered_jerk, prev_action, v_ref/v_max]
         # PreviewWrapper appends the peak slots on top of this
-        extra_high = np.array([1.0, a_bound, j_bound, 1.0], dtype=np.float32)
-        extra_low  = np.array([0.0, -a_bound, -j_bound, -1.0], dtype=np.float32)
+        extra_high = np.array([1.0, a_bound, j_bound, 1.0, 1.0], dtype=np.float32)
+        extra_low  = np.array([0.0, -a_bound, -j_bound, -1.0, 0.0], dtype=np.float32)
         high = np.concatenate([OBS_HIGH, extra_high])
         low  = np.concatenate([OBS_LOW,  extra_low])
         return high, low
@@ -363,6 +353,7 @@ class QuarterCarEnv(gym.Env):
             float(np.clip(self._filtered_a / cfg.a_comfort, -a_bound, a_bound)),
             float(np.clip(self._filtered_jerk / cfg.j_max, -j_bound, j_bound)),
             float(self._prev_action),
+            float(np.clip(self._v_ref_last / cfg.v_max, 0.0, 1.0)),
         ], dtype=np.float32)
 
         return np.concatenate([base_obs, scalars])

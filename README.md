@@ -110,7 +110,7 @@ Integration: RK4, 20 sub-steps per 20 ms control interval (effective 1 ms physic
 
 **Action:** scalar float32 ∈ [−1, 1] → scaled to `a_cmd = u × a_max` [m/s²].
 
-**Observation:** 6 base signals + 3×n_peaks from `PreviewWrapper`.
+**Observation:** 7 base signals + 3×n_peaks from `PreviewWrapper`.
 
 | Index | Signal | Range |
 |---|---|---|
@@ -120,7 +120,8 @@ Integration: RK4, 20 sub-steps per 20 ms control interval (effective 1 ms physic
 | 3 | filtered longitudinal accel / a_comfort | IIR α=0.8 |
 | 4 | filtered jerk / j_max | IIR α=0.8 |
 | 5 | prev_action | [−1, 1] |
-| 6… | bump preview (t2r, height, freq) per peak | [0, 1] each |
+| 6 | v_ref / v_max | [0, 1] |
+| 7… | bump preview (t2r, height, freq) per peak | [0, 1] each |
 
 The preview samples 200 points over a 60 m lookahead, runs `scipy.signal.find_peaks`, and encodes up to *n* bumps as `[t2r/T_MAX, h/h_clip, freq/_FREQ_MAX]` where `t2r = dist/v` (time-to-reach) and `freq = v/width` (crossing frequency). Missing peaks fill with `[1.0, 0.0, 0.0]`. PT1 filter (τ = 0.05 s) smooths the output.
 
@@ -151,7 +152,7 @@ R = (v/v_max) × [w_heave·r_heave + w_wheel·r_wheel + w_accel·r_accel]
 |---|---|---|
 | r_heave | −(clip(z̈_B, ±8) / 3.0)² | vertical body accel, ISO 2631 aligned |
 | r_wheel | −(clip(z̈_W, ±60) / 30)² | wheel-hop / road holding |
-| r_tracking | r_speed_band(v, v_min, v_max) | stay near v_max, hard penalty below v_min |
+| r_tracking | r_speed_band(v, v_min, v_ref) | absolute tracking \|v−v_ref\|/v_ref above v_min; hard cliff below v_min |
 | r_accel | −(clip(ā, ±4) / 2.0)² | longitudinal ride comfort |
 | r_jerk | −(clip(j̄, ±4) / 2.0)² | smoothness of acceleration |
 | r_smooth | −(u_t − u_{t−1})² | control chatter |

@@ -4,6 +4,7 @@ All entries are one line. For design rationale see `WHY_WE_DO_THAT.md`.
 
 ---
 
+- (pending) — Mandl improvements: add v_ref/v_max to obs; replace quadratic speed band with absolute tracking |v-v_ref|/v_ref above v_min
 - 4dbfb1b — fix reward_bounds: add n_bumps param so episode_max includes crossing rewards
 - 63415b5 — document how agent uses t2r for anticipatory braking in WHY_WE_DO_THAT
 - 0d75578 — add --bump-type and --n-bumps args to train.py for single-bump curriculum

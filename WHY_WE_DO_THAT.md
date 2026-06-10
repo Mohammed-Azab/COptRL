@@ -561,3 +561,29 @@ re-enter bumps at full speed and produce large heave, exactly as observed.
 A constant zero-throttle policy scores ~-359, MPC with the one-sided bug scores ~-286 (~70 better).
 MPC with two-sided tracking is expected to score closer to the RL agent (~-25 to -50) because it
 can actually plan a brake-coast-accelerate profile over the bump preview horizon.
+
+---
+
+## Mandl 2024 improvements: v_ref in observation and absolute speed tracking
+
+**What changed (2026-06-10):**
+1. `v_ref / v_max` added as observation feature (index 6 in the base obs).
+2. `r_speed_band` formula above `v_min` changed from one-sided quadratic (`r = 0` in comfort zone, `r < 0` above `v_limit`) to Mandl-style absolute tracking: `r = −|v − v_ref| / v_ref`.
+
+**Why the old formula was suboptimal:**
+The original `r_speed_band` had a dead zone between `v_min` and `v_limit` where the reward was exactly 0.  The only incentive to drive fast was `r_progress = v/v_max`. Near bumps, `v_ref` dropped (via `_compute_v_ref`), but the reward gave no gradient toward that lower target — the agent had to discover the optimal braking speed purely through the comfort and bump-crossing terms.
+
+**What the absolute formula adds:**
+`r = −|v − v_ref| / v_ref` is zero only at `v = v_ref` and increases linearly as the agent deviates in either direction. This means:
+- On flat road (v_ref = v_max): agent is penalised for driving below v_max, same directional pressure as before but with a gradient throughout [v_min, v_max].
+- Near a bump (v_ref < v_max from `_compute_v_ref`): agent is penalised for driving faster *or* slower than v_ref. The tracking term now directly encodes "slow to this specific target speed before the bump."
+
+**Why v_ref in observation:**
+Without v_ref in the observation, the policy must infer the current target speed from the preview features (t2r, height, freq). Adding `v_ref / v_max` gives the policy an explicit, pre-computed signal of the recommended approach speed, making the speed-tracking task much easier to learn.
+
+**What we kept from COptRL:**
+- The cliff penalty below v_min is unchanged — stopping is still heavily penalised.
+- All other reward terms (heave, wheel, accel, jerk, smooth, progress, bump cross, terminal) are unchanged.
+- The velocity scaling on comfort terms is unchanged.
+
+**Source:** Mandl (2024) "Speed Control in the Presence of Road Obstacles: A Comparison of RL and MPC", reward function Eq. (1a), Q_v term.
