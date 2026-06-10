@@ -18,7 +18,7 @@ vertical:
   enable_vel_scaling: true
 
 enable:
-  tracking:      false
+  tracking:      true
   accel:         true
   jerk:          true
   action_smooth: true
@@ -28,9 +28,10 @@ enable:
   step_bonus:    0.5
 
 velocity:
-  v_max:  72.0   # km/h  (= 20 m/s)
+  v_max:  72.0   # km/h  (= 20 m/s)  — physical maximum (ODE constraint)
   a_max:   5.0   # m/s²
-  v_min:   7.2   # km/h  (= 2 m/s)
+  v_min:   7.2   # km/h  (= 2 m/s)   — minimum speed (stop-and-wait floor)
+  v_limit: 50.0  # km/h              — soft speed limit (city: 50, highway: 100)
 
 comfort:
   a_comfort:           2.0   # m/s²
@@ -50,13 +51,13 @@ terminal:
   a_limit:            5.0   # m/s²
 
 observations:
-  preview_distance:    40.0   # m
+  preview_distance:    60.0   # m  — matches flat_start; guarantees first bump visible from s=0
   h_clip:              0.15
   n_peaks:             3
   peak_height_min:     0.01
   peak_distance_min_m: 0.5
-  noise_active:        true
+  noise_active:        false
   noise_height_std:    0.005
   noise_distance_std:  0.5
   noise_width_std:     0.05
-  pt1_tau:             0.2
+  pt1_tau:             0.05  # s  — reduced lag; at v=20 m/s closes only 1m vs 4m before

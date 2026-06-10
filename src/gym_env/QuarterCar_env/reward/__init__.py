@@ -1,4 +1,5 @@
 from QuarterCar_env.reward.reward import (
+    r_speed_band,
     r_accel,
     r_jerk,
     r_action_smooth,

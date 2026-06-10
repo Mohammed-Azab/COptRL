@@ -38,9 +38,10 @@ class RewardConfig:
     w_bump_cross: float = 10.0
 
     # velocity (stored internally in m/s; config files use km/h)
-    v_max: float = 20.0   # m/s
-    a_max: float = 5.0    # m/s²
-    v_min: float = 2.0    # m/s
+    v_max:   float = 20.0   # m/s — physical maximum (ODE hard constraint)
+    a_max:   float = 5.0    # m/s²
+    v_min:   float = 2.0    # m/s — minimum speed floor
+    v_limit: float = 13.9   # m/s — soft speed limit (50 km/h city; 100 km/h highway = 27.8)
 
     # longitudinal comfort / filter
     a_comfort:          float = 2.0
@@ -65,7 +66,7 @@ class RewardConfig:
     n_peaks:             int   = 3
     peak_height_min:     float = 0.01
     peak_distance_min_m: float = 0.5
-    noise_active:        bool  = True
+    noise_active:        bool  = False
     noise_height_std:    float = 0.005
     noise_distance_std:  float = 0.5
     noise_width_std:     float = 0.05
@@ -112,9 +113,10 @@ def load_reward_config() -> RewardConfig:
         w_bump_cross         = float(e.get("w_bump_cross", 5.0)),
         step_bonus           = float(e.get("step_bonus",   0.0)),
 
-        v_max = float(v.get("v_max", 72.0)) / 3.6,   # config in km/h → m/s
-        a_max = float(v.get("a_max",  5.0)),
-        v_min = float(v.get("v_min",  7.2)) / 3.6,   # config in km/h → m/s
+        v_max   = float(v.get("v_max",   72.0)) / 3.6,
+        a_max   = float(v.get("a_max",    5.0)),
+        v_min   = float(v.get("v_min",    7.2)) / 3.6,
+        v_limit = float(v.get("v_limit", 50.0)) / 3.6,
 
         a_comfort          = float(c.get("a_comfort",          2.0)),
         accel_filter_alpha = float(c.get("accel_filter_alpha", 0.8)),
