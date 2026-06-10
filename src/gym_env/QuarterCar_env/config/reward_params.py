@@ -22,10 +22,10 @@ class RewardConfig:
     reward_wheel_clip: float = 60.0
 
     # velocity (stored internally in m/s; config files use km/h)
-    v_max:   float = 20.0   # m/s — physical maximum (ODE hard constraint)
+    v_max:   float = 13.9   # m/s — hard cap (50 km/h city); env clips v after every ODE step
     a_max:   float = 5.0    # m/s²
     v_min:   float = 2.0    # m/s — minimum speed floor
-    v_limit: float = 13.9   # m/s — soft speed limit (50 km/h city; 100 km/h highway = 27.8)
+    v_limit: float = 13.9   # m/s — kept equal to v_max; upper r_speed_band penalty dead
 
     # longitudinal comfort / filter
     a_comfort:          float = 2.0

@@ -17,10 +17,10 @@ vertical:
   reward_wheel_clip: 60.0   # m/s²
 
 velocity:
-  v_max:  72.0   # km/h  (20 m/s) Physical limit 
+  v_max:  50.0   # km/h  (13.9 m/s) — hard cap; env clips v to this after every ODE step
   a_max:   5.0   # m/s²
-  v_min:   7.2   # km/h  (2 m/s)  
-  v_limit: 50.0  # km/h              
+  v_min:   7.2   # km/h  (2 m/s)
+  v_limit: 50.0  # km/h  — kept equal to v_max; upper r_speed_band penalty is dead with hard cap
 
 comfort:
   a_comfort:           2.0   # m/s²
