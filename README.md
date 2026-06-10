@@ -16,7 +16,7 @@ A reinforcement learning agent trained to plan longitudinal vehicle speed in a q
 
 The environment runs a full nonlinear quarter-car ODE (Numba-jitted RK4 at 1 ms steps) wrapped in a Gymnasium interface. Training uses PPO with a staged performance-gated curriculum and per-episode road randomisation.
 
-**Baselines included:** rule-based human driver and an acados MPC controller with a 50-step receding horizon.
+**Baselines included:** rule-based human driver and an acados MPC controller with a 150-step receding horizon (3.0 s).
 
 ---
 
@@ -93,7 +93,7 @@ m_W · z̈_W  =   F_spring + F_damp − k_T(z_W − ζ) − c_T(ż_W − ζ̇)
 | k_T | 262 200 N/m | tyre radial stiffness |
 | c_T | 500 N·s/m | tyre damping |
 
-Integration: RK4, 20 sub-steps per 20 ms control interval (effective 1 ms physics step). All kernels are Numba-jitted : a 300-step episode runs in under 5 ms on CPU.
+Integration: RK4, 20 sub-steps per 20 ms control interval (effective 1 ms physics step). All kernels are Numba-jitted : a 2000-step episode runs in under 30 ms on CPU.
 
 ### State vector
 
@@ -120,9 +120,9 @@ Integration: RK4, 20 sub-steps per 20 ms control interval (effective 1 ms physic
 | 3 | filtered longitudinal accel / a_comfort | IIR α=0.8 |
 | 4 | filtered jerk / j_max | IIR α=0.8 |
 | 5 | prev_action | [−1, 1] |
-| 6… | bump preview (dist, height, width) per peak | [0, 1] each |
+| 6… | bump preview (t2r, height, freq) per peak | [0, 1] each |
 
-The preview samples 200 points over a 20 m lookahead, runs `scipy.signal.find_peaks`, and encodes up to *n* bumps as `[dist/D, h/h_clip, w/D]`. Missing peaks fill with `[1.0, 0.0, 0.0]`. Gaussian noise + PT1 filter (τ = 0.2 s) simulate a noisy real sensor.
+The preview samples 200 points over a 60 m lookahead, runs `scipy.signal.find_peaks`, and encodes up to *n* bumps as `[t2r/T_MAX, h/h_clip, freq/_FREQ_MAX]` where `t2r = dist/v` (time-to-reach) and `freq = v/width` (crossing frequency). Missing peaks fill with `[1.0, 0.0, 0.0]`. PT1 filter (τ = 0.05 s) smooths the output.
 
 ---
 
@@ -132,40 +132,41 @@ The per-step reward has four independent buckets that add together:
 
 ```
 R = (v/v_max) × [w_heave·r_heave + w_wheel·r_wheel + w_accel·r_accel]
-  + w_track · r_track                          
-  + w_jerk  · r_jerk  + w_smooth · r_smooth                               
-  + w_progress · r_progress                             
-  + w_bump_cross
+  + w_tracking · r_tracking                    (unscaled — always costs the same)
+  + w_jerk · r_jerk + w_action_smooth · r_smooth  (unscaled — see WHY_WE_DO_THAT.md)
+  + w_progress · r_progress
+  + step_bonus
+  + w_bump_cross  (one-shot per bump cleared)
 ```
 
-**Velocity scaling** on the comfort terms means going slow doesn't help -> slower speed = smaller multiplier, so the agent can't farm a comfort score by crawling.
+**Velocity scaling** on the comfort terms means going slow doesn't help — slower speed = smaller multiplier, so the agent can't farm a comfort score by crawling.
 
-**Tracking and smoothness are unscaled** they cost the same at any speed. Without this, the agent learned to drive slowly and oscillate freely (see `TRIAL_ERROR.md` Issue 5).
+**Tracking and smoothness are unscaled** — they cost the same at any speed. Without this, the agent learned to drive slowly and oscillate freely (see `WHY_WE_DO_THAT.md`).
 
-**`r_progress = v / v_max`** is always positive -> it's what stops the agent from just sitting still before every bump. Without it, stopping is the easiest way to get zero comfort penalty.
+**`r_progress = v / v_max`** is always positive — it's what stops the agent from sitting still before every bump.
 
-**Bump-crossing bonus** (`w_bump_cross = 50.0`) fires once each time the vehicle clears the end of a bump. This directly rewards the agent for actually getting through bumps rather than dodging them by stopping short.
+**Bump-crossing bonus** (`w_bump_cross = 20.0`) fires once each time the vehicle clears the end of a bump.
 
 | Term | Formula | Role |
 |---|---|---|
-| r_heave | −(z̈_B / a_B_comfort)² | vertical body accel, ISO 2631 aligned |
-| r_wheel | −(z̈_W / a_W_comfort)² | wheel-hop / road holding |
-| r_track | −(v − v_ref)² / v_ref² | stay at reference speed |
-| r_accel | −(ã_long / a_comfort)² | longitudinal ride comfort |
-| r_jerk | −(j̃_long / j_max)² | smoothness of acceleration |
+| r_heave | −(clip(z̈_B, ±8) / 3.0)² | vertical body accel, ISO 2631 aligned |
+| r_wheel | −(clip(z̈_W, ±60) / 30)² | wheel-hop / road holding |
+| r_tracking | r_speed_band(v, v_min, v_max) | stay near v_max, hard penalty below v_min |
+| r_accel | −(clip(ā, ±4) / 2.0)² | longitudinal ride comfort |
+| r_jerk | −(clip(j̄, ±4) / 2.0)² | smoothness of acceleration |
 | r_smooth | −(u_t − u_{t−1})² | control chatter |
 | r_progress | v / v_max | positive reward for going fast |
 | bump bonus | +w_bump_cross | one-shot per bump end cleared |
 
-Terminal bonus of ±100 at episode end -> requires **both** low RMS body accel and a minimum mean speed (the speed gate stops the stop-and-wait exploit from collecting the bonus by barely moving).
+Terminal bonus of ±100 at episode end — requires **both** low RMS body accel (< a_limit = 5 m/s²) and a minimum mean speed.
 
-Default weights: `w_heave=1.0, w_wheel=0.5, w_track=0.5, w_accel=0.8, w_jerk=0.3, w_smooth=0.2, w_progress=0.2, w_bump_cross=50.0`
+Current weights: `w_heave=0.8, w_wheel=0.6, w_tracking=0.2, w_accel=0.3, w_jerk=0.4, w_action_smooth=0.1, w_progress=0.15, w_bump_cross=20.0, step_bonus=0.05`
 
 ---
 
 ## Training
 
-**Algorithm:** PPO (`MlpPolicy`, net_arch [256, 256] for both actor and critic), with `VecNormalize` on observations and rewards.
+**Algorithm:** PPO (`MlpPolicy`, net_arch [128, 128] for both actor and critic), with `VecNormalize` on observations and rewards.
 
 **Curriculum:** 4 performance-gated levels. The agent must sustain mean eval return above a threshold for 5 consecutive evaluations before advancing. This stops it from being pushed to harder roads before it's ready.
 
