@@ -118,11 +118,11 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
     return model
 
 
-# Lightweight 2-state speed-planner OCP — used instead of the full model.
-# The full 7-state suspension ODE generates (2π/L)³ Jacobian terms for narrow
-# bumps, and large state magnitudes during bump crossings cause MINSTEP failures.
-# Road information enters only through v_ref (online parameter), so the ODE
-# only needs to integrate [v, s_pos].
+# 3-state speed-planner OCP — x = [v, s_pos, u_prev].
+# u_prev is augmented into the state so consecutive-action differences are
+# available at every shooting node, mirroring the jerk/smooth cost in reward.py.
+# The full 7-state suspension ODE is not used: narrow bump Jacobians cause
+# ACADOS_NAN_DETECTED/MINSTEP; road geometry is handled by the env constraints.
 
 def build_solver_simple(
     physics:              dict,
@@ -135,63 +135,68 @@ def build_solver_simple(
     model      = AcadosModel()
     model.name = 'qc_speed'
 
-    nx, nu, np_ = 2, 1, 1
-    x   = ca.SX.sym('x', nx)   # [v, s_pos]
-    u   = ca.SX.sym('u', nu)
-    p   = ca.SX.sym('p', np_)  # v_ref
+    nx, nu = 3, 1   # x = [v, s_pos, u_prev]
+    x = ca.SX.sym('x', nx)
+    u = ca.SX.sym('u', nu)
 
-    v     = x[0]
-    a_max = float(physics.get('a_max', 5.0))
-    v_max = float(physics.get('v_max', 20.0))
+    v      = x[0]
+    u_prev = x[2]
+    a_max  = float(physics.get('a_max', 5.0))
+    v_max  = float(cfg.v_max)
+    v_min  = float(cfg.v_min)
 
+    # du_prev/dt = (u - u_prev)/dt → exact step update under ERK integration
     f_expl = ca.vertcat(
-        u[0] * a_max,   # dv/dt
-        v,              # ds/dt
+        u[0] * a_max,
+        v,
+        (u[0] - u_prev) / dt,
     )
     model.x           = x
     model.u           = u
-    model.p           = p
     model.f_expl_expr = f_expl
     model.xdot        = ca.SX.sym('xdot', nx)
     model.f_impl_expr = model.xdot - f_expl
 
-    ocp              = AcadosOcp()
-    ocp.model        = model
+    ocp = AcadosOcp()
+    ocp.model = model
     ocp.solver_options.N_horizon = N
     ocp.solver_options.tf        = N * dt
-    ocp.dims.nx  = nx
-    ocp.dims.nu  = nu
-    ocp.dims.np  = np_
+    ocp.dims.nx = nx
+    ocp.dims.nu = nu
+    ocp.dims.np = 0
 
-    v_max_v = float(cfg.v_max)
-    v_min_v = float(cfg.v_min)
+    # cost residuals mirror compute_reward() — heave/wheel omitted (no suspension state)
+    vel_scale = v / v_max
+    delta_u   = u[0] - u_prev
 
-    speed_err = (v - p[0]) / v_max_v
-    vel_scale = v / v_max_v
-    a_long    = u[0] * a_max
+    r_tracking = (v_max - v) / v_max                          # target 0  (drive v → v_max)
+    r_accel    = vel_scale * u[0] * a_max / cfg.a_comfort     # target 0  (velocity-scaled long. accel)
+    r_jerk     = delta_u * a_max / (float(cfg.j_max) * dt)   # target 0  (rate of accel change)
+    r_smooth   = delta_u                                       # target 0  (action smoothness)
+    r_progress = v / v_max                                     # target 1  (maximise speed)
 
-    r   = ca.vertcat(speed_err,
-                     vel_scale * a_long / float(cfg.a_comfort),
-                     u[0])
-    r_e = ca.vertcat(speed_err)
+    r   = ca.vertcat(r_tracking, r_accel, r_jerk, r_smooth, r_progress)
+    r_e = ca.vertcat(r_tracking, r_progress)   # terminal: no u
+
+    W   = np.diag([cfg.w_tracking, cfg.w_accel, cfg.w_jerk, cfg.w_action_smooth, cfg.w_progress])
+    W_e = np.diag([cfg.w_tracking, cfg.w_progress]) * 2.0
 
     ocp.cost.cost_type    = 'NONLINEAR_LS'
     ocp.cost.cost_type_e  = 'NONLINEAR_LS'
     ocp.model.cost_y_expr   = r
     ocp.model.cost_y_expr_e = r_e
-    ocp.cost.W      = np.diag([cfg.w_tracking, cfg.w_accel, cfg.w_action_smooth])
-    ocp.cost.W_e    = np.array([[cfg.w_tracking * 2.0]])
-    ocp.cost.yref   = np.zeros(3)
-    ocp.cost.yref_e = np.zeros(1)
+    ocp.cost.W      = W
+    ocp.cost.W_e    = W_e
+    ocp.cost.yref   = np.array([0.0, 0.0, 0.0, 0.0, 1.0])
+    ocp.cost.yref_e = np.array([0.0, 1.0])
 
-    ocp.constraints.lbu    = np.array([-1.0])
-    ocp.constraints.ubu    = np.array([ 1.0])
-    ocp.constraints.idxbu  = np.array([0])
-    ocp.constraints.lbx    = np.array([v_min_v])
-    ocp.constraints.ubx    = np.array([v_max_v])
-    ocp.constraints.idxbx  = np.array([0])
-    ocp.constraints.x0     = np.zeros(nx)
-    ocp.parameter_values   = np.array([v_max_v])
+    ocp.constraints.lbu   = np.array([-1.0])
+    ocp.constraints.ubu   = np.array([ 1.0])
+    ocp.constraints.idxbu = np.array([0])
+    ocp.constraints.lbx   = np.array([v_min])
+    ocp.constraints.ubx   = np.array([v_max])
+    ocp.constraints.idxbx = np.array([0])
+    ocp.constraints.x0    = np.zeros(nx)
 
     ocp.solver_options.integrator_type     = 'ERK'
     ocp.solver_options.num_stages          = 4
@@ -204,8 +209,7 @@ def build_solver_simple(
     ocp.solver_options.print_level         = 0
     ocp.code_export_directory              = gen_dir
 
-    solver = AcadosOcpSolver(ocp, json_file=f'{gen_dir}/acados_ocp.json',
-                              verbose=False)
+    solver = AcadosOcpSolver(ocp, json_file=f'{gen_dir}/acados_ocp.json', verbose=False)
     solver.options_set('print_level',    0)
     solver.options_set('qp_print_level', 0)
     return solver

@@ -112,7 +112,6 @@ def compute_reward(
     else:
         bd["r_action_smooth"] = 0.0
 
-    # progress: positive reward for forward movement — unscaled, always on
     progress_reward = 0.0
     if cfg.enable_progress:
         rp = r_progress(v, cfg.v_max)
