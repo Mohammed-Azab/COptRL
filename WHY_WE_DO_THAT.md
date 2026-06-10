@@ -459,6 +459,64 @@ Replacing t2r with raw dist gives identical information but makes the urgency–
 
 ---
 
+## How the agent uses t2r to brake before bumps (not during)
+
+**The problem without preview**
+
+Without any lookahead, the agent only observes its current state (speed, suspension deflection).
+By the time `zeta` and `zeta_dot` rise — which is the first physical signal that a bump exists —
+the vehicle is already on top of it. Braking at that point only worsens the crossing: abrupt
+deceleration mid-bump increases jerk and body accel instead of reducing them.
+Reactive control cannot produce a smooth crossing; anticipatory control can.
+
+**What t2r enables**
+
+Every step, `PreviewWrapper` appends `[t2r, height, freq]` for each upcoming bump.
+`t2r = dist / v_current` — the seconds until impact at current speed, normalised by `T_MAX`.
+As the agent drives toward a bump, `t2r` counts down from ~1 to 0:
+
+```
+t2r ≈ 0.9   far away     →  maintain speed, collect progress reward
+t2r ≈ 0.4   approaching  →  should be decelerating now
+t2r ≈ 0.05  close        →  should already be at crossing speed
+t2r = 0     on bump      →  cross at whatever speed you arrived at
+```
+
+The agent cannot change what happens at `t2r = 0`. The reward at that step is determined
+by what it did at `t2r = 0.4`. This temporal credit assignment is the whole challenge.
+
+**How the policy learns it**
+
+During training the agent tries many actions and observes the resulting rewards.
+It learns — through repeated episodes — a pattern:
+
+> "When t2r was ~0.5 and height was large, steps where I had already been decelerating
+> gave low heave penalty on crossing. Steps where I hadn't started decelerating yet
+> gave large heave penalty. Therefore: at t2r ≈ 0.5 with large height, decelerate."
+
+The policy network learns a mapping `(t2r, height, freq, v, ...) → action`.
+It does not execute a formula; it learns a nonlinear function from observation to action
+that approximates what a formula would prescribe.
+
+**Why t2r (not dist) makes this easier to learn**
+
+`t2r = dist / v_current` accounts for speed automatically. At 50 km/h you need to start
+braking 30 m out (≈ 2.2 s). At 20 km/h you can wait until 12 m (≈ 2.2 s). Both situations
+have `t2r ≈ 0.4` — the same observation triggers the same action. With raw distance, the
+policy would need to separately learn the speed–distance relationship before it could act
+correctly, doubling the approximation problem. t2r collapses both into one number.
+
+**What breaks if the preview is removed**
+
+Without preview the policy sees only the current bump height (zeta, zeta_dot).
+Those rise from zero only when the vehicle is on the bump. No information arrives early
+enough to support anticipatory braking. The agent can only react — it learns to slow
+down reactively during bumps (producing high jerk) rather than proactively before them.
+In practice this means consistently worse heave and accel scores even with the same
+reward function.
+
+---
+
 ## Issue 13 — MPC one-sided speed tracking (and why it doesn't decelerate)
 
 **What we observed:**
