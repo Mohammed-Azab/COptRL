@@ -22,5 +22,5 @@ levels:
 
   3:
     difficulty: expert
-    allow_multi_bump: true
+    allow_multi_bump: false
     multi_bump_prob:  0.25
