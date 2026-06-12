@@ -303,8 +303,8 @@ class QuarterCarEnv(gym.Env):
             rms        = np.sqrt(self._accel_sq / self._step_count)
             mean_speed = self._s_pos / max(self._t, 1e-9)
             reward    += compute_terminal_reward(
-                v_init=self._v_init_last,
                 t=self._t,
+                t_max=self._max_episode_steps * DT,
                 road_length=self._max_distance or self._s_pos,
                 s_pos=self._s_pos,
                 cfg=cfg,

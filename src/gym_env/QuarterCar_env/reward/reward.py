@@ -36,20 +36,21 @@ def j_speed(v: float, v_min: float, v_init: float) -> float:
 
 
 # Terminal Rewards
-def j_distination(s_pos: float, road_length, cfg: RewardConfig) -> float:
-    return cfg.terminal_bonus if (s_pos >= road_length-1.0) else cfg.terminal_penalty
+
+def j_destination(s_pos: float, road_length: float, cfg: RewardConfig) -> float:
+    return cfg.terminal_bonus if s_pos >= road_length - 1.0 else cfg.terminal_penalty
 
 
-def j_time(v_init: float, road_length, t: float, cfg: RewardConfig) -> float:
-    time_needed = road_length / v_init
-    tn = time_needed * 2.5 
-    return -((t-tn) / tn)** 2 # needs to be fixed 
+def j_time(t: float, t_max: float, cfg: RewardConfig) -> float:
+    frac_used = float(np.clip(t / max(t_max, 1e-6), 0.0, 1.0))
+    return cfg.terminal_bonus * (1.0 - frac_used)
 
-# fix it in the quarter_car_env
-def compute_terminal_reward(v_init: float, t: float, road_length: float, s_pos:float, cfg: RewardConfig) -> float:
-    Jt = j_time(v_init,road_length,t,cfg)
-    Jd = j_distination(s_pos, road_length, cfg)
-    return Jt + Jd 
+
+def compute_terminal_reward(t: float, t_max: float, road_length: float,
+                             s_pos: float, cfg: RewardConfig) -> float:
+    Jd = j_destination(s_pos, road_length, cfg)
+    Jt = j_time(t, t_max, cfg) if Jd > 0 else 0.0
+    return Jd + Jt
 
 
 def compute_reward(
@@ -78,7 +79,7 @@ def compute_reward(
     Jas = j_action_smooth(action, prev_action)
     J_jerk = cfg.w_jerk * Jj + cfg.w_action_smooth * Jas
 
-    scale = float(np.clip(v / v_init, 0.0, 1.0))
+    scale = float(np.clip(v / _v_init, 0.0, 1.0))
 
     total = scale * J_comfort + J_speed + J_jerk - cfg.Q_step
     total = float(np.nan_to_num(total, nan=0.0, posinf=0.0, neginf=0.0))
