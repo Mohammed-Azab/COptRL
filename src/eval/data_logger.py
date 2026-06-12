@@ -1,7 +1,7 @@
 """
 Run-data logger for eval.py, driver_eval.py, and mpc.py.
 
-Saves per-episode timeseries to  data/<method>/<road>/<timestamp>/
+Saves per-episode timeseries to  data/<method>/<road>/<run_id>/
   run.mat   MATLAB struct (all arrays as max_steps × n_episodes matrices)
   run.npz   NumPy archive  (same arrays, same layout)
   run_info.json human-readable metadata + variable guide
@@ -32,7 +32,7 @@ Metadata scalars (prefix meta_):
   meta_v_max_kmh    speed limit          [km/h]
   meta_a_comfort    body-accel comfort threshold  [m/s²]
   meta_a_limit      terminal-bonus threshold      [m/s²]
-  meta_timestamp    ISO-8601 string
+  meta_run_id       experiment tag, e.g. exp_27 or run_1
 
 MATLAB quick-start
 ------------------
@@ -59,7 +59,7 @@ Python quick-start
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -133,17 +133,30 @@ class RunLogger:
         v_max_kmh:   float = 72.0,
         a_comfort:   float = 3.0,
         a_limit:     float = 5.0,
+        run_id:      str | None = None,
     ):
-        self.method     = method
-        self.road       = road
-        self.dt         = dt
-        self.v_max_kmh  = v_max_kmh
-        self.a_comfort  = a_comfort
-        self.a_limit    = a_limit
-        self.timestamp  = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.method    = method
+        self.road      = road
+        self.dt        = dt
+        self.v_max_kmh = v_max_kmh
+        self.a_comfort = a_comfort
+        self.a_limit   = a_limit
         self._episodes: list[EpisodeData] = []
 
-        self.save_dir = out_root / method / road / self.timestamp
+        if run_id is None:
+            parent = out_root / method / road
+            existing: set[int] = set()
+            if parent.is_dir():
+                for d in parent.iterdir():
+                    m = re.match(r'run_(\d+)$', d.name)
+                    if m:
+                        existing.add(int(m.group(1)))
+            n = 1
+            while n in existing:
+                n += 1
+            run_id = f'run_{n}'
+        self.run_id   = run_id
+        self.save_dir = out_root / method / road / self.run_id
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
     def add(self, ep: EpisodeData) -> None:
@@ -199,9 +212,9 @@ class RunLogger:
         }
         # string metadata goes to JSON only (see companion below)
         meta_str = {
-            'meta_method':    self.method,
-            'meta_road':      self.road,
-            'meta_timestamp': self.timestamp,
+            'meta_method':  self.method,
+            'meta_road':    self.road,
+            'meta_run_id':  self.run_id,
         }
 
         saved: dict[str, Path] = {}

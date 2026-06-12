@@ -195,7 +195,7 @@ def main() -> None:
     ap.add_argument('--results-dir',     default=None)
     ap.add_argument('--out',             default=None)
     ap.add_argument('--log-data',        metavar='DIR', default='data',
-                    help='Save run data (.mat/.npz) to DIR/HumanDriver/<road>/<ts>/. '
+                    help='Save run data (.mat/.npz) to DIR/HumanDriver/<road>/<run_N>/. '
                          'Omit DIR to use <repo>/data/.',
                     nargs='?', const='__default__')
     args = ap.parse_args()

@@ -239,8 +239,8 @@ def main() -> None:
                             help='save per-episode time-series PNG')
             ap.add_argument('--results-dir', default=None)
             ap.add_argument('--out', default=None)
-            ap.add_argument('--log-data', metavar='DIR', default=None,
-                            help='Save run data (.mat/.npz) to DIR/MPC/<road>/<ts>/. '
+            ap.add_argument('--log-data', metavar='DIR', default='data',
+                            help='Save run data (.mat/.npz) to DIR/MPC/<road>/<run_N>/. '
                                  'Omit DIR to use <repo>/data/.',
                             nargs='?', const='__default__')
             args = ap.parse_args()

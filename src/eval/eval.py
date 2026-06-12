@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -64,8 +65,8 @@ def parse_args() -> argparse.Namespace:
                    help="Output directory for JSON + figures.")
     p.add_argument("--no-deterministic", action="store_true",
                    help="Sample from policy stochastically instead of taking the mode.")
-    p.add_argument("--log-data", metavar="DIR", default=None,
-                   help="Save run data (.mat/.npz) to DIR/PPO/<road>/<timestamp>/. "
+    p.add_argument("--log-data", metavar="DIR", default='data',
+                   help="Save run data (.mat/.npz) to DIR/PPO/<road>/<exp_N>/. "
                         "Default root is <repo>/data/ when flag is given without value.",
                    nargs="?", const="__default__")
     return p.parse_args()
@@ -480,10 +481,11 @@ def main() -> None:
         scenario_road  = make_road_generator(args.scenario)
         scenario_label = args.scenario
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _m = re.search(r'(exp_\d+)', str(args.model_path))
+    exp_tag = _m.group(1) if _m else None
     save_dir = (
         Path(args.results_dir) if args.results_dir
-        else _ROOT / "eval" / "results" / f"eval_{args.algo}_{scenario_label}_{ts}"
+        else _ROOT / "eval" / "results" / f"eval_{args.algo}_{scenario_label}_{exp_tag or 'run'}"
     )
 
     print(f"\n{'═'*60}")
@@ -512,6 +514,7 @@ def main() -> None:
             v_max_kmh=rcfg.v_max * 3.6,
             a_comfort=rcfg.a_comfort,
             a_limit=rcfg.a_limit,
+            run_id=exp_tag,
         )
         if log_root is not None else None
     )
