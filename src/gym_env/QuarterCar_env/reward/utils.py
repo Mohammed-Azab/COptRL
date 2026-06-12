@@ -14,7 +14,7 @@ def reward_bounds(cfg: RewardConfig, n_steps: int, n_bumps: int = 0) -> dict:
         + cfg.w_jerk   * -(cfg.reward_jerk_clip  / cfg.j_max) ** 2
         + cfg.w_action_smooth * _J_SMOOTH_WORST
         + cfg.Q_v             * _J_SPEED_WORST
-        - cfg.Q_step
+        + cfg.Q_step
     )
 
     return {

@@ -1,31 +1,32 @@
-# PPO hyperparameters for SB3 PPO constructor.
+# PPO hyperparameters — canonical values from Schulman et al. (2017) with
+# long-horizon adjustments (gamma=0.999, moderate entropy for curriculum).
 # Keys match SB3 API exactly so they can be unpacked with **kwargs.
 
 PPO:
   policy: MlpPolicy
-  learning_rate: 2.5640917889918337e-05
-  n_steps: 8192
-  batch_size: 256
-  n_epochs: 18
-  gamma: 0.9954345391650923
-  gae_lambda: 0.9542839301626783
-  clip_range: 0.2
-  ent_coef: 1.0404989354164112e-05
-  vf_coef: 0.5800106273228675
-  max_grad_norm: 0.9918176654427455
+  learning_rate: 3.0e-04      
+  n_steps: 2048                
+  batch_size: 64              
+  n_epochs: 10                
+  gamma: 0.999                
+  gae_lambda: 0.95            
+  clip_range: 0.2             
+  ent_coef: 0.005              
+  vf_coef: 0.5                
+  max_grad_norm: 0.5          
   policy_kwargs:
     net_arch:
-      pi: [512, 512]
-      vf: [512, 512]
+      pi: [256, 256]        
+      vf: [256, 256]
 
 training:
   seed: 42
   total_timesteps: 10_000_000
   n_envs: 5
   n_eval_envs: 1
-  eval_freq: 50_000
+  eval_freq: 100_000
   n_eval_episodes: 20
-  checkpoint_freq: 200_000
+  checkpoint_freq: 500_000
   norm_obs: true
   norm_reward: true
   eval_road: speed_bump

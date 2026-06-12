@@ -36,7 +36,6 @@ def j_speed(v: float, v_min: float, v_init: float) -> float:
 
 
 # Terminal Rewards
-
 def j_destination(s_pos: float, road_length: float, cfg: RewardConfig) -> float:
     return cfg.terminal_bonus if s_pos >= road_length - 1.0 else cfg.terminal_penalty
 
@@ -80,8 +79,9 @@ def compute_reward(
     J_jerk = cfg.w_jerk * Jj + cfg.w_action_smooth * Jas
 
     scale = float(np.clip(v / _v_init, 0.0, 1.0))
+    scale = 1.0
 
-    total = scale * J_comfort + J_speed + J_jerk - cfg.Q_step
+    total = scale * J_comfort + J_speed + J_jerk + cfg.Q_step
     total = float(np.nan_to_num(total, nan=0.0, posinf=0.0, neginf=0.0))
 
     bd = {
