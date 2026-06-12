@@ -15,24 +15,60 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 
 class QuarterCarMetricsCallback(BaseCallback):
-    # writes ride-comfort and speed-tracking metrics to TensorBoard
+    # writes ride-comfort, speed, reward breakdown, and curriculum metrics to TensorBoard
 
     def _on_step(self) -> bool:
         infos: list[dict] = self.locals.get("infos", [])
-        comfort, rms_a, spd_err, ep_reward, preview_max = [], [], [], [], []
+
+        comfort, rms_a, peak_a      = [], [], []
+        spd_kmh, spd_err, v_ratio   = [], [], []
+        ep_reward                   = []
+        J_heave, J_speed, J_jerk, J_total = [], [], [], []
+        bumps_passed, bumps_total   = [], []
 
         for info in infos:
-            if "comfort_score"    in info: comfort.append(info["comfort_score"])
-            if "rms_accel"        in info: rms_a.append(info["rms_accel"])
-            if "speed_error"      in info: spd_err.append(abs(info["speed_error"]))
-            if "episode_reward"   in info: ep_reward.append(info["episode_reward"])
-            if "preview_max_height" in info: preview_max.append(info["preview_max_height"])
+            if "comfort_score"  in info: comfort.append(info["comfort_score"])
+            if "rms_accel"      in info: rms_a.append(info["rms_accel"])
+            if "peak_accel"     in info: peak_a.append(info["peak_accel"])
+            if "speed_kmh"      in info: spd_kmh.append(info["speed_kmh"])
+            if "speed_error"    in info: spd_err.append(abs(info["speed_error"]))
+            if "episode_reward" in info: ep_reward.append(info["episode_reward"])
+            if "J_heave"        in info: J_heave.append(info["J_heave"])
+            if "J_speed"        in info: J_speed.append(info["J_speed"])
+            if "J_jerk"         in info: J_jerk.append(info["J_jerk"])
+            if "J_total"        in info: J_total.append(info["J_total"])
+            if "bumps_passed"   in info: bumps_passed.append(info["bumps_passed"])
+            if "bumps_total"    in info: bumps_total.append(info["bumps_total"])
+            v_init_kmh = info.get("v_init_kmh", 0.0)
+            if "speed_kmh" in info and v_init_kmh > 0:
+                v_ratio.append(info["speed_kmh"] / v_init_kmh)
 
-        if comfort:     self.logger.record("env/comfort_score",      float(np.mean(comfort)))
-        if rms_a:       self.logger.record("env/rms_accel_ms2",      float(np.mean(rms_a)))
-        if spd_err:     self.logger.record("env/speed_error_ms",     float(np.mean(spd_err)))
-        if ep_reward:   self.logger.record("env/ep_reward",          float(np.mean(ep_reward)))
-        if preview_max: self.logger.record("env/preview_max_height_m", float(np.mean(preview_max)))
+        log = self.logger.record
+        # --- driving quality ---
+        if comfort:   log("env/comfort_score",  float(np.mean(comfort)))
+        if rms_a:     log("env/rms_accel_ms2",  float(np.mean(rms_a)))
+        if peak_a:    log("env/peak_accel_ms2", float(np.mean(peak_a)))
+        if spd_kmh:   log("env/speed_kmh",      float(np.mean(spd_kmh)))
+        if spd_err:   log("env/speed_error_ms", float(np.mean(spd_err)))
+        if v_ratio:   log("env/v_ratio",        float(np.mean(v_ratio)))  # v/v_init; 1.0=on target
+        if ep_reward: log("env/ep_reward",      float(np.mean(ep_reward)))
+        if bumps_passed and bumps_total and sum(bumps_total) > 0:
+            log("env/bump_pass_rate", sum(bumps_passed) / sum(bumps_total))
+
+        # --- per-step reward breakdown ---
+        if J_heave: log("reward/J_heave", float(np.mean(J_heave)))  # comfort cost
+        if J_speed: log("reward/J_speed", float(np.mean(J_speed)))  # speed tracking cost
+        if J_jerk:  log("reward/J_jerk",  float(np.mean(J_jerk)))   # jerk/smoothness cost
+        if J_total: log("reward/J_total", float(np.mean(J_total)))  # total per-step
+
+        # --- curriculum level ---
+        try:
+            levels = self.training_env.get_attr("current_level")
+            if levels:
+                log("curriculum/level", float(levels[0]))
+        except Exception:
+            pass
+
         return True
 
 
