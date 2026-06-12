@@ -81,6 +81,10 @@ human-driver *args="":
 mpc *args="":
     PYTHONPATH=src:src/baseline:src/baseline/mpc {{venv}} src/baseline/mpc/mpc.py {{args}}
 
+# Print reward bounds from current config
+reward-bounds:
+    PYTHONPATH=src {{venv}} scripts/reward_bounds.py
+
 # tests
 test *args="":
     PYTHONPATH=src .venv/bin/pytest tests/ -v {{args}}
