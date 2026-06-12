@@ -6,8 +6,9 @@ weights:
   Q_v:               0.5    
   Q_step:            0.1   
 
-  w_jerk:            0.3    
+  w_jerk:            0.3
   w_action_smooth:   0.0
+  Q_t:               1.0    # time-efficiency weight: 0=no time bonus, 1=full terminal_bonus
 
 vertical:
   g:                 9.81

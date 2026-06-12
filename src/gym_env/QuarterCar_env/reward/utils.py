@@ -17,10 +17,12 @@ def reward_bounds(cfg: RewardConfig, n_steps: int, n_bumps: int = 0) -> dict:
         + cfg.Q_step
     )
 
+    j_time_max = cfg.Q_t * cfg.terminal_bonus  # j_time at t=0 (theoretical ceiling)
+
     return {
         "per_step_max": round(per_step_max, 4),
         "per_step_min": round(per_step_min, 4),
-        "episode_max":  round(per_step_max * n_steps + cfg.terminal_bonus, 1),
+        "episode_max":  round(per_step_max * n_steps + cfg.terminal_bonus + j_time_max, 1),
         "episode_min":  round(per_step_min * n_steps + cfg.terminal_penalty, 1),
         "n_steps":  n_steps,
         "n_bumps":  n_bumps,

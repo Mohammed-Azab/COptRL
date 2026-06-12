@@ -42,6 +42,7 @@ class RewardConfig:
     terminal_bonus:   float = 100.0
     terminal_penalty: float = -100.0
     a_limit:          float =   5.0
+    Q_t:              float =   1.0   # time-efficiency weight (scales j_time bonus)
 
     # observation preview
     preview_distance:    float = 60.0
@@ -76,6 +77,7 @@ def load_reward_config() -> RewardConfig:
         Q_a             = float(w.get("Q_a",             1.0)),
         Q_v             = float(w.get("Q_v",             1.0)),
         Q_step          = float(w.get("Q_step",          0.1)),
+        Q_t             = float(w.get("Q_t",             1.0)),
         w_jerk          = float(w.get("w_jerk",          0.4)),
         w_action_smooth = float(w.get("w_action_smooth", 0.1)),
 

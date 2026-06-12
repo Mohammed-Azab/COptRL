@@ -42,7 +42,7 @@ def j_destination(s_pos: float, road_length: float, cfg: RewardConfig) -> float:
 
 def j_time(t: float, t_max: float, cfg: RewardConfig) -> float:
     frac_used = float(np.clip(t / max(t_max, 1e-6), 0.0, 1.0))
-    return cfg.terminal_bonus * (1.0 - frac_used)
+    return cfg.Q_t * cfg.terminal_bonus * (1.0 - frac_used)
 
 
 def compute_terminal_reward(t: float, t_max: float, road_length: float,
