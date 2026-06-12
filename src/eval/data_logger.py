@@ -1,60 +1,8 @@
 """
-Run-data logger for eval.py, driver_eval.py, and mpc.py.
-
 Saves per-episode timeseries to  data/<method>/<road>/<run_id>/
-  run.mat   MATLAB struct (all arrays as max_steps × n_episodes matrices)
-  run.npz   NumPy archive  (same arrays, same layout)
-  run_info.json human-readable metadata + variable guide
-
-Layout (both formats)
----------------------
-Timeseries: shape (max_steps, n_episodes), NaN-padded for shorter episodes:
-  t           time axis                 [s]
-  v_kmh       longitudinal speed        [km/h]
-  v_ref_kmh   speed reference           [km/h]
-  z_B_ddot    body vertical accel       [m/s²]
-  z_W_ddot    wheel vertical accel      [m/s²]   (when available)
-  action      normalised control input  [-1, 1]
-  reward      per-step reward           [-]
-  s_pos       arc-length position       [m]       (when available)
-
-Per-episode scalars, shape (n_episodes,):
-  episode_return    total episode return
-  rms_accel         RMS body accel       [m/s²]
-  comfort_score     comfort metric       [0-1]
-  n_steps           valid steps before NaN padding
-
-Metadata scalars (prefix meta_):
-  meta_method       e.g. 'PPO', 'MPC', 'HumanDriver'
-  meta_road         e.g. 'speed_bump'
-  meta_n_episodes   int
-  meta_dt           simulation timestep  [s]
-  meta_v_max_kmh    speed limit          [km/h]
-  meta_a_comfort    body-accel comfort threshold  [m/s²]
-  meta_a_limit      terminal-bonus threshold      [m/s²]
-  meta_run_id       experiment tag, e.g. exp_27 or run_1
-
-MATLAB quick-start
-------------------
-    d = load('run.mat');
-    % overlay all episodes
-    figure; plot(d.t, d.v_kmh); xlabel('t [s]'); ylabel('v [km/h]');
-    % per-episode mean speed
-    mean_v = nanmean(d.v_kmh);
-    % single episode
-    ep = 1;
-    valid = ~isnan(d.t(:, ep));
-    plot(d.t(valid, ep), d.z_B_ddot(valid, ep));
-
-Python quick-start
-------------------
-    import numpy as np
-    d = np.load('run.npz')          # no allow_pickle needed, no object arrays
-    t, v = d['t'], d['v_kmh']      # (max_steps, n_ep)
-    # episode 0
-    mask = ~np.isnan(t[:, 0])
-    plt.plot(t[mask, 0], v[mask, 0])
-    # string metadata lives in run_info.json, not run.npz
+  - run.mat   
+  - run.npz
+  - run_info.json human-readable metadata + variable guide
 """
 from __future__ import annotations
 
@@ -66,7 +14,7 @@ from typing import Optional
 import numpy as np
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# helpers 
 
 def _to_arr(v) -> np.ndarray:
     return np.asarray(v, dtype=np.float64) if v is not None else np.empty(0)
@@ -83,7 +31,7 @@ def _pad_episodes(cols: list[np.ndarray]) -> np.ndarray:
     return out
 
 
-# ── public API ────────────────────────────────────────────────────────────────
+# public API 
 
 class EpisodeData:
     """Accumulate one episode's timeseries then hand it to RunLogger."""
@@ -170,7 +118,7 @@ class RunLogger:
 
         dt = self.dt
 
-        # ── build arrays ──────────────────────────────────────────────────
+        # build arrays 
         arrays: dict[str, np.ndarray] = {}
 
         # time axis
@@ -224,7 +172,7 @@ class RunLogger:
         np.savez(str(npz_path), **arrays, **meta_num)
         saved['npz'] = npz_path
 
-        # ── .mat ──────────────────────────────────────────────────────────
+        # .mat 
         try:
             from scipy.io import savemat
             mat_dict = dict(arrays)
@@ -236,7 +184,7 @@ class RunLogger:
         except ImportError:
             pass   # scipy optional; .npz is always saved
 
-        # ── companion JSON ─────────────────────────────────────────────────
+        # companion JSON 
         info = {
             'metadata': {**meta_str, **meta_num},
             'summary': {
@@ -260,7 +208,7 @@ class RunLogger:
         return saved
 
 
-# ── variable documentation ────────────────────────────────────────────────────
+# variable documentation 
 
 _UNITS: dict[str, str] = {
     't':              's',
@@ -278,9 +226,5 @@ _UNITS: dict[str, str] = {
 }
 
 _GUIDE = {
-    'timeseries_shape': '(max_steps, n_episodes) — NaN-padded for shorter episodes',
-    'access_episode':   'd["t"][:, i]  or  d.t(:, i+1) in MATLAB  (0-indexed Python, 1-indexed MATLAB)',
-    'valid_mask_python': 'mask = ~np.isnan(d["t"][:, ep_i])',
-    'valid_mask_matlab': 'valid = ~isnan(d.t(:, ep));',
-    'mean_over_eps':    'nanmean(d.v_kmh, 2) in MATLAB  /  np.nanmean(d["v_kmh"], axis=1) in Python',
+
 }
