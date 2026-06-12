@@ -1,0 +1,36 @@
+total: 800
+per_difficulty:
+  easy: 200
+  medium: 200
+  hard: 200
+  expert: 200
+catalog_source: Mandl 2021 (speed_bumps.json)
+v_range_kmh:
+- 18.0
+- 50.0
+flat_start_m_values:
+- 30.0
+- 45.0
+- 60.0
+- 75.0
+n_speeds_pool: 400
+per_level_requested: 200
+difficulty_thresholds:
+  easy:
+    score_min: 0.0
+    score_max: 0.3
+  medium:
+    score_min: 0.3
+    score_max: 0.57
+  hard:
+    score_min: 0.57
+    score_max: 0.78
+  expert:
+    score_min: 0.78
+    score_max: 1.01
+bump_rank:
+  3: 0.0
+  4: 0.25
+  1: 0.5
+  0: 0.75
+  2: 1.0

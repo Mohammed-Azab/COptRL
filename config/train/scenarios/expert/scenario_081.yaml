@@ -1,0 +1,8 @@
+catalog_id: 0
+catalog_name: short_bump
+speed_kmh: 50.0
+flat_start_m: 60.0
+difficulty: expert
+difficulty_score: 0.85
+height_m: 0.025
+width_m: 0.92

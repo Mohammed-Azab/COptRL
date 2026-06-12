@@ -5,6 +5,23 @@ Each entry explains what we do, why we do it, and what breaks if you change it.
 
 ---
 
+## Curriculum uses pre-generated scenarios, not on-the-fly random roads
+
+**What we do:**
+`scripts/generate_train_scenarios.py` produces 200 YAML files per difficulty level (easy/medium/hard/expert) and writes them to `config/train/scenarios/` before training starts. `CurriculumWrapper` loads them once at init and samples uniformly from the pool on each reset. Fallback random-road parameters (used when files are absent or for the expert-level multi-bump fraction) live in `config/curriculum/curr_multi_bumps.yaml` separately from the main `curriculum_params.yaml`.
+
+**Why:**
+On-the-fly random roads (`RoadGenerator.from_random`) are fully unbounded — any catalog bump at any speed in the level's range. This means the agent can see the same (bump, speed) pair in multiple episodes at slightly different values, or never see some extreme combinations at all within a training run. Pre-generation fixes the training distribution: every scenario is distinct, difficulty boundaries are exact (based on `difficulty_score = 0.6 × bump_rank + 0.4 × speed_norm`), and the set is reproducible from the seed. It also lets us inspect and adjust the distribution (run the script again) without changing training code.
+
+Level 3 (expert) still mixes in 25% random multi-bump episodes via `allow_multi_bump: true` so the agent does not overfit to single-bump trajectories at the highest level.
+
+**What breaks if you change it:**
+- Deleting `config/train/scenarios/` without removing `scenarios_dir` from the curriculum config → wrapper silently falls back to random generation at all levels, training still works but loses distribution control.
+- Changing thresholds in the script after training has started → the new difficulty assignments won't match what the agent has already seen; reload scenarios and restart from level 0.
+- Removing `curr_multi_bumps.yaml` → fallback branch in `CurriculumWrapper.reset()` raises `KeyError` on `num_bumps_range`; always keep it alongside `curriculum_params.yaml`.
+
+---
+
 ## Speed: km/h in config, m/s in physics
 
 **What we do:**
