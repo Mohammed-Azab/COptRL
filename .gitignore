@@ -234,8 +234,8 @@ docs/
 !README.md
 !CHANGELOG.md
 !config/README.md
-!config/reward/params_dict.txt
 *.txt
+!config/reward/iso_param.txt
 tune.db
 tune/*
 Mandl Philipp - 2021 - Predictive driver model for speed control in the presence...pdf

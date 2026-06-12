@@ -268,7 +268,7 @@ just eval models/.../PPO_final.zip --road recorded \
     --vecnorm-path models/.../vecnormalize.pkl
 ```
 
-| File | Description | v_ref | Arc length |
+| File | Description | v_init | Arc length |
 |------|-------------|-------|-----------|
 | `sb1_v7_full.json` | Full speed-bump run, Nardo FL wheel | 7 m/s | 83 m |
 | `sb1_v5_full.json` | Same run replayed at reduced speed | 5 m/s | 83 m |

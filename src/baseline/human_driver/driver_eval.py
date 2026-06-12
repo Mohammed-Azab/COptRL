@@ -68,7 +68,7 @@ def run_episode(env, ctrl: HumanDriverController, seed: int,
     n_steps    = 0
     act_times: list[float] = []
     speeds:    list[float] = []
-    v_refs:    list[float] = []
+    v_inits:    list[float] = []
     accels:    list[float] = []
     actions:   list[float] = []
     frames:    list        = []
@@ -93,7 +93,7 @@ def run_episode(env, ctrl: HumanDriverController, seed: int,
         accel_sq  += info.get('z_B_ddot', 0.0) ** 2
         n_steps   += 1
         speeds.append(info.get('speed',    0.0))
-        v_refs.append(info.get('v_ref',    0.0))
+        v_inits.append(info.get('v_init',    0.0))
         accels.append(info.get('z_B_ddot', 0.0))
         actions.append(float(u))
         done = terminated or truncated
@@ -111,7 +111,7 @@ def run_episode(env, ctrl: HumanDriverController, seed: int,
         'bumps_total':    len(raw._bump_ends),
         'act_us_mean':    round(float(np.mean(act_times)) * 1e6, 1),
         '_speeds':        speeds,
-        '_v_refs':        v_refs,
+        '_v_inits':        v_inits,
         '_accels':        accels,
         '_actions':       actions,
         '_frames':        frames,
@@ -205,7 +205,7 @@ def main() -> None:
 
     cfg  = load_reward_config()
     ctrl = HumanDriverController(
-        v_max          = float(cfg.v_max),
+        v_max          = float(cfg.v_limit),
         v_min          = float(cfg.v_min),
         a_max          = float(cfg.a_max),
         preview_m      = args.preview,
@@ -259,7 +259,7 @@ def main() -> None:
             road=scenario_label,
             out_root=log_root,
             dt=DT,
-            v_max_kmh=cfg.v_max * 3.6,
+            v_max_kmh=cfg.v_limit * 3.6,
             a_comfort=cfg.a_comfort,
             a_limit=cfg.a_limit,
         )
@@ -284,7 +284,7 @@ def main() -> None:
         if run_logger is not None:
             run_logger.add(EpisodeData(
                 v=r['_speeds'],
-                v_ref=r['_v_refs'],
+                v_init=r['_v_inits'],
                 z_B_ddot=r['_accels'],
                 action=r['_actions'],
                 episode_return=r['episode_return'],

@@ -101,7 +101,7 @@ def _record(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["rewards"].append(reward)
     ep["actions"].append(action)
     ep["speeds"].append(info.get("speed", 0.0))
-    ep["v_refs"].append(info.get("v_ref", 0.0))
+    ep["v_inits"].append(info.get("v_init", 0.0))
     ep["body_accels"].append(info.get("z_B_ddot", 0.0))
     ep["wheel_accels"].append(info.get("z_W_ddot", 0.0))
     ep["rms_accel_running"].append(info.get("rms_accel", 0.0))
@@ -167,7 +167,7 @@ def episode_metrics(ep: dict) -> dict:
     rewards = np.asarray(ep["rewards"])
     accels  = np.asarray(ep["body_accels"])
     speeds  = np.asarray(ep["speeds"])
-    v_refs  = np.asarray(ep["v_refs"])
+    v_inits  = np.asarray(ep["v_inits"])
     actions = np.asarray(ep["actions"])
 
     metrics = {
@@ -176,7 +176,7 @@ def episode_metrics(ep: dict) -> dict:
         "n_steps":               int(len(rewards)),
         "rms_accel":             float(np.sqrt(np.mean(accels ** 2))),
         "peak_accel":            float(np.max(np.abs(accels))),
-        "speed_rmse":            float(np.sqrt(np.mean((speeds - v_refs) ** 2))) * 3.6,  # km/h
+        "speed_rmse":            float(np.sqrt(np.mean((speeds - v_inits) ** 2))) * 3.6,  # km/h
         "mean_speed":            float(speeds.mean()) * 3.6,  # km/h
         "comfort_score":         float(ep["comfort_score_running"][-1]),
         "action_rms":            float(np.sqrt(np.mean(actions ** 2))),
@@ -284,9 +284,9 @@ def plot_timeseries(ep: dict, ep_i: int, rcfg, bounds: dict, save_dir: Path | No
 
     # Wheel acceleration
     ax_wheel.plot(t, ep["wheel_accels"], color="#00838F", lw=1.4, label="wheel accel z̈_W")
-    ax_wheel.axhline( rcfg.a_W_comfort, color="#26C6DA", ls="--", lw=1.2,
-                      label=f"comfort ±{rcfg.a_W_comfort} m/s²")
-    ax_wheel.axhline(-rcfg.a_W_comfort, color="#26C6DA", ls="--", lw=1.2)
+    ax_wheel.axhline( 30.0, color="#26C6DA", ls="--", lw=1.2,
+                      label="comfort ±30 m/s²")
+    ax_wheel.axhline(-30.0, color="#26C6DA", ls="--", lw=1.2)
     ax_wheel.set_ylabel("wheel accel [m/s²]", fontsize=9)
     ax_wheel.legend(fontsize=7, loc="upper right")
 
@@ -511,7 +511,7 @@ def main() -> None:
             road=scenario_label,
             out_root=log_root,
             dt=DT,
-            v_max_kmh=rcfg.v_max * 3.6,
+            v_max_kmh=rcfg.v_limit * 3.6,
             a_comfort=rcfg.a_comfort,
             a_limit=rcfg.a_limit,
             run_id=exp_tag,
@@ -539,7 +539,7 @@ def main() -> None:
         if run_logger is not None:
             run_logger.add(EpisodeData(
                 v=ep["speeds"],
-                v_ref=ep["v_refs"],
+                v_init=ep["v_inits"],
                 z_B_ddot=ep["body_accels"],
                 z_W_ddot=ep["wheel_accels"],
                 action=ep["actions"],

@@ -36,14 +36,14 @@ def _pad_episodes(cols: list[np.ndarray]) -> np.ndarray:
 class EpisodeData:
     """Accumulate one episode's timeseries then hand it to RunLogger."""
 
-    __slots__ = ('v', 'v_ref', 'z_B_ddot', 'z_W_ddot',
+    __slots__ = ('v', 'v_init', 'z_B_ddot', 'z_W_ddot',
                  'action', 'reward', 's_pos',
                  'episode_return', 'rms_accel', 'comfort_score')
 
     def __init__(
         self,
         v:              list | np.ndarray,
-        v_ref:          list | np.ndarray,
+        v_init:          list | np.ndarray,
         z_B_ddot:       list | np.ndarray,
         action:         list | np.ndarray,
         episode_return: float,
@@ -54,7 +54,7 @@ class EpisodeData:
         s_pos:          Optional[list | np.ndarray] = None,
     ):
         self.v              = _to_arr(v)
-        self.v_ref          = _to_arr(v_ref)
+        self.v_init          = _to_arr(v_init)
         self.z_B_ddot       = _to_arr(z_B_ddot)
         self.z_W_ddot       = _to_arr(z_W_ddot) if z_W_ddot is not None else None
         self.action         = _to_arr(action)
@@ -127,7 +127,7 @@ class RunLogger:
 
         # timeseries channels
         arrays['v_kmh']     = _pad_episodes([e.v     * 3.6 for e in eps])
-        arrays['v_ref_kmh'] = _pad_episodes([e.v_ref * 3.6 for e in eps])
+        arrays['v_init_kmh'] = _pad_episodes([e.v_init * 3.6 for e in eps])
         arrays['z_B_ddot']  = _pad_episodes([e.z_B_ddot    for e in eps])
         arrays['action']    = _pad_episodes([e.action       for e in eps])
 
@@ -213,7 +213,7 @@ class RunLogger:
 _UNITS: dict[str, str] = {
     't':              's',
     'v_kmh':          'km/h',
-    'v_ref_kmh':      'km/h',
+    'v_init_kmh':      'km/h',
     'z_B_ddot':       'm/s²',
     'z_W_ddot':       'm/s²',
     'action':         '[-1, 1]',

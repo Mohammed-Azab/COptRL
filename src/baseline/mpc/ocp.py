@@ -68,21 +68,21 @@ def build_acados_model(physics: dict, bumps: list, dt: float) -> AcadosModel:
 
     nx = 7   # [ζ−z_W, ż_W, z_W−z_B, ż_B, v, z_B, s_pos]
     nu = 1   # normalised acceleration command u ∈ [-1, 1]
-    # online parameters: v_ref (1 scalar per shooting node, passed as p)
+    # online parameters: v_init (1 scalar per shooting node, passed as p)
     # we bake bumps into the symbolic expression at build time
 
     x  = ca.SX.sym('x',  nx)
     u  = ca.SX.sym('u',  nu)
-    p  = ca.SX.sym('p',  1)    # p[0] = v_ref at this node
+    p  = ca.SX.sym('p',  1)    # p[0] = v_init at this node
 
     # augmented state: x[0:6] = ODE state, x[6] = s_pos
     x_ode = x[:6]
     s_pos = x[6]
     v     = x[4]               # longitudinal speed slot
 
-    # speed integration:  v_new = clip(v + u * a_max * dt, 0, v_max)
+    # speed integration:  v_new = clip(v + u * a_max * dt, 0, v_limit)
     # acados doesn't clip inside dynamics, so we rely on constraints
-    v_max = physics.get('v_max', 20.0)
+    v_max = physics.get('v_limit', 20.0)
     a_max = physics.get('a_max',  5.0)
     v_new = v + u[0] * a_max * dt
 
@@ -140,7 +140,7 @@ def build_solver_simple(
     v      = x[0]
     u_prev = x[2]
     a_max  = float(physics.get('a_max', 5.0))
-    v_max  = float(cfg.v_max)
+    v_max  = float(cfg.v_limit)
     v_min  = float(cfg.v_min)
 
     # du_prev/dt = (u - u_prev)/dt → exact step update under ERK integration
@@ -176,8 +176,8 @@ def build_solver_simple(
     r   = ca.vertcat(r_tracking, r_accel, r_jerk, r_smooth, r_progress)
     r_e = ca.vertcat(r_tracking, r_progress)   # terminal: no u
 
-    W   = np.diag([cfg.Q_v, cfg.Q_a, cfg.w_jerk, cfg.w_action_smooth, cfg.w_progress])
-    W_e = np.diag([cfg.Q_v, cfg.w_progress]) * 2.0
+    W   = np.diag([cfg.Q_v, cfg.Q_a, cfg.w_jerk, cfg.w_action_smooth])
+    W_e = np.diag([cfg.Q_v]) * 2.0
 
     ocp.cost.cost_type    = 'NONLINEAR_LS'
     ocp.cost.cost_type_e  = 'NONLINEAR_LS'
@@ -240,7 +240,7 @@ def build_solver(
 
     # --- cost: external (lets us express the full reward-aligned cost) ---
     # cost = Q_zBddot*(zBddot/g)^2 + Q_zWddot*(zWddot/g)^2
-    #      + Q_v*((v-v_ref)/v_max)^2 + Q_a*(a/g)^2
+    #      + Q_v*((v-v_init)/v_max)^2 + Q_a*(a/g)^2
     #      + w_smooth*(u - u_prev)^2 - w_prog*v/v_max
     # We use NONLINEAR_LS cost so acados can use Gauss-Newton Hessian approx.
 
@@ -251,8 +251,8 @@ def build_solver(
     v     = x_sym[4]
     s_pos = x_sym[6]
     a_max_v = physics.get('a_max', 5.0)
-    v_max_v = float(cfg.v_max)
-    v_min_v = float(cfg.v_min)
+    v_limit_v = float(cfg.v_limit)
+    v_min_v   = float(cfg.v_min)
 
     # body/wheel accel: evaluate ODE derivative at current state for z_B_ddot, z_W_ddot
     zq_cost = _zq_expr(s_pos, v, bumps)
@@ -261,11 +261,11 @@ def build_solver(
     z_W_ddot = dx_cost[1]
     a_long   = u_sym[0] * a_max_v
 
-    v_ref     = p_sym[0]
-    speed_err = (v - v_ref) / v_max_v
+    v_init    = p_sym[0]
+    speed_err = (v - v_init) / v_limit_v
 
-    # velocity scale mirrors env: heave/wheel/accel multiplied by v/v_max
-    vel_scale = v / v_max_v
+    # velocity scale mirrors env: heave/wheel/accel multiplied by v/v_limit
+    vel_scale = v / v_limit_v
 
     # residuals for NONLINEAR_LS  (cost = 0.5 * (r - yref)' W (r - yref))
     r = ca.vertcat(
@@ -316,16 +316,16 @@ def build_solver(
     ocp.constraints.ubu = np.array([ 1.0])
     ocp.constraints.idxbu = np.array([0])
 
-    # v ∈ [v_min, v_max]  (state constraint on x[4])
+    # v ∈ [v_min, v_limit]  (hard constraint in MPC; env uses soft limit)
     ocp.constraints.lbx   = np.array([v_min_v])
-    ocp.constraints.ubx   = np.array([v_max_v])
+    ocp.constraints.ubx   = np.array([v_limit_v])
     ocp.constraints.idxbx = np.array([4])
 
     # initial state constraint (set at runtime)
     ocp.constraints.x0 = np.zeros(nx)
 
     # --- initial parameter values ---
-    ocp.parameter_values = np.array([v_max_v])  # v_ref placeholder
+    ocp.parameter_values = np.array([v_limit_v])  # v_init placeholder
 
     # --- solver options ---
     ocp.solver_options.integrator_type      = 'ERK'

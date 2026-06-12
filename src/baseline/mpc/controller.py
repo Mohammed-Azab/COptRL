@@ -43,7 +43,7 @@ class MPCController:
     ):
         self._cfg     = cfg or load_reward_config()
         self._physics = dict(physics or PHYSICS)
-        self._physics['v_max'] = float(self._cfg.v_max)
+        self._physics['v_limit'] = float(self._cfg.v_limit)
         self._physics['a_max'] = float(self._cfg.a_max)
 
         self._N                   = N

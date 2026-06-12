@@ -7,7 +7,7 @@ from gymnasium import spaces
 from QuarterCar_env.core.ode_model import QuarterCarODE
 from road.road_generator import RoadGenerator
 from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
-from QuarterCar_env.reward.reward import compute_reward, compute_terminal_bonus
+from QuarterCar_env.reward.reward import compute_reward, compute_terminal_reward
 from QuarterCar_env.config.env_params import (
     DT, EPISODE_STEPS,
     TRUNC_TRAVEL, TRUNC_ZS,
@@ -65,7 +65,7 @@ class QuarterCarEnv(gym.Env):
         self._trunc_zs          = float(trunc_zs)
         self._start_at_eq       = bool(start_at_equilibrium)
 
-        self._v_ref_fn: Optional[Callable[[float], float]] = (road_params or {}).get('v_ref_fn', None)
+        self._v_init_fn: Optional[Callable[[float], float]] = (road_params or {}).get('v_init_fn', None)
 
         self._rcfg = reward_config or load_reward_config()
 
@@ -99,8 +99,8 @@ class QuarterCarEnv(gym.Env):
 
         # speed state
         self._v              = self._v0
-        self._v_episode_ref  = self._rcfg.v_max   # constant per episode, Mandl-style
-        self._v_ref_last     = self._rcfg.v_max
+        self._v_episode_ref  = self._rcfg.v_limit
+        self._v_init_last     = self._rcfg.v_limit
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
@@ -159,7 +159,7 @@ class QuarterCarEnv(gym.Env):
         elif self.road_profile == 'speed_bump' and randomize:
             road_kwargs = opts.get("road_kwargs", self._random_road_kwargs)
             v_low  = float(opts.get("v_random_low",  self._v_random_low))
-            v_high = float(opts.get("v_random_high", cfg.v_max))
+            v_high = float(opts.get("v_random_high", cfg.v_limit))
             v = float(rng.uniform(v_low, v_high)) if randomize_speed else self._v0
             self._road = RoadGenerator.from_random(
                 rng, vehicle_speed=v, **road_kwargs
@@ -198,8 +198,8 @@ class QuarterCarEnv(gym.Env):
 
         # Mandl-style: sample a constant reference speed for this episode
         cfg = self._rcfg
-        self._v_episode_ref  = float(self.np_random.uniform(cfg.v_ref_low, cfg.v_max))
-        self._v_ref_last     = self._v_episode_ref
+        self._v_episode_ref  = float(self.np_random.uniform(cfg.v_init_low, cfg.v_limit))
+        self._v_init_last     = self._v_episode_ref
         self._speed_err_sq   = 0.0
         self._s_pos          = 0.0
 
@@ -230,7 +230,7 @@ class QuarterCarEnv(gym.Env):
         u     = float(np.clip(action[0], -1.0, 1.0))
         a_cmd = u * cfg.a_max
         v_old = self._v
-        v_new = float(np.clip(v_old + a_cmd * DT, 0.0, cfg.v_max))
+        v_new = float(np.clip(v_old + a_cmd * DT, 0.0, cfg.v_limit * 2.0))
         a_actual = (v_new - v_old) / DT
         self._v        = v_new
         self._state[4] = v_new
@@ -265,10 +265,10 @@ class QuarterCarEnv(gym.Env):
         self._peak_accel = max(self._peak_accel, abs(z_B_ddot))
 
         # 4. Speed band upper limit and reward
-        v_ref    = self._compute_v_ref(self._t)
-        self._v_ref_last = v_ref
+        v_init    = self._compute_v_init(self._t)
+        self._v_init_last = v_init
 
-        reward, breakdown, self._bumps_passed = compute_reward(
+        reward, breakdown = compute_reward(
             v_new,
             self._last_z_B_ddot,
             self._last_z_W_ddot,
@@ -276,13 +276,9 @@ class QuarterCarEnv(gym.Env):
             self._filtered_jerk,
             self._prev_action, u,
             cfg,
-            s_pos=self._s_pos,
-            road_length=self._max_distance or 0.0,
-            bump_ends=self._bump_ends,
-            bumps_passed=self._bumps_passed,
-            v_ref=v_ref,
+            v_init=v_init,
         )
-        self._speed_err_sq   += (v_ref - v_new) ** 2
+        self._speed_err_sq   += (v_init - v_new) ** 2
 
         self._episode_reward += reward
 
@@ -306,7 +302,13 @@ class QuarterCarEnv(gym.Env):
             terminated = True
             rms        = np.sqrt(self._accel_sq / self._step_count)
             mean_speed = self._s_pos / max(self._t, 1e-9)
-            reward    += compute_terminal_bonus(rms, mean_speed, cfg)
+            reward    += compute_terminal_reward(
+                v_init=self._v_init_last,
+                t=self._t,
+                road_length=self._max_distance or self._s_pos,
+                s_pos=self._s_pos,
+                cfg=cfg,
+            )
 
         if self.render_mode == 'human':
             self.render()
@@ -332,9 +334,9 @@ class QuarterCarEnv(gym.Env):
         a_bound = cfg.accel_clip / cfg.a_comfort
         j_bound = cfg.jerk_clip  / cfg.j_max
 
-        # base obs: [ζ, ζ̇, v/v_max, filtered_a, filtered_jerk, prev_action, v_ref/v_max]
-        # PreviewWrapper appends the peak slots on top of this
-        extra_high = np.array([1.0, a_bound, j_bound, 1.0, 1.0], dtype=np.float32)
+        # base obs: [ζ, ζ̇, v/v_limit, filtered_a, filtered_jerk, prev_action, v_init/v_limit]
+        # v/v_limit can exceed 1.0 (soft constraint); cap at 2.0 for obs space bound.
+        extra_high = np.array([2.0, a_bound, j_bound, 1.0, 1.0], dtype=np.float32)
         extra_low  = np.array([0.0, -a_bound, -j_bound, -1.0, 0.0], dtype=np.float32)
         high = np.concatenate([OBS_HIGH, extra_high])
         low  = np.concatenate([OBS_LOW,  extra_low])
@@ -353,11 +355,11 @@ class QuarterCarEnv(gym.Env):
         a_bound = cfg.accel_clip / cfg.a_comfort
         j_bound = cfg.jerk_clip  / cfg.j_max
         scalars = np.array([
-            float(np.clip(self._v / cfg.v_max, 0.0, 1.0)),
+            float(np.clip(self._v / cfg.v_limit, 0.0, 2.0)),
             float(np.clip(self._filtered_a / cfg.a_comfort, -a_bound, a_bound)),
             float(np.clip(self._filtered_jerk / cfg.j_max, -j_bound, j_bound)),
             float(self._prev_action),
-            float(np.clip(self._v_ref_last / cfg.v_max, 0.0, 1.0)),
+            float(np.clip(self._v_init_last / cfg.v_limit, 0.0, 1.0)),
         ], dtype=np.float32)
 
         return np.concatenate([base_obs, scalars])
@@ -377,9 +379,9 @@ class QuarterCarEnv(gym.Env):
             'z_W_ddot':        float(self._last_z_W_ddot),
             'speed':           float(self._v),              # m/s  (internal)
             'speed_kmh':       float(self._v * 3.6),        # km/h (display)
-            'v_ref':           float(self._v_ref_last),
-            'v_ref_kmh':       float(self._v_ref_last * 3.6),
-            'speed_error':       float(self._v_ref_last - self._v),
+            'v_init':           float(self._v_init_last),
+            'v_init_kmh':       float(self._v_init_last * 3.6),
+            'speed_error':       float(self._v_init_last - self._v),
             'speed_error_rms':   float(np.sqrt(self._speed_err_sq / n)),
             'bumps_passed':    int(self._bumps_passed),
             'bumps_total':     len(self._bump_ends),
@@ -397,7 +399,7 @@ class QuarterCarEnv(gym.Env):
         #   speed_bump: last bump end + 5 m, capped by v_max * episode budget
         #   recorded: full track length
         #   flat/iso/etc: None (step count terminates instead)
-        episode_budget_m = self._max_episode_steps * DT * self._rcfg.v_max
+        episode_budget_m = self._max_episode_steps * DT * self._rcfg.v_limit
 
         if self.road_profile == 'speed_bump' and self._road._bumps:
             x0, _, L = self._road._bumps[-1]
@@ -409,9 +411,9 @@ class QuarterCarEnv(gym.Env):
 
         return None  # flat: no distance limit
 
-    def _compute_v_ref(self, t: float) -> float:
-        if self._ref_speed_profile == "custom" and self._v_ref_fn is not None:
-            return float(self._v_ref_fn(t))
+    def _compute_v_init(self, t: float) -> float:
+        if self._ref_speed_profile == "custom" and self._v_init_fn is not None:
+            return float(self._v_init_fn(t))
         # Mandl-style: constant per episode, sampled in reset()
         return self._v_episode_ref
     

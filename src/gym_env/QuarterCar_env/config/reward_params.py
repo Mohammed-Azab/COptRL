@@ -5,32 +5,28 @@ from QuarterCar_env.config.config_manager import _load_yaml
 @dataclass(frozen=True)
 class RewardConfig:
     # Mandl weights (g-normalised)
-    Q_zBddot:     float = 50.0   # body vertical accel
-    Q_zWddot:     float =  0.5   # wheel vertical accel
-    Q_a:          float =  1.0   # longitudinal accel
-    Q_v:          float =  1.0   # speed tracking
-    Q_step:       float =  0.1   # per-step bonus
+    Q_zBddot:     float = 50.0
+    Q_zWddot:     float =  0.5
+    Q_a:          float =  1.0
+    Q_v:          float =  1.0
+    Q_step:       float =  0.1
 
     # COptRL additions
     w_jerk:          float = 0.4
     w_action_smooth: float = 0.1
-    w_progress:      float = 0.15
-    w_bump_cross:    float = 20.0
 
     # normalization
-    g:               float = 9.81  # gravitational accel, Mandl reward denominator
-    a_B_comfort:     float = 3.0   # obs-space bounds only
-    a_W_comfort:     float = 30.0  # obs-space bounds only
+    g:               float = 9.81
     reward_heave_clip: float = 8.0
     reward_wheel_clip: float = 60.0
 
     # velocity (stored internally in m/s; config files use km/h)
-    v_max:     float = 13.9   # m/s, hard cap
-    a_max:     float =  5.0   # m/s²
-    v_min:     float =  2.0   # m/s
-    v_ref_low: float =  6.94  # m/s (~25 km/h), lower bound for episode v_ref sampling
+    v_limit:    float = 13.9   # m/s, soft speed cap
+    a_max:      float =  5.0   # m/s²
+    v_min:      float =  2.0   # m/s
+    v_init_low: float =  6.94  # m/s (~25 km/h), lower bound for episode v_init sampling
 
-    # longitudinal comfort / filter (obs-space + filter, not reward denominator)
+    # longitudinal comfort / filter
     a_comfort:          float = 2.0
     accel_filter_alpha: float = 0.8
     accel_clip:         float = 9.81
@@ -82,19 +78,15 @@ def load_reward_config() -> RewardConfig:
         Q_step          = float(w.get("Q_step",          0.1)),
         w_jerk          = float(w.get("w_jerk",          0.4)),
         w_action_smooth = float(w.get("w_action_smooth", 0.1)),
-        w_progress      = float(w.get("w_progress",      0.15)),
-        w_bump_cross    = float(w.get("w_bump_cross",   20.0)),
 
         g                = float(vt.get("g",                 9.81)),
-        a_B_comfort      = float(vt.get("a_B_comfort",       3.0)),
-        a_W_comfort      = float(vt.get("a_W_comfort",      30.0)),
         reward_heave_clip = float(vt.get("reward_heave_clip", 8.0)),
         reward_wheel_clip = float(vt.get("reward_wheel_clip", 60.0)),
 
-        v_max     = float(v.get("v_max",     50.0)) / 3.6,
-        a_max     = float(v.get("a_max",      5.0)),
-        v_min     = float(v.get("v_min",      7.2)) / 3.6,
-        v_ref_low = float(v.get("v_ref_low", 25.0)) / 3.6,
+        v_limit    = float(v.get("v_limit",    50.0)) / 3.6,
+        a_max      = float(v.get("a_max",       5.0)),
+        v_min      = float(v.get("v_min",       7.2)) / 3.6,
+        v_init_low = float(v.get("v_init_low", 25.0)) / 3.6,
 
         a_comfort          = float(c.get("a_comfort",          2.0)),
         accel_filter_alpha = float(c.get("accel_filter_alpha", 0.8)),

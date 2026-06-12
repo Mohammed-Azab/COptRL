@@ -120,7 +120,7 @@ Integration: RK4, 20 sub-steps per 20 ms control interval (effective 1 ms physic
 | 3 | filtered longitudinal accel / a_comfort | IIR α=0.8 |
 | 4 | filtered jerk / j_max | IIR α=0.8 |
 | 5 | prev_action | [−1, 1] |
-| 6 | v_ref / v_max | [0, 1] |
+| 6 | v_init / v_max | [0, 1] |
 | 7… | bump preview (t2r, height, freq) per peak | [0, 1] each |
 
 The preview samples 200 points over a 60 m lookahead, runs `scipy.signal.find_peaks`, and encodes up to *n* bumps as `[t2r/T_MAX, h/h_clip, freq/_FREQ_MAX]` where `t2r = dist/v` (time-to-reach) and `freq = v/width` (crossing frequency). Missing peaks fill with `[1.0, 0.0, 0.0]`. PT1 filter (τ = 0.05 s) smooths the output.
@@ -152,7 +152,7 @@ R = (v/v_max) × [Q_zBddot·J_heave + Q_zWddot·J_wheel + Q_a·J_long]   (veloci
 |---|---|---|
 | J_heave | −(clip(z̈_B, ±8) / g)² | vertical body accel, g-normalised (Mandl 2024) |
 | J_wheel | −(clip(z̈_W, ±60) / g)² | wheel-hop / road holding |
-| J_speed | −\|v−v_ref\|/v_ref above v_min; −1−((v_min−v)/v_min)² below | absolute speed tracking |
+| J_speed | −\|v−v_init\|/v_init above v_min; −1−((v_min−v)/v_min)² below | absolute speed tracking |
 | J_long | −(clip(ā, ±4) / g)² | longitudinal ride comfort |
 | J_jerk | −(clip(j̄, ±4) / j_max)² | smoothness of acceleration |
 | J_smooth | −(u_t − u_{t−1})² | control chatter |

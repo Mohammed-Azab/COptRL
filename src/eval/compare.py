@@ -130,7 +130,7 @@ def _record_step(ep: dict, action: float, reward: float, info: dict) -> None:
     ep["rewards"].append(reward)
     ep["actions"].append(action)
     ep["speeds"].append(info.get("speed", 0.0))
-    ep["v_refs"].append(info.get("v_ref", 0.0))
+    ep["v_inits"].append(info.get("v_init", 0.0))
     ep["body_accels"].append(info.get("z_B_ddot", 0.0))
     ep["comfort_scores"].append(info.get("comfort_score", 0.0))
     ep["rms_accel_running"].append(info.get("rms_accel", 0.0))
@@ -142,7 +142,7 @@ def _summarize(ep: dict) -> dict:
     rewards = np.array(ep["rewards"])
     accels  = np.array(ep["body_accels"])
     speeds  = np.array(ep["speeds"])
-    v_refs  = np.array(ep["v_refs"])
+    v_inits  = np.array(ep["v_inits"])
     actions = np.array(ep["actions"])
 
     return {
@@ -151,7 +151,7 @@ def _summarize(ep: dict) -> dict:
         "n_steps":               int(len(rewards)),
         "rms_accel":             float(np.sqrt(np.mean(accels ** 2))),
         "peak_accel":            float(np.max(np.abs(accels))),
-        "speed_rmse":            float(np.sqrt(np.mean((speeds - v_refs) ** 2))),
+        "speed_rmse":            float(np.sqrt(np.mean((speeds - v_inits) ** 2))),
         "comfort_score":         float(ep["comfort_scores"][-1]) if ep["comfort_scores"] else 0.0,
         "action_smoothness_rms": float(np.sqrt(np.mean(np.diff(actions) ** 2))) if len(actions) > 1 else 0.0,
         "ts": {k: [float(x) for x in v] for k, v in ep.items()},
@@ -486,7 +486,7 @@ def plot_timeseries(results: dict, bounds: dict, rcfg, save_dir: Path | None) ->
 
             ax_accel.plot(t, ts["body_accels"], **kw)
             ax_speed.plot(t, ts["speeds"],      **kw)
-            ax_speed.plot(t, ts["v_refs"],      color=color, lw=1.0, ls=":", alpha=0.5)
+            ax_speed.plot(t, ts["v_inits"],      color=color, lw=1.0, ls=":", alpha=0.5)
             ax_action.plot(t, ts["actions"],    **kw)
             ax_reward.plot(t, ts["rewards"],    **kw)
 

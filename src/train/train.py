@@ -375,7 +375,7 @@ def main() -> None:
     print(f"  n_envs     : {n_envs}")
     print(f"  normalize  : obs={normalize}, reward={norm_reward}")
     print(f"  render     : {args.render}")
-    print(f"  v_max      : {rcfg.v_max * 3.6:.0f} km/h")
+    print(f"  v_limit    : {rcfg.v_limit * 3.6:.0f} km/h")
     print(f"  v_min      : {rcfg.v_min * 3.6:.1f} km/h")
     print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
     if args.bump_type is not None:

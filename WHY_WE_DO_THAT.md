@@ -604,3 +604,39 @@ Without v_ref in the observation, the policy must infer the current target speed
 - The velocity scaling on comfort terms is unchanged.
 
 **Source:** Mandl (2024) "Speed Control in the Presence of Road Obstacles: A Comparison of RL and MPC", reward function Eq. (1a), Q_v term.
+
+---
+
+## Why we clip observations and rewards — and why aggressive clipping is a problem
+
+**What we do:**
+Observations are clipped inside `_obs()` to the bounds declared in `observation_space` (e.g. `h_clip = 0.15 m` for road height, `accel_clip / a_comfort` for longitudinal acceleration). Reward terms are clipped before squaring: `j_heave` clips `z_B_ddot` at `reward_heave_clip` (8 m/s²), `j_long` clips at `reward_accel_clip` (4 m/s²), etc. VecNormalize adds a second layer of running-statistics normalisation for observations.
+
+**Why clipping is necessary:**
+- *Observation clipping* keeps VecNormalize's running mean/variance finite. Outlier spikes (suspension resonance, numerical stiff steps) would inflate the variance estimate, compressing all normal observations toward zero and destroying the information content of the obs vector. A hard clip at a physically meaningful extreme prevents this without requiring a manual variance cap.
+- *Reward clipping* controls gradient magnitude. Without it, a single step with extreme body acceleration (e.g. 80 m/s² during a resonance spike) produces a per-step loss ≈ −(80/9.81)² ≈ −66, dominating all other signal for that mini-batch and causing large policy gradient steps. Clipping at ~8 m/s² caps the worst-case per-step comfort cost at −(8/9.81)² ≈ −0.66, keeping the per-step range predictable.
+
+**Why too-aggressive clipping is a problem:**
+- If `reward_heave_clip` is too small (e.g. 2 m/s² when typical bump crossings produce 5–15 m/s²), nearly every crossing saturates the clip. The agent loses resolution: hitting a catalog-4 bump at 50 km/h looks the same as a catalog-1 at 30 km/h. The comfort term cannot teach bump-severity awareness.
+- Flat-clipping the observation means the agent cannot tell the difference between a 0.12 m bump and a 0.20 m bump once both exceed `h_clip = 0.15 m`. This matters for anticipatory braking: the preview feature is designed to convey how bad the incoming bump is.
+- The current values (8 m/s² heave, 4 m/s² accel, 4 m/s³ jerk) are chosen to clip only true outliers (>4–8σ for most roads) while preserving relative severity ordering within normal driving.
+
+---
+
+## v_limit is a soft speed constraint, not a hard cap
+
+**What we do:**
+`cfg.v_limit` (formerly `v_max`) is the design reference speed — the speed the agent is expected to drive on flat road. The env's `step()` clips speed at `2 × v_limit` only as a physical safety cap (the vehicle cannot realistically do 2× the design speed). There is no clip at exactly `v_limit`. The reward function penalises deviation from `v_init` (the per-episode reference speed, sampled from `[v_init_low, v_limit]`) but does not zero-out reward for speeds above `v_limit`.
+
+The MPC baseline retains a hard constraint at `v_limit` — this is intentional: MPC is a rule-based controller that must satisfy constraints explicitly; the RL agent is exploring what happens when it breaks the soft limit.
+
+**Why:**
+A hard clip at `v_limit` hides information: the agent can never observe that it went faster than the limit, so it cannot learn to regulate itself. By removing the clip, the agent receives reward signal at every speed including above `v_limit` (the `j_speed` penalty grows as `|v - v_init| / v_init`). The agent can discover that staying close to `v_init` is optimal without the environment enforcing it mechanically. This is the RL equivalent of "show consequences, don't prevent the action."
+
+**What breaks if you restore the hard clip:**
+- Speeds above `v_limit` become unexplorable — the agent never sees that part of the state space.
+- `v / v_limit` in the obs is always ≤ 1.0, so the obs-space upper bound of 2.0 becomes wasted. The VecNormalize running stats will concentrate around [0, 1], which is fine but means the 2.0 upper bound is conservative.
+- The agent cannot learn to trade comfort (reduced scale factor) for speed in scenarios where a burst of speed is strategically useful (e.g. to carry momentum through a long flat section).
+
+**What the `scale = clip(v / v_init, 0, 1)` factor does:**
+At low speed the comfort penalty is downweighted — bumping a wall slowly hurts less. This mirrors the physical reality (ISO 2631-1 is frequency-weighted; at lower travel speeds the excitation frequency shifts). It also prevents the agent being heavily penalised for comfort when it is legitimately braking toward `v_min` for a severe bump.

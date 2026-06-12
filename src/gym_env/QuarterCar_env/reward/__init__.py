@@ -6,5 +6,5 @@ from QuarterCar_env.reward.reward import (
     j_heave,
     j_wheel,
     compute_reward,
-    compute_terminal_bonus,
+    compute_terminal_reward,
 )

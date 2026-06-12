@@ -1,0 +1,29 @@
+# ISO 2631-1 parameter reference for COptRL reward design
+#
+# Source: ISO 2631-1:2016 — Mechanical vibration and shock —
+#         Evaluation of human exposure to whole-body vibration
+
+# --- Vertical vibration comfort thresholds (Table 3, frequency-weighted) ---
+# < 0.315 m/s² RMS  →  "not uncomfortable"
+#   0.315–0.63      →  "a little uncomfortable"
+#   0.5–1.0         →  "fairly uncomfortable"           ← design reference (a_B_comfort)
+#   0.8–1.6         →  "uncomfortable"                  ← a_limit operating range
+#   1.25–2.5        →  "very uncomfortable"
+#   > 2.0           →  "extremely uncomfortable"         ← reward clip upper bound
+a_B_comfort:  0.5   # m/s² RMS — "fairly uncomfortable" onset; used as reward denominator
+
+# --- Longitudinal / transverse weighting ---
+# ISO 2631-1 §6.2: longitudinal/lateral weighted 1.4× vs vertical
+# Comfortable firm braking ≈ 2.0 m/s²
+a_comfort:    2.0   # m/s² — longitudinal deceleration comfort threshold
+
+# --- Jerk ---
+# EN 13374 / ISO 22133: comfortable jerk < 2 m/s³ (onset of perceptible transient)
+j_max:        2.0   # m/s³ — reward normalisation denominator
+
+# --- Dependent (derived from above, not ISO primary values) ---
+# reward_heave_clip  = 4 × a_B_comfort  → 2.0 m/s²  (clips per-step penalty at worst-case)
+# reward_accel_clip  = 2 × a_comfort    → 4.0 m/s²
+# reward_jerk_clip   = 2 × j_max        → 4.0 m/s³
+# jerk_clip          = 6 × j_max        → 12.0 m/s³  (obs-space hard clip)
+# accel_clip         = g                → 9.81 m/s²  (physically motivated hard clip)

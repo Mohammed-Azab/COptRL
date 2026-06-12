@@ -279,7 +279,7 @@ def init_render(env):
             bump_vlines.append(lines)
 
     # --- speed arrow ---
-    v_max_kmh = env._rcfg.v_max * 3.6
+    v_max_kmh = env._rcfg.v_limit * 3.6
     v_line, = ax_s.plot([_ARR_X0, _ARR_X0], [_ARR_Y_V, _ARR_Y_V], '-',
                         color='#7b2d8b', lw=2.2, zorder=8)
     v_head, = ax_s.plot([_ARR_X0],          [_ARR_Y_V],            '>',
@@ -416,7 +416,7 @@ def update_artists(env):
     )
 
     # speed arrow
-    v_max  = env._rcfg.v_max
+    v_max  = env._rcfg.v_limit
     v_frac = float(np.clip(env._v / v_max, 0.03, 1.0))
     v_tip  = _ARR_X0 + v_frac * _ARR_MAX_LEN
     art['v_line'].set_xdata([_ARR_X0, v_tip])
