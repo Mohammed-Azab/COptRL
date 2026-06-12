@@ -194,7 +194,7 @@ def main() -> None:
                     help='save per-episode time-series PNG')
     ap.add_argument('--results-dir',     default=None)
     ap.add_argument('--out',             default=None)
-    ap.add_argument('--log-data',        metavar='DIR', default=None,
+    ap.add_argument('--log-data',        metavar='DIR', default='data',
                     help='Save run data (.mat/.npz) to DIR/HumanDriver/<road>/<ts>/. '
                          'Omit DIR to use <repo>/data/.',
                     nargs='?', const='__default__')

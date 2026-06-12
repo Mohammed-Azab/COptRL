@@ -3,20 +3,20 @@
 
 PPO:
   policy: MlpPolicy
-  learning_rate: "lin_3e-5"
-  n_steps: 4096
+  learning_rate: 2.5640917889918337e-05
+  n_steps: 8192
   batch_size: 256
-  n_epochs: 10
-  gamma: 0.999
-  gae_lambda: 0.98
+  n_epochs: 18
+  gamma: 0.9954345391650923
+  gae_lambda: 0.9542839301626783
   clip_range: 0.2
-  ent_coef: 0.002
-  vf_coef: 0.7
-  max_grad_norm: 0.83
+  ent_coef: 1.0404989354164112e-05
+  vf_coef: 0.5800106273228675
+  max_grad_norm: 0.9918176654427455
   policy_kwargs:
     net_arch:
-      pi: [128, 128]
-      vf: [128, 128]
+      pi: [512, 512]
+      vf: [512, 512]
 
 training:
   seed: 42

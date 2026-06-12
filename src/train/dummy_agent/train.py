@@ -31,7 +31,7 @@ def run_episodes(road: str, n_episodes: int, render: bool) -> None:
         step = 0
 
         while not done:
-            obs, reward, terminated, truncated, info = env.step(SPEEDING_UP)
+            obs, reward, terminated, truncated, info = env.step(ZERO_ACTION)
             done = terminated or truncated
             ep_reward += reward
             step += 1

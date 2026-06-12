@@ -11,7 +11,7 @@ from QuarterCar_env.config.env_params import DT
 _DENSE_N = 200   # spatial samples for peak detection over the preview horizon
 
 # crossing-frequency normalization: v_max / narrowest catalog bump (0.92 m)
-_FREQ_MAX = 20.0 / 0.92   # ≈21.7 Hz, clipped at 1.0 in output
+_FREQ_MAX = 20.0 / 0.92   # ≈21.7 Hz
 
 
 class PreviewWrapper(gym.ObservationWrapper):
