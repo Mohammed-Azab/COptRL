@@ -403,7 +403,7 @@ def update_artists(env):
 
     # info box, horizontal two-row layout
     n_passed = int(env._bumps_passed)
-    n_total  = len(env._bump_ends)
+    n_total  = env._bumps_total
     art['status_text'].set_text(
         f'$t$ = {env._t:.2f} s'
         f'    $s$ = {env._s_pos:.1f} m'

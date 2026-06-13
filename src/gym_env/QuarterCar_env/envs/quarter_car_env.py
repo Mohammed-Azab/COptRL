@@ -107,6 +107,7 @@ class QuarterCarEnv(gym.Env):
         # bump-crossing state
         self._bumps_passed   = 0
         self._bump_ends: list = []
+        self._bumps_total    = 0
 
         # random road config, forwarded to from_random each reset
         from QuarterCar_env.config.config_manager import _load_yaml
@@ -211,6 +212,7 @@ class QuarterCarEnv(gym.Env):
         self._bump_ends      = sorted(
             x0 + L + 1.0 for (x0, _, L) in self._road._bumps
         ) if self.road_profile == 'speed_bump' else []
+        self._bumps_total    = len(self._bump_ends)
 
         # reset filter state
         self._prev_a         = 0.0
@@ -237,6 +239,11 @@ class QuarterCarEnv(gym.Env):
         self._road.set_speed(v_new)          # also geometry-clamps road.speed
         s_pos_start    = self._s_pos         # position at START of this step
         self._s_pos   += v_new * DT
+
+        # count bumps crossed (pop from sorted list as each end-marker is passed)
+        while self._bump_ends and self._s_pos >= self._bump_ends[0]:
+            self._bumps_passed += 1
+            self._bump_ends.pop(0)
 
         # 2. Update IIR filters
         alpha_a = cfg.accel_filter_alpha
@@ -384,7 +391,7 @@ class QuarterCarEnv(gym.Env):
             'speed_error':       float(self._v_init_last - self._v),
             'speed_error_rms':   float(np.sqrt(self._speed_err_sq / n)),
             'bumps_passed':    int(self._bumps_passed),
-            'bumps_total':     len(self._bump_ends),
+            'bumps_total':     self._bumps_total,
         }
 
     def get_comfort_metric(self) -> float:
