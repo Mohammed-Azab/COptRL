@@ -5,7 +5,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from scipy.signal import find_peaks
 
-from QuarterCar_env.config.reward_params import RewardConfig, load_reward_config
+from QuarterCar_env.config.preview_params import PreviewConfig, load_preview_config
 from QuarterCar_env.config.env_params import DT
 
 _DENSE_N = 200   # spatial samples for peak detection over the preview horizon
@@ -15,16 +15,22 @@ _FREQ_MAX = 20.0 / 0.92   # ≈21.7 Hz
 
 
 class PreviewWrapper(gym.ObservationWrapper):
-    # appends [t2r, height, freq] × n_peaks to the base observation
+    # appends [dist_or_t2r, height, width_or_freq] × n_peaks to the base observation
     #
-    # t2r    time-to-reach / T_MAX, T_MAX = preview_distance / v_min  (0-1)
-    # height peak height / h_clip  (0-1)
-    # freq   crossing frequency v/L / _FREQ_MAX  (0-1)
+    # use_dist_obs=False (default, t2r mode):
+    #   slot0  t2r  = (dist_m / v) / T_MAX              (speed-dependent, 0-1)
+    #   slot2  freq = (v / peak_width_m) / _FREQ_MAX     (crossing frequency, 0-1)
+    #
+    # use_dist_obs=True (dist mode):
+    #   slot0  dist = dist_m / preview_distance           (speed-independent, 0-1)
+    #   slot2  wid  = peak_width_m / preview_distance     (relative width, 0-1)
+    #
+    # slot1 is always: peak_height / h_clip  (0-1)
 
-    def __init__(self, env: gym.Env, cfg: RewardConfig | None = None):
+    def __init__(self, env: gym.Env, cfg: PreviewConfig | None = None):
         super().__init__(env)
 
-        self._cfg = cfg or load_reward_config()
+        self._cfg = cfg or load_preview_config()
         n_prev    = self._cfg.n_peaks * 3
 
         orig_high = env.observation_space.high
@@ -58,7 +64,8 @@ class PreviewWrapper(gym.ObservationWrapper):
 
         v_safe = max(float(env._v), 0.5)
         # T_MAX: longest possible time-to-reach (bump at horizon, car at v_min)
-        T_MAX = cfg.preview_distance / max(cfg.v_min, 0.5)
+        v_min  = float(getattr(getattr(env, "_rcfg", None), "v_min", 0.5))
+        T_MAX  = cfg.preview_distance / max(v_min, 0.5)
 
         heights = env._road.get_spatial_preview(
             s_pos=env._s_pos,
@@ -86,16 +93,22 @@ class PreviewWrapper(gym.ObservationWrapper):
             peak_h      = float(heights[pk])
             peak_w_m    = float(props["widths"][i] * ds)
 
-            # A: time-to-reach, seconds normalised by T_MAX
-            t2r = dist_m / v_safe
-            peak_arr[i * 3]     = float(np.clip(t2r / T_MAX, 0.0, 1.0))
+            # slot 0: distance encoding (speed-independent dist or speed-dependent t2r)
+            if cfg.use_dist_obs:
+                peak_arr[i * 3] = float(np.clip(dist_m / cfg.preview_distance, 0.0, 1.0))
+            else:
+                t2r = dist_m / v_safe
+                peak_arr[i * 3] = float(np.clip(t2r / T_MAX, 0.0, 1.0))
 
-            # height normalised by h_clip
+            # slot 1: height normalised by h_clip
             peak_arr[i * 3 + 1] = float(np.clip(peak_h / cfg.h_clip, 0.0, 1.0))
 
-            # C: crossing frequency v/L normalised by _FREQ_MAX
-            freq = v_safe / max(peak_w_m, 0.01)
-            peak_arr[i * 3 + 2] = float(np.clip(freq / _FREQ_MAX, 0.0, 1.0))
+            # slot 2: width encoding (physical width or crossing frequency)
+            if cfg.use_dist_obs:
+                peak_arr[i * 3 + 2] = float(np.clip(peak_w_m / cfg.preview_distance, 0.0, 1.0))
+            else:
+                freq = v_safe / max(peak_w_m, 0.01)
+                peak_arr[i * 3 + 2] = float(np.clip(freq / _FREQ_MAX, 0.0, 1.0))
 
         self.preview = peak_arr.copy()
 

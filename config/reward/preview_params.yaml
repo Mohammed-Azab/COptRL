@@ -1,0 +1,18 @@
+# lookahead horizon
+preview_distance:    60.0   # m
+h_clip:              0.15   # m, height normalisation clip
+n_peaks:             3
+peak_height_min:     0.01   # m
+# minimum spacing between detected peaks
+peak_distance_min_m: 0.5    # m
+
+noise_active:        false
+noise_height_std:    0.005
+noise_distance_std:  0.5
+noise_width_std:     0.05
+
+pt1_tau:             0.05   # s, PT1 filter time constant
+
+# true  → slot0 = dist/preview_distance, slot2 = width/preview_distance
+# false → slot0 = t2r/T_MAX,             slot2 = crossing-freq/_FREQ_MAX
+use_dist_obs:        true

@@ -456,7 +456,11 @@ because the progress reward outweighs heave penalties.
 
 ## Preview observation uses t2r and freq, not dist and width
 
-**What we do:**
+**Both modes are available** via `use_dist_obs` in `config/reward/preview_params.yaml`.
+`use_dist_obs: false` (default) → `[t2r, height, freq]`; `use_dist_obs: true` → `[dist, height, width]`.
+Changing this flag changes the observation semantics — do not hot-swap between a model trained on one mode and the other.
+
+**What we do (default):**
 The preview wrapper encodes each upcoming bump as `[t2r, height, freq]` rather than `[dist, height, width]`.
 
 ```python
@@ -620,6 +624,27 @@ Observations are clipped inside `_obs()` to the bounds declared in `observation_
 - If `reward_heave_clip` is too small (e.g. 2 m/s² when typical bump crossings produce 5–15 m/s²), nearly every crossing saturates the clip. The agent loses resolution: hitting a catalog-4 bump at 50 km/h looks the same as a catalog-1 at 30 km/h. The comfort term cannot teach bump-severity awareness.
 - Flat-clipping the observation means the agent cannot tell the difference between a 0.12 m bump and a 0.20 m bump once both exceed `h_clip = 0.15 m`. This matters for anticipatory braking: the preview feature is designed to convey how bad the incoming bump is.
 - The current values (8 m/s² heave, 4 m/s² accel, 4 m/s³ jerk) are chosen to clip only true outliers (>4–8σ for most roads) while preserving relative severity ordering within normal driving.
+
+---
+
+## Q_v must be large enough to outweigh the terminal bonus at 2× v_init
+
+**What we do:**
+`Q_v = 2.0` (in `reward_params.yaml` `weights:`).
+
+**Why:**
+`j_speed` above `v_min` is `−|v − v_init| / v_init`, capped by the `2 × v_limit` safety clip.
+At 100 km/h with `v_init = 50 km/h`: `j_speed = −1.0`, so `J_speed = Q_v × −1.0`.
+Finishing a 100 m road at 100 km/h takes ~180 steps, so the episode speed cost is `−180 × Q_v`.
+The terminal bonus is +300. For speeding to be net-negative: `180 × Q_v > 300 − time_bonus_delta`,
+giving `Q_v > ~1.5`. We set 2.0 for margin.
+
+At `Q_v = 0.5` or `0.7` the speed penalty was weaker than the terminal gain from finishing quickly,
+and the agent reliably converged to 100 km/h by exploiting the soft constraint.
+
+**What breaks if you lower it:**
+Below ~1.5 the agent can profitably run at 2× v_init. The eval `env/speed_kmh` metric will
+climb toward `v_limit × 2` and comfort scores will degrade (the agent does not brake before bumps).
 
 ---
 

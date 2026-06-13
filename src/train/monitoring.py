@@ -21,10 +21,9 @@ class QuarterCarMetricsCallback(BaseCallback):
         infos: list[dict] = self.locals.get("infos", [])
 
         comfort, rms_a, peak_a      = [], [], []
-        spd_kmh, spd_err, v_ratio   = [], [], []
+        spd_kmh, spd_err   = [], []
         ep_reward                   = []
         J_heave, J_speed, J_jerk, J_total = [], [], [], []
-        bumps_passed, bumps_total   = [], []
 
         for info in infos:
             if "comfort_score"  in info: comfort.append(info["comfort_score"])
@@ -37,23 +36,15 @@ class QuarterCarMetricsCallback(BaseCallback):
             if "J_speed"        in info: J_speed.append(info["J_speed"])
             if "J_jerk"         in info: J_jerk.append(info["J_jerk"])
             if "J_total"        in info: J_total.append(info["J_total"])
-            if "bumps_passed"   in info: bumps_passed.append(info["bumps_passed"])
-            if "bumps_total"    in info: bumps_total.append(info["bumps_total"])
-            v_init_kmh = info.get("v_init_kmh", 0.0)
-            if "speed_kmh" in info and v_init_kmh > 0:
-                v_ratio.append(info["speed_kmh"] / v_init_kmh)
 
         log = self.logger.record
         # --- driving quality ---
         if comfort:   log("env/comfort_score",  float(np.mean(comfort)))
-        if rms_a:     log("env/rms_accel_ms2",  float(np.mean(rms_a)))
-        if peak_a:    log("env/peak_accel_ms2", float(np.mean(peak_a)))
+        if rms_a:     log("env/rms_accel",  float(np.mean(rms_a)))
+        if peak_a:    log("env/peak_accel", float(np.mean(peak_a)))
         if spd_kmh:   log("env/speed_kmh",      float(np.mean(spd_kmh)))
-        if spd_err:   log("env/speed_error_ms", float(np.mean(spd_err)))
-        if v_ratio:   log("env/v_ratio",        float(np.mean(v_ratio)))  # v/v_init; 1.0=on target
+        if spd_err:   log("env/speed_error", float(np.mean(spd_err)))
         if ep_reward: log("env/ep_reward",      float(np.mean(ep_reward)))
-        if bumps_passed and bumps_total and sum(bumps_total) > 0:
-            log("env/bump_pass_rate", sum(bumps_passed) / sum(bumps_total))
 
         # --- per-step reward breakdown ---
         if J_heave: log("reward/J_heave", float(np.mean(J_heave)))  # comfort cost

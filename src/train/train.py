@@ -22,6 +22,7 @@ from monitoring import build_callbacks
 from environment import make_eval_vec_env, make_vec_env
 from seed import seed_everything
 from QuarterCar_env.config.reward_params import load_reward_config
+from QuarterCar_env.config.preview_params import load_preview_config
 from QuarterCar_env.config.env_params import EPISODE_STEPS
 from QuarterCar_env.reward.utils import reward_bounds
 from QuarterCar_env.wrappers.curriculum import load_curriculum_config
@@ -377,7 +378,8 @@ def main() -> None:
     print(f"  render     : {args.render}")
     print(f"  v_limit    : {rcfg.v_limit * 3.6:.0f} km/h")
     print(f"  v_min      : {rcfg.v_min * 3.6:.1f} km/h")
-    print(f"  preview    : {rcfg.n_peaks} peaks × 3 = {rcfg.n_peaks * 3} features over {rcfg.preview_distance}m")
+    pcfg = load_preview_config()
+    print(f"  preview    : {pcfg.n_peaks} peaks × 3 = {pcfg.n_peaks * 3} features over {pcfg.preview_distance}m")
     if args.bump_type is not None:
         print(f"  bump mode  : type {args.bump_type} ({_BUMP_NAMES.get(args.bump_type, '?')})  ×  {args.n_bumps} bump(s)")
     if curriculum_cfg:

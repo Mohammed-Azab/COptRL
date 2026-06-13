@@ -44,17 +44,6 @@ class RewardConfig:
     a_limit:          float =   5.0
     Q_t:              float =   1.0   # time-efficiency weight (scales j_time bonus)
 
-    # observation preview
-    preview_distance:    float = 60.0
-    h_clip:              float = 0.15
-    n_peaks:             int   = 3
-    peak_height_min:     float = 0.01
-    peak_distance_min_m: float = 0.5
-    noise_active:        bool  = False
-    noise_height_std:    float = 0.005
-    noise_distance_std:  float = 0.5
-    noise_width_std:     float = 0.05
-    pt1_tau:             float = 0.05
 
 
 def load_reward_config() -> RewardConfig:
@@ -63,13 +52,12 @@ def load_reward_config() -> RewardConfig:
     except FileNotFoundError:
         return RewardConfig()
 
-    w  = cfg.get("weights",      {})
-    vt = cfg.get("vertical",     {})
-    v  = cfg.get("velocity",     {})
-    c  = cfg.get("comfort",      {})
-    j  = cfg.get("jerk",         {})
-    t  = cfg.get("terminal",     {})
-    o  = cfg.get("observations", {})
+    w  = cfg.get("weights",  {})
+    vt = cfg.get("vertical", {})
+    v  = cfg.get("velocity", {})
+    c  = cfg.get("comfort",  {})
+    j  = cfg.get("jerk",     {})
+    t  = cfg.get("terminal", {})
 
     return RewardConfig(
         Q_zBddot        = float(w.get("Q_zBddot",       50.0)),
@@ -103,15 +91,4 @@ def load_reward_config() -> RewardConfig:
         terminal_bonus   = float(t.get("terminal_bonus",    100.0)),
         terminal_penalty = float(t.get("terminal_penalty", -100.0)),
         a_limit          = float(t.get("a_limit",            5.0)),
-
-        preview_distance    = float(o.get("preview_distance",    60.0)),
-        h_clip              = float(o.get("h_clip",              0.15)),
-        n_peaks             = int(  o.get("n_peaks",             3)),
-        peak_height_min     = float(o.get("peak_height_min",     0.01)),
-        peak_distance_min_m = float(o.get("peak_distance_min_m", 0.5)),
-        noise_active        = bool( o.get("noise_active",        False)),
-        noise_height_std    = float(o.get("noise_height_std",    0.005)),
-        noise_distance_std  = float(o.get("noise_distance_std",  0.5)),
-        noise_width_std     = float(o.get("noise_width_std",     0.05)),
-        pt1_tau             = float(o.get("pt1_tau",             0.05)),
     )

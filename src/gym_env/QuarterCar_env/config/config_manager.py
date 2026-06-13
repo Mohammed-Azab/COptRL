@@ -14,6 +14,9 @@ class ParamsFiles:
     reward  = "reward_params.yaml"
     reward_dir = "reward"
 
+    preview = "preview_params.yaml"
+    preview_dir = "reward"
+
     road    = "road_params.yaml"
     road_dir = "road"
 
@@ -22,18 +25,21 @@ class ConfigManager:
 
 def _find_config_file(filename: str) -> Path:
 
-    config_dir = "env_env"
-    if filename not in [ParamsFiles.gym_env, ParamsFiles.render, ParamsFiles.reward, ParamsFiles.road]:
+    _known = [ParamsFiles.gym_env, ParamsFiles.render, ParamsFiles.reward,
+              ParamsFiles.preview, ParamsFiles.road]
+    if filename not in _known:
         raise ValueError(f"Unknown config file: {filename}")
+
+    if filename == ParamsFiles.gym_env:
+        config_dir = ParamsFiles.gym_env_dir
+    elif filename == ParamsFiles.render:
+        config_dir = ParamsFiles.render_dir
+    elif filename == ParamsFiles.reward:
+        config_dir = ParamsFiles.reward_dir
+    elif filename == ParamsFiles.preview:
+        config_dir = ParamsFiles.preview_dir
     else:
-        if filename == ParamsFiles.gym_env:
-            config_dir = ParamsFiles.gym_env_dir
-        elif filename == ParamsFiles.render:
-            config_dir = ParamsFiles.render_dir
-        elif filename == ParamsFiles.reward:
-            config_dir = ParamsFiles.reward_dir
-        elif filename == ParamsFiles.road:
-            config_dir = ParamsFiles.road_dir
+        config_dir = ParamsFiles.road_dir
 
     here = Path(__file__).resolve()
     for parent in [here] + list(here.parents):

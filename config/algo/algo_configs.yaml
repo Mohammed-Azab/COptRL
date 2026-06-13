@@ -21,7 +21,7 @@ PPO:
 
 training:
   seed: 42
-  total_timesteps: 10_000_000
+  total_timesteps: 3_000_000
   n_envs: 5
   n_eval_envs: 1
   eval_freq: 100_000

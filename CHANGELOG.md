@@ -4,6 +4,11 @@ All entries are one line. For design rationale see `WHY_WE_DO_THAT.md`.
 
 ---
 
+- (config) — raise Q_v 0.7→2.0: speed penalty at 100 km/h now exceeds terminal bonus so agent stops running away to 100 km/h
+- (refactor) — split preview config into config/reward/preview_params.yaml + PreviewConfig dataclass; remove all preview fields from RewardConfig and reward_params.yaml
+- (feature) — add use_dist_obs bool to PreviewConfig: switches preview slots 0/2 from t2r/freq to dist/width; dist slot normalized by preview_distance (no extra param needed)
+- (monitoring) — simplify QuarterCarMetricsCallback: drop v_ratio and bump_pass_rate; rename rms_accel_ms2→rms_accel, speed_error_ms→speed_error
+
 - (refactor) — rename v_max→v_limit (soft constraint: remove hard env clip at v_limit, safety cap at 2×v_limit); drop dead params Q_t/a_B_comfort/a_W_comfort; fix compute_terminal_reward call; fix reward_bounds NameError; replace params_dict.txt with iso_param.txt
 - (script+config) — pre-generate 200 single-bump scenarios/level in config/train/scenarios/; curriculum loads files at init; fallback random params moved to curr_multi_bumps.yaml; expert level keeps 25% multi-bump episodes
 - c47f8a0 — Mandl improvements: add v_init/v_max to obs; replace quadratic speed band with absolute tracking |v-v_init|/v_init above v_min
