@@ -3,10 +3,10 @@
 
 advance_return_threshold:
   0:    0.0
-  1:    30.0
-  2:    120.0
+  1:    20.0
+  2:    50.0
 
-advance_window: 5
+advance_window: 3
 
 scenarios_dir: config/train/scenarios
 

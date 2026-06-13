@@ -21,11 +21,11 @@ PPO:
 
 training:
   seed: 42
-  total_timesteps: 3_000_000
+  total_timesteps: 5_000_000
   n_envs: 5
   n_eval_envs: 1
   eval_freq: 100_000
-  n_eval_episodes: 20
+  n_eval_episodes: 30
   checkpoint_freq: 500_000
   norm_obs: true
   norm_reward: true
