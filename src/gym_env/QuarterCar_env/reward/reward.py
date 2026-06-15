@@ -29,10 +29,10 @@ def j_action_smooth(u_t: float, u_prev: float) -> float:
 
 
 # Speed
-def j_speed(v: float, v_min: float, v_init: float) -> float:
+def j_speed(v: float, v_min: float, v_init: float, v_limit: float = 1.0) -> float:
     if v < v_min:
         return -1.0 - ((v_min - v) / v_min) ** 2
-    return -abs(v_init - v) / max(v_init, 0.1)
+    return -abs(v_init - v) / max(v_limit, 0.1)
 
 
 # Terminal Rewards
@@ -71,7 +71,7 @@ def compute_reward(
     Jl = j_long(filtered_a, cfg.g, cfg.reward_accel_clip)
     J_comfort = cfg.Q_zBddot * Jh + cfg.Q_zWddot * Jw + cfg.Q_a * Jl
 
-    Js = j_speed(v, cfg.v_min, _v_init)
+    Js = j_speed(v, cfg.v_min, _v_init, v_limit=cfg.v_limit)
     J_speed = cfg.Q_v * Js
 
     Jj = j_jerk(filtered_jerk, cfg.j_max, cfg.reward_jerk_clip)

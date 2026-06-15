@@ -5,7 +5,7 @@ _J_SPEED_WORST    = -(1.0 + 1.0) # j_speed at v=0: -1.0 - (v_min/v_min)² = -2.0
 
 
 def reward_bounds(cfg: RewardConfig, n_steps: int, n_bumps: int = 0) -> dict:
-    per_step_max = -cfg.Q_step  # best step: zero comfort/speed/jerk penalty
+    per_step_max = cfg.Q_step
 
     per_step_min = (
         cfg.Q_zBddot * -(cfg.reward_heave_clip / cfg.g) ** 2
