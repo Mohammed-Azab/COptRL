@@ -63,6 +63,10 @@ def parse_args() -> argparse.Namespace:
                    help="Save matplotlib figures to results_dir.")
     p.add_argument("--results-dir", default=None,
                    help="Output directory for JSON + figures.")
+    p.add_argument("--save-gif", action="store_true",
+                   help="Save an animated GIF for each episode to results_dir.")
+    p.add_argument("--gif-skip", type=int, default=2,
+                   help="Save every Nth frame to reduce GIF file size (default: 2).")
     p.add_argument("--no-deterministic", action="store_true",
                    help="Sample from policy stochastically instead of taking the mode.")
     p.add_argument("--log-data", metavar="DIR", default='data',
@@ -112,6 +116,26 @@ def _record(ep: dict, action: float, reward: float, info: dict) -> None:
         ep[k].append(info.get(k, 0.0))
 
 
+def save_gif(frames: list, path: Path, dt: float, skip: int = 1) -> None:
+    frames = frames[::skip]
+    fps = max(1, round(1.0 / (dt * skip)))
+    try:
+        import imageio
+        imageio.mimsave(str(path), frames, fps=fps)
+    except ImportError:
+        try:
+            from PIL import Image
+            pil = [Image.fromarray(f) for f in frames]
+            pil[0].save(
+                str(path), save_all=True, append_images=pil[1:],
+                duration=int(dt * skip * 1000), loop=0,
+            )
+        except ImportError:
+            print("  install imageio or Pillow to save GIFs:  pip install imageio pillow")
+            return
+    print(f"  gif saved  → {path}  ({len(frames)} frames @ {fps} fps)")
+
+
 def run_episode(
     model,
     vecnorm_path: Path,
@@ -120,8 +144,14 @@ def run_episode(
     render: bool,
     deterministic: bool,
     scenario_road=None,
-) -> dict:
-    render_mode = "human" if render else "none"
+    capture_frames: bool = False,
+) -> tuple[dict, list]:
+    if render:
+        render_mode = "human"
+    elif capture_frames:
+        render_mode = "rgb_array"
+    else:
+        render_mode = "none"
 
     def _env_fn():
         env = gym.make(_ENV_ID, road_profile=road, render_mode=render_mode,
@@ -143,8 +173,9 @@ def run_episode(
         reset_out       = venv.reset()
         obs: np.ndarray = reset_out[0] if isinstance(reset_out, tuple) else reset_out
 
-    done = np.array([False])
+    done   = np.array([False])
     ep: dict = defaultdict(list)
+    frames: list = []
 
     while not done[0]:
         action, _ = model.predict(obs, deterministic=deterministic)
@@ -159,8 +190,13 @@ def run_episode(
             info_list = step_result[3]
         _record(ep, float(action[0, 0]), float(reward[0]), info_list[0])
 
+        if capture_frames:
+            frame = venv.venv.envs[0].render()
+            if frame is not None:
+                frames.append(frame)
+
     venv.close()
-    return dict(ep)
+    return dict(ep), frames
 
 
 def episode_metrics(ep: dict) -> dict:
@@ -494,7 +530,7 @@ def main() -> None:
     if args.scenario:
         print(f"  scenario: {sc_name} — {sc_desc}")
     print(f"  model: {args.model_path}")
-    print(f"  deterministic={deterministic}  render={args.render}  save_plots={args.save_plots}")
+    print(f"  deterministic={deterministic}  render={args.render}  save_plots={args.save_plots}  save_gif={args.save_gif}")
     print(f"{'═'*60}\n")
 
     model, vecnorm_path = load_model(args.algo, args.model_path, args.vecnorm_path)
@@ -523,13 +559,14 @@ def main() -> None:
     all_metrics: list[dict] = []
 
     for ep_i in range(args.n_episodes):
-        ep = run_episode(
+        ep, frames = run_episode(
             model, vecnorm_path,
             road=args.road,
             seed=args.seed + ep_i,
             render=args.render,
             deterministic=deterministic,
             scenario_road=scenario_road,
+            capture_frames=args.save_gif,
         )
         m = episode_metrics(ep)
         all_eps.append(ep)
@@ -548,6 +585,11 @@ def main() -> None:
                 rms_accel=m["rms_accel"],
                 comfort_score=m["comfort_score"],
             ))
+
+        if args.save_gif and frames:
+            save_dir.mkdir(parents=True, exist_ok=True)
+            gif_path = save_dir / f"ep{ep_i + 1}.gif"
+            save_gif(frames, gif_path, dt=DT, skip=args.gif_skip)
 
         if args.save_plots:
             save_dir.mkdir(parents=True, exist_ok=True)
